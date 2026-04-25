@@ -17,6 +17,9 @@ import org.eu.nl.syu.charchat.ui.screens.HomeScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsScreen
 import org.eu.nl.syu.charchat.ui.theme.ChatTheme
 
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,21 +36,12 @@ class MainActivity : ComponentActivity() {
 fun CharChatApp() {
     val navController = rememberNavController()
 
-    // Mock data for initial UI demonstration
-    val predefinedCharacters = listOf(
-        Character("1", "Eldrin the Wise", null, null, "Ancient Wizard", "An ancient wizard with deep knowledge.", "System Lore...", isPredefined = true),
-        Character("2", "Kaelen Shadowstep", null, null, "Mysterious Rogue", "A mysterious rogue with a dark past.", "System Lore...", isPredefined = true),
-        Character("3", "Lyra Heartfelt", null, null, "Kind Bard", "A kind-hearted bard who loves music.", "System Lore...", isPredefined = true),
-        Character("4", "Grom Ironfist", null, null, "Fierce Warrior", "A fierce warrior who values honor.", "System Lore...", isPredefined = true)
-    )
-
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
             HomeScreen(
                 onNavigateToChat = { id -> navController.navigate("chat/$id") },
                 onNavigateToSettings = { navController.navigate("settings") },
-                onNavigateToCreateCharacter = { navController.navigate("create_character") },
-                predefinedCharacters = predefinedCharacters
+                onNavigateToCreateCharacter = { navController.navigate("create_character") }
             )
         }
         composable("settings") {

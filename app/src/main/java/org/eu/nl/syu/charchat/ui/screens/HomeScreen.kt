@@ -29,6 +29,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
 
+import androidx.hilt.navigation.compose.hiltViewModel
+import org.eu.nl.syu.charchat.ui.viewmodels.HomeViewModel
+
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -36,18 +39,17 @@ fun HomeScreen(
     onNavigateToChat: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToCreateCharacter: () -> Unit,
-    predefinedCharacters: List<Character> = emptyList(),
-    activeChats: List<Character> = emptyList()
+    viewModel: HomeViewModel = hiltViewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberLazyGridState()
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val filteredCharacters = remember(searchQuery, predefinedCharacters, activeChats) {
-        val all = (activeChats + predefinedCharacters).distinctBy { it.id }
-        if (searchQuery.isEmpty()) all
-        else all.filter { 
+    val filteredCharacters = remember(searchQuery, uiState.characters) {
+        if (searchQuery.isEmpty()) uiState.characters
+        else uiState.characters.filter { 
             it.name.contains(searchQuery, ignoreCase = true) || 
             it.tagline.contains(searchQuery, ignoreCase = true) 
         }
@@ -144,7 +146,7 @@ fun HomeScreen(
             }
 
             Text(
-                text = if (activeChats.isEmpty() && searchQuery.isEmpty()) "Start a new adventure" else "Characters",
+                text = if (uiState.characters.isEmpty() && searchQuery.isEmpty()) "Start a new adventure" else "Characters",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(16.dp)
             )

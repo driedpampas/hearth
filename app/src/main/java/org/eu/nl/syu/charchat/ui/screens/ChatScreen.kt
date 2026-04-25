@@ -1,8 +1,6 @@
 package org.eu.nl.syu.charchat.ui.screens
 
-import androidx.lifecycle.viewModelScope
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,100 +21,44 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import org.eu.nl.syu.charchat.data.ChatMessage
-import org.eu.nl.syu.charchat.data.MessageAuthor
-
-data class ChatUiState(
-    val messages: List<ChatMessage> = emptyList(),
-    val isThinking: Boolean = false,
-    val tokenCount: Int = 0,
-    val maxTokens: Int = 4096,
-    val backgroundUrl: String? = null
-)
-
-class ChatViewModel : ViewModel() {
-    private val _uiState = MutableStateFlow(ChatUiState())
-    val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
-
-    fun sendMessage(text: String) {
-        val userMsg = ChatMessage(java.util.UUID.randomUUID().toString(), text, MessageAuthor.USER)
-        _uiState.update { it.copy(
-            messages = it.messages + userMsg,
-            tokenCount = it.tokenCount + text.length / 4 // Simple heuristic
-        ) }
-        
-        simulateAiResponse()
-    }
-
-    private fun simulateAiResponse() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isThinking = true) }
-            delay(1500) // Thinking delay
-            
-            val aiMsgId = java.util.UUID.randomUUID().toString()
-            var currentText = ""
-            val fullResponse = "This is a simulated streaming response from the local LLM. It demonstrates token-by-token updates for an immersive roleplay experience."
-            
-            val aiMsg = ChatMessage(aiMsgId, "", MessageAuthor.AI)
-            _uiState.update { it.copy(
-                messages = it.messages + aiMsg,
-                isThinking = false
-            ) }
-
-            fullResponse.split(" ").forEach { word ->
-                delay(100) // Streaming speed
-                currentText += "$word "
-                _uiState.update { state ->
-                    val updatedMessages = state.messages.map { 
-                        if (it.id == aiMsgId) it.copy(text = currentText) else it 
-                    }
-                    state.copy(
-                        messages = updatedMessages,
-                        tokenCount = state.tokenCount + word.length / 4
-                    )
-                }
-            }
-        }
-    }
-}
+import androidx.hilt.navigation.compose.hiltViewModel
+import org.eu.nl.syu.charchat.data.MessageRole
+import org.eu.nl.syu.charchat.ui.components.MarkdownText
+import org.eu.nl.syu.charchat.ui.viewmodels.ChatViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     characterId: String,
     onNavigateBack: () -> Unit,
-    viewModel: ChatViewModel = viewModel()
+    viewModel: ChatViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
 
+    LaunchedEffect(characterId) {
+        viewModel.loadCharacter(characterId)
+    }
+
     // Scroll to bottom when new messages arrive
-    LaunchedEffect(uiState.messages.size, uiState.messages.lastOrNull()?.text) {
-        if (uiState.messages.isNotEmpty()) {
-            scrollState.animateScrollToItem(uiState.messages.size - 1)
+    LaunchedEffect(uiState.messages.size, uiState.currentGeneratingText) {
+        if (uiState.messages.isNotEmpty() || uiState.currentGeneratingText.isNotEmpty()) {
+            scrollState.animateScrollToItem(if (uiState.currentGeneratingText.isNotEmpty()) uiState.messages.size else uiState.messages.size - 1)
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Immersive Background
-        if (uiState.backgroundUrl != null) {
+        if (uiState.character?.sceneBackgroundUrl != null) {
             AsyncImage(
-                model = uiState.backgroundUrl,
+                model = uiState.character?.sceneBackgroundUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().blur(8.dp),
@@ -141,7 +83,7 @@ fun ChatScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text(characterId, style = MaterialTheme.typography.titleMedium)
+                            Text(uiState.character?.name ?: characterId, style = MaterialTheme.typography.titleMedium)
                             TokenIndicator(uiState.tokenCount, uiState.maxTokens)
                         }
                     },
@@ -178,7 +120,18 @@ fun ChatScreen(
                     ChatBubble(message)
                 }
                 
-                if (uiState.isThinking) {
+                if (uiState.currentGeneratingText.isNotEmpty()) {
+                    item {
+                        ChatBubble(
+                            ChatMessage(
+                                role = MessageRole.MODEL,
+                                content = uiState.currentGeneratingText
+                            )
+                        )
+                    }
+                }
+                
+                if (uiState.isGenerating && uiState.currentGeneratingText.isEmpty()) {
                     item {
                         TypingIndicator()
                     }
@@ -250,7 +203,7 @@ fun ChatInput(
 
 @Composable
 fun ChatBubble(message: ChatMessage) {
-    val isUser = message.isUser
+    val isUser = message.role == MessageRole.USER
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
@@ -265,11 +218,10 @@ fun ChatBubble(message: ChatMessage) {
             ),
             tonalElevation = if (isUser) 0.dp else 2.dp
         ) {
-            Text(
-                text = message.text,
+            MarkdownText(
+                text = message.content,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                textColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
             )
         }
     }
