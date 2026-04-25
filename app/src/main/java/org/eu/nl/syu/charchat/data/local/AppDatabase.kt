@@ -67,6 +67,9 @@ interface ChatMessageDao {
 
     @Query("DELETE FROM chat_messages WHERE characterId = :characterId")
     suspend fun deleteMessagesForCharacter(characterId: String)
+
+    @Query("UPDATE chat_messages SET isHiddenFromAi = 1 WHERE characterId = :characterId AND id IN (:messageIds)")
+    suspend fun hideMessages(characterId: String, messageIds: List<String>)
 }
 
 @Database(entities = [CharacterEntity::class, ChatMessageEntity::class], version = 1, exportSchema = false)

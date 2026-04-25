@@ -30,9 +30,10 @@ class ScraperUseCase @Inject constructor(
                 }
             """.trimIndent()
             
-            // Note: In a real app, we'd use a dedicated scraper model.
-            // For now, we'll try to use the currently initialized engine if available.
-            // This is a simplified implementation.
+            if (!engineWrapper.isInitialized()) {
+                throw IllegalStateException("LLM Engine is not initialized. Please load a model first.")
+            }
+            
             var result: String? = null
             engineWrapper.sendMessage(prompt).collect { partial ->
                 result = (result ?: "") + partial
@@ -40,6 +41,7 @@ class ScraperUseCase @Inject constructor(
             
             parseJsonToMap(result)
         } catch (e: Exception) {
+            e.printStackTrace()
             null
         }
     }

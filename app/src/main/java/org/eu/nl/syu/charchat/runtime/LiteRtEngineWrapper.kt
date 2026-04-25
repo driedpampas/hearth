@@ -20,6 +20,8 @@ class LiteRtEngineWrapper @Inject constructor(
     private var engine: Engine? = null
     private var conversation: Conversation? = null
 
+    fun isInitialized(): Boolean = engine != null
+
     suspend fun initialize(modelPath: String, backend: Backend = Backend.GPU()) {
         val config = EngineConfig(
             modelPath = modelPath,

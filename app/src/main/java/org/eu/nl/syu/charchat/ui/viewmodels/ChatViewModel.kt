@@ -101,17 +101,28 @@ class ChatViewModel @Inject constructor(
                 summary += partial
             }
             
-            // In a real app, we'd replace old messages with this summary.
-            // For now, we'll just add it as a system message.
-            val summaryMessage = ChatMessage(
-                role = MessageRole.SYSTEM,
-                content = "SUMMARY: $summary",
-                isHiddenFromAi = false
-            )
-            chatMessageDao.insertMessage(summaryMessage.toEntity(character.id))
-            _uiState.update { it.copy(messages = it.messages + summaryMessage, tokenCount = 500) }
+            val visibleMessages = _uiState.value.messages.filter { !it.isHiddenFromAi }
+            // Keep the last 6 messages for immediate context, hide the rest
+            if (visibleMessages.size > 6) {
+                val messagesToHide = visibleMessages.dropLast(6)
+                val messageIdsToHide = messagesToHide.map { it.id }
+                
+                chatMessageDao.hideMessages(character.id, messageIdsToHide)
+                
+                val summaryMessage = ChatMessage(
+                    role = MessageRole.SYSTEM,
+                    content = "SUMMARY OF PAST EVENTS: $summary",
+                    isHiddenFromAi = false
+                )
+                chatMessageDao.insertMessage(summaryMessage.toEntity(character.id))
+                
+                // Refresh UI state with updated messages
+                val updatedMessages = chatMessageDao.getMessagesForCharacter(character.id).map { it.toDomain() }
+                _uiState.update { it.copy(messages = updatedMessages, tokenCount = 1500) } // Reset token count heuristic
+            }
         }
     }
+
 
     override fun onCleared() {
         super.onCleared()
