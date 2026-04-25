@@ -18,6 +18,7 @@ import org.eu.nl.syu.charchat.ui.screens.SettingsMainScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsGeneralScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsModelsScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsLiteRtModelsScreen
+import org.eu.nl.syu.charchat.ui.screens.SettingsEmbeddingModelsScreen
 import org.eu.nl.syu.charchat.ui.theme.ChatTheme
 
 import dagger.hilt.android.AndroidEntryPoint
@@ -62,11 +63,17 @@ fun CharChatApp() {
         composable("settings/models") {
             SettingsModelsScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToLiteRt = { navController.navigate("settings/models/litert") }
+                onNavigateToLiteRt = { navController.navigate("settings/models/litert") },
+                onNavigateToEmbeddingModels = { navController.navigate("settings/models/embedding") }
             )
         }
         composable("settings/models/litert") {
             SettingsLiteRtModelsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable("settings/models/embedding") {
+            SettingsEmbeddingModelsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

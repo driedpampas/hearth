@@ -28,6 +28,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.eu.nl.syu.charchat.data.DownloadState
+import org.eu.nl.syu.charchat.data.AllowedModel
+import org.eu.nl.syu.charchat.data.ModelRepository
 import org.eu.nl.syu.charchat.data.ModelManager
 import org.eu.nl.syu.charchat.data.AuthRepository
 import org.eu.nl.syu.charchat.data.AuthToken
@@ -132,7 +134,8 @@ fun SettingsGeneralScreen(
 @Composable
 fun SettingsModelsScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToLiteRt: () -> Unit
+    onNavigateToLiteRt: () -> Unit,
+    onNavigateToEmbeddingModels: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -157,6 +160,17 @@ fun SettingsModelsScreen(
                 trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
                 modifier = Modifier.clickable { onNavigateToLiteRt() }
             )
+            
+            val viewModel: ModelsViewModel = hiltViewModel()
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            
+            ListItem(
+                headlineContent = { Text("Embedding Model") },
+                supportingContent = { Text(uiState.selectedEmbeddingModel ?: "None selected") },
+                trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+                modifier = Modifier.clickable { onNavigateToEmbeddingModels() }
+            )
+
             ListItem(
                 headlineContent = { Text("GGUF Models") },
                 supportingContent = { Text("Coming Soon") },
@@ -230,9 +244,10 @@ fun SettingsLiteRtModelsScreen(
                 .padding(paddingValues)
         ) {
             items(uiState.availableModels) { model ->
-                val isDownloaded = uiState.downloadedModels.contains(model.fileName)
-                val progress = uiState.downloadProgress[model.fileName]
-                val error = uiState.downloadErrors[model.fileName]
+                val isDownloaded = viewModel.isDownloaded(model)
+                val fileName = viewModel.getDownloadFileName(model)
+                val progress = uiState.downloadProgress[fileName]
+                val error = uiState.downloadErrors[fileName]
                 
                 ListItem(
                     headlineContent = { Text(model.name) },
@@ -261,28 +276,74 @@ fun SettingsLiteRtModelsScreen(
     }
 }
 
+// --- Embedding Models Selection Screen ---
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsEmbeddingModelsScreen(
+    onNavigateBack: () -> Unit,
+    viewModel: ModelsViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val downloadedEmbeddingModels = uiState.availableModels.filter { model ->
+        model.taskTypes.contains("embedding") && viewModel.isDownloaded(model)
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Select Embedding Model") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        if (downloadedEmbeddingModels.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Text("No embedding models downloaded.\nGo to LiteRT Models to download one.", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                items(downloadedEmbeddingModels) { model ->
+                    val isSelected = uiState.selectedEmbeddingModel == model.name
+                    ListItem(
+                        headlineContent = { Text(model.name) },
+                        supportingContent = { Text(model.description) },
+                        trailingContent = {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { viewModel.selectEmbeddingModel(model) }
+                            )
+                        },
+                        modifier = Modifier.clickable { viewModel.selectEmbeddingModel(model) }
+                    )
+                }
+            }
+        }
+    }
+}
+
 // --- ViewModel and Helper Classes ---
 
-data class ModelInfo(
-    val name: String,
-    val description: String,
-    val url: String,
-    val fileName: String
-)
-
 data class ModelsUiState(
-    val availableModels: List<ModelInfo> = listOf(
-        ModelInfo("Gemma 2B (LiteRT)", "Optimized 2B parameter model", "https://huggingface.co/google/gemma-2b-it-cpu-int4/resolve/main/gemma-2b-it-cpu-int4.bin?download=true", "gemma-2b-it-cpu-int4.bin"),
-        ModelInfo("MobileBERT Embedding", "Text embedding model for RAG", "https://storage.googleapis.com/download.tensorflow.org/models/tflite/mobilebert_v2.tflite", "mobilebert_v2.tflite")
-    ),
+    val availableModels: List<AllowedModel> = emptyList(),
     val downloadedModels: List<String> = emptyList(),
     val downloadProgress: Map<String, Int> = emptyMap(),
-    val downloadErrors: Map<String, String> = emptyMap()
+    val downloadErrors: Map<String, String> = emptyMap(),
+    val selectedEmbeddingModel: String? = null
 )
 
 @HiltViewModel
 class ModelsViewModel @Inject constructor(
     private val modelManager: ModelManager,
+    private val modelRepository: ModelRepository,
     private val authRepository: AuthRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -295,8 +356,24 @@ class ModelsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     init {
+        _uiState.update { it.copy(availableModels = modelRepository.getAvailableModels()) }
         refreshDownloadedModels()
         observeWorkManager()
+        observeSelectedEmbeddingModel()
+    }
+
+    private fun observeSelectedEmbeddingModel() {
+        viewModelScope.launch {
+            modelRepository.selectedEmbeddingModel.collect { name ->
+                _uiState.update { it.copy(selectedEmbeddingModel = name) }
+            }
+        }
+    }
+
+    fun selectEmbeddingModel(model: AllowedModel) {
+        viewModelScope.launch {
+            modelRepository.setSelectedEmbeddingModel(model.name)
+        }
     }
 
     private fun observeWorkManager() {
@@ -375,12 +452,31 @@ class ModelsViewModel @Inject constructor(
     fun refreshDownloadedModels() {
         val downloaded = modelManager.getLocalModels().map { it.name }
         _uiState.update { it.copy(downloadedModels = downloaded) }
+        
+        // Automatic selection logic for embedding models
+        val downloadedEmbeddingModels = _uiState.value.availableModels
+            .filter { it.taskTypes.contains("embedding") && downloaded.contains(modelRepository.getDownloadFileName(it)) }
+        
+        if (downloadedEmbeddingModels.size == 1 && _uiState.value.selectedEmbeddingModel == null) {
+            selectEmbeddingModel(downloadedEmbeddingModels[0])
+        }
     }
 
-    fun downloadModel(model: ModelInfo) {
+    fun downloadModel(model: AllowedModel) {
         viewModelScope.launch {
-            modelManager.downloadModel(model.url, model.fileName)
+            val url = modelRepository.getDownloadUrl(model)
+            val fileName = modelRepository.getDownloadFileName(model)
+            modelManager.downloadModel(url, fileName)
         }
+    }
+
+    fun isDownloaded(model: AllowedModel): Boolean {
+        val fileName = modelRepository.getDownloadFileName(model)
+        return uiState.value.downloadedModels.contains(fileName)
+    }
+
+    fun getDownloadFileName(model: AllowedModel): String {
+        return modelRepository.getDownloadFileName(model)
     }
 }
 

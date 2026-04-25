@@ -3,6 +3,9 @@ package org.eu.nl.syu.charchat.runtime
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.eu.nl.syu.charchat.data.local.VectorDao
+import org.eu.nl.syu.charchat.data.ModelRepository
+import org.eu.nl.syu.charchat.data.ModelManager
+import kotlinx.coroutines.flow.first
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -14,14 +17,31 @@ import kotlinx.coroutines.withContext
 @Singleton
 class EmbeddingEngine @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val vectorDao: VectorDao
+    private val vectorDao: VectorDao,
+    private val modelRepository: ModelRepository,
+    private val modelManager: ModelManager
 ) {
+    private var modelFile: File? = null
     // Note: If you are using Google Play Services TFLite, you'd initialize InterpreterApi here.
     // private var interpreter: InterpreterApi? = null
 
-    suspend fun initialize(modelFile: File) {
+    suspend fun ensureInitialized() {
+        val selectedModelName = modelRepository.selectedEmbeddingModel.first() ?: return
+        val availableModels = modelRepository.getAvailableModels()
+        val model = availableModels.find { it.name == selectedModelName } ?: return
+        val fileName = modelRepository.getDownloadFileName(model)
+        
+        val file = File(context.filesDir, "models/$fileName")
+        if (file.exists() && file != modelFile) {
+            initialize(file)
+        }
+    }
+
+    suspend fun initialize(file: File) {
         withContext(Dispatchers.IO) {
-            // interpreter = InterpreterApi.create(modelFile, InterpreterApi.Options())
+            modelFile = file
+            // TODO: Initialize TFLite Interpreter here
+            // interpreter = Interpreter(modelFile!!)
         }
     }
 
@@ -57,6 +77,7 @@ class EmbeddingEngine @Inject constructor(
     }
 
     suspend fun similaritySearch(query: String, topK: Int = 3): List<String> {
+        ensureInitialized()
         val queryEmbedding = generateEmbedding(query)
         val queryBytes = floatArrayToByteArray(queryEmbedding)
 
