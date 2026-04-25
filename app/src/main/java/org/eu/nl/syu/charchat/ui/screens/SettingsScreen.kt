@@ -35,7 +35,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
                 Text("General", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
@@ -76,13 +76,13 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("GGUF Models (Coming Soon)", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
             }
-            item {
-                ModelItem(
-                    name = "Llama 3 8B (Placeholder)",
-                    status = "Future Support",
-                    isActive = false
-                )
-            }
+//            item {
+//                ModelItem(
+//                    name = "Llama 3 8B (Placeholder)",
+//                    status = "Future Support",
+//                    isActive = false
+//                )
+//            }
         }
     }
 }
@@ -94,6 +94,7 @@ fun ModelItem(
     isActive: Boolean
 ) {
     OutlinedCard(
+        onClick = { /* Handle model selection */ },
         modifier = Modifier.fillMaxWidth(),
         enabled = isActive
     ) {

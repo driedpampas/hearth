@@ -1,7 +1,10 @@
 package org.eu.nl.syu.charchat.ui.screens
 
+import android.annotation.SuppressLint
+import androidx.compose.ui.semantics.contentDescription
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -15,10 +18,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.eu.nl.syu.charchat.data.Character
 
-@OptIn(ExperimentalMaterial3Api::class)
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HomeScreen(
     onNavigateToChat: (String) -> Unit,
@@ -49,7 +54,6 @@ fun HomeScreen(
                 Box {
                     FloatingActionButtonMenu(
                         expanded = fabMenuExpanded,
-                        onDismissRequest = { fabMenuExpanded = false },
                         button = {
                             ToggleFloatingActionButton(
                                 checked = fabMenuExpanded,
@@ -74,8 +78,8 @@ fun HomeScreen(
                                 fabMenuExpanded = false
                                 // Logic to select character for new chat
                             },
-                            icon = { Icon(Icons.Filled.Message, contentDescription = null) },
-                            label = { Text("New Chat") }
+                            icon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) },
+                            text = { Text("New Chat") }
                         )
                         FloatingActionButtonMenuItem(
                             onClick = {
@@ -83,39 +87,43 @@ fun HomeScreen(
                                 onNavigateToCreateCharacter()
                             },
                             icon = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
-                            label = { Text("Create Character") }
+                            text = { Text("Create Character") }
                         )
                     }
                 }
             }
         }
-    ) { paddingValues ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
         ) {
-            // Google Keep Style Search Bar
             SearchBar(
-                query = searchQuery,
-                onQueryChange = { searchQuery = it },
-                onSearch = { searchActive = false },
-                active = searchActive,
-                onActiveChange = { searchActive = it },
+                inputField = {
+                    SearchBarDefaults.InputField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onSearch = { searchActive = false },
+                        expanded = searchActive,
+                        onExpandedChange = { searchActive = it },
+                        placeholder = { Text("Search characters") },
+                        leadingIcon = {
+                            IconButton(onClick = { /* Menu */ }) {
+                                Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                            }
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = onNavigateToSettings) {
+                                Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                            }
+                        }
+                    )
+                },
+                expanded = searchActive,
+                onExpandedChange = { searchActive = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = if (searchActive) 0.dp else 16.dp, vertical = 8.dp),
-                placeholder = { Text("Search characters") },
-                leadingIcon = {
-                    IconButton(onClick = { /* Menu */ }) {
-                        Icon(Icons.Filled.Menu, contentDescription = "Menu")
-                    }
-                },
-                trailingIcon = {
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                    }
-                }
+                    .padding(horizontal = if (searchActive) 0.dp else 16.dp, vertical = 0.dp),
             ) {
                 // Search suggestions or results could go here
             }
@@ -126,7 +134,9 @@ fun HomeScreen(
                 modifier = Modifier.padding(16.dp)
             )
 
-            val displayList = if (activeChats.isEmpty()) predefinedCharacters else activeChats
+            activeChats.ifEmpty {  }
+
+            val displayList = activeChats.ifEmpty { predefinedCharacters }
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
