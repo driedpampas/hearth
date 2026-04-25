@@ -35,10 +35,10 @@ fun CharChatApp() {
 
     // Mock data for initial UI demonstration
     val predefinedCharacters = listOf(
-        Character("1", "Eldrin the Wise", null, null, "An ancient wizard with deep knowledge.", "System Lore...", true),
-        Character("2", "Kaelen Shadowstep", null, null, "A mysterious rogue with a dark past.", "System Lore...", true),
-        Character("3", "Lyra Heartfelt", null, null, "A kind-hearted bard who loves music.", "System Lore...", true),
-        Character("4", "Grom Ironfist", null, null, "A fierce warrior who values honor.", "System Lore...", true)
+        Character("1", "Eldrin the Wise", null, null, "Ancient Wizard", "An ancient wizard with deep knowledge.", "System Lore...", isPredefined = true),
+        Character("2", "Kaelen Shadowstep", null, null, "Mysterious Rogue", "A mysterious rogue with a dark past.", "System Lore...", isPredefined = true),
+        Character("3", "Lyra Heartfelt", null, null, "Kind Bard", "A kind-hearted bard who loves music.", "System Lore...", isPredefined = true),
+        Character("4", "Grom Ironfist", null, null, "Fierce Warrior", "A fierce warrior who values honor.", "System Lore...", isPredefined = true)
     )
 
     NavHost(navController = navController, startDestination = "home") {

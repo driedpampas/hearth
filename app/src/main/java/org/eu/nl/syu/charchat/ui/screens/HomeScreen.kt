@@ -22,6 +22,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.eu.nl.syu.charchat.data.Character
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import coil.compose.AsyncImage
+
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -36,6 +43,15 @@ fun HomeScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
+
+    val filteredCharacters = remember(searchQuery, predefinedCharacters, activeChats) {
+        val all = (activeChats + predefinedCharacters).distinctBy { it.id }
+        if (searchQuery.isEmpty()) all
+        else all.filter { 
+            it.name.contains(searchQuery, ignoreCase = true) || 
+            it.tagline.contains(searchQuery, ignoreCase = true) 
+        }
+    }
 
     // FAB visibility based on scroll
     val isFabVisible by remember {
@@ -76,7 +92,6 @@ fun HomeScreen(
                         FloatingActionButtonMenuItem(
                             onClick = {
                                 fabMenuExpanded = false
-                                // Logic to select character for new chat
                             },
                             icon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) },
                             text = { Text("New Chat") }
@@ -129,14 +144,10 @@ fun HomeScreen(
             }
 
             Text(
-                text = if (activeChats.isEmpty()) "Start a new adventure" else "Recent Chats",
+                text = if (activeChats.isEmpty() && searchQuery.isEmpty()) "Start a new adventure" else "Characters",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(16.dp)
             )
-
-            activeChats.ifEmpty {  }
-
-            val displayList = activeChats.ifEmpty { predefinedCharacters }
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
@@ -146,7 +157,7 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(displayList) { character ->
+                items(filteredCharacters) { character ->
                     CharacterCard(
                         character = character,
                         onClick = { onNavigateToChat(character.id) }
@@ -164,7 +175,8 @@ fun CharacterCard(
 ) {
     ElevatedCard(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge
     ) {
         Column(
             modifier = Modifier
@@ -172,28 +184,53 @@ fun CharacterCard(
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Avatar Placeholder
             Surface(
-                modifier = Modifier.size(80.dp),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.primaryContainer
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(MaterialTheme.shapes.large),
+                color = MaterialTheme.colorScheme.surfaceVariant
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Person,
-                    contentDescription = null,
-                    modifier = Modifier.padding(16.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                if (character.avatarUrl != null) {
+                    AsyncImage(
+                        model = character.avatarUrl,
+                        contentDescription = character.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
             Text(
                 text = character.name,
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+            
             Text(
-                text = character.shortDescription,
+                text = character.tagline,
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 2
+                color = MaterialTheme.colorScheme.secondary,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp)
             )
         }
     }
