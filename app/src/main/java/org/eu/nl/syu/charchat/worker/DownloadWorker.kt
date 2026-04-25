@@ -6,10 +6,14 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import org.eu.nl.syu.charchat.data.AuthRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -22,7 +26,12 @@ private const val TAG = "DownloadWorker"
 private const val CHANNEL_ID = "model_download_channel"
 private var channelCreated = false
 
-class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+@HiltWorker
+class DownloadWorker @AssistedInject constructor(
+    @Assisted context: Context,
+    @Assisted params: WorkerParameters,
+    private val authRepository: AuthRepository
+) : CoroutineWorker(context, params) {
 
     init {
         if (!channelCreated) {
@@ -47,10 +56,35 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
                 val url = URL(urlStr)
                 val connection = url.openConnection() as HttpURLConnection
+                
+                // Add Authorization header if it's a HuggingFace URL
+                if (urlStr.contains("huggingface.co")) {
+                    val token = authRepository.getAccessToken()
+                    if (token != null) {
+                        connection.setRequestProperty("Authorization", "Bearer $token")
+                        Log.d(TAG, "Using HuggingFace Auth Token")
+                    }
+                }
+
                 connection.connect()
 
+                if (connection.responseCode == HttpURLConnection.HTTP_FORBIDDEN || connection.responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                    Log.e(TAG, "Auth failed: ${connection.responseCode}")
+                    return@withContext Result.failure(
+                        Data.Builder()
+                            .putInt("error_code", connection.responseCode)
+                            .putString("fileName", fileName)
+                            .build()
+                    )
+                }
+
                 if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                    return@withContext Result.failure()
+                    Log.e(TAG, "HTTP error: ${connection.responseCode}")
+                    return@withContext Result.failure(
+                        Data.Builder()
+                            .putString("fileName", fileName)
+                            .build()
+                    )
                 }
 
                 val totalBytes = connection.contentLengthLong

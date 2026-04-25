@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -24,14 +25,22 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.eu.nl.syu.charchat.data.DownloadState
 import org.eu.nl.syu.charchat.data.ModelManager
+import org.eu.nl.syu.charchat.data.AuthRepository
+import org.eu.nl.syu.charchat.data.AuthToken
+import org.eu.nl.syu.charchat.common.ProjectConfig
+import net.openid.appauth.AuthorizationException
+import net.openid.appauth.AuthorizationRequest
+import net.openid.appauth.AuthorizationResponse
+import net.openid.appauth.AuthorizationService
+import net.openid.appauth.ResponseTypeValues
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import javax.inject.Inject
+import androidx.core.net.toUri
 
 // --- Main Settings Screen ---
 
@@ -154,6 +163,41 @@ fun SettingsModelsScreen(
                 trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.Gray) },
                 modifier = Modifier.alpha(0.5f)
             )
+            
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            val hfViewModel: ModelsViewModel = hiltViewModel()
+            val isLoggedIn by hfViewModel.isLoggedIn.collectAsStateWithLifecycle()
+            
+            val launcher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                hfViewModel.handleAuthResult(result)
+            }
+            val context = LocalContext.current
+
+            ListItem(
+                headlineContent = { Text("HuggingFace Account") },
+                supportingContent = { Text(if (isLoggedIn) "Logged in" else "Not logged in") },
+                leadingContent = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
+                trailingContent = {
+                    if (isLoggedIn) {
+                        TextButton(onClick = { hfViewModel.logout() }) {
+                            Text("Logout", color = MaterialTheme.colorScheme.error)
+                        }
+                    } else {
+                        Button(onClick = {
+                            val authRequest = hfViewModel.getAuthorizationRequest()
+                            val authService = AuthorizationService(context)
+                            val authIntent = authService.getAuthorizationRequestIntent(authRequest)
+                            launcher.launch(authIntent)
+                            authService.dispose()
+                        }) {
+                            Text("Login")
+                        }
+                    }
+                }
+            )
         }
     }
 }
@@ -188,10 +232,17 @@ fun SettingsLiteRtModelsScreen(
             items(uiState.availableModels) { model ->
                 val isDownloaded = uiState.downloadedModels.contains(model.fileName)
                 val progress = uiState.downloadProgress[model.fileName]
+                val error = uiState.downloadErrors[model.fileName]
                 
                 ListItem(
                     headlineContent = { Text(model.name) },
-                    supportingContent = { Text(model.description) },
+                    supportingContent = { 
+                        if (error != null) {
+                            Text(error, color = MaterialTheme.colorScheme.error)
+                        } else {
+                            Text(model.description)
+                        }
+                    },
                     leadingContent = { Icon(Icons.Default.ModelTraining, contentDescription = null) },
                     trailingContent = {
                         if (isDownloaded) {
@@ -200,7 +251,7 @@ fun SettingsLiteRtModelsScreen(
                             CircularProgressIndicator(progress = progress / 100f, modifier = Modifier.size(24.dp))
                         } else {
                             IconButton(onClick = { viewModel.downloadModel(model) }) {
-                                Icon(Icons.Default.Download, contentDescription = "Download")
+                                Icon(if (error != null) Icons.Default.Refresh else Icons.Default.Download, contentDescription = "Download")
                             }
                         }
                     }
@@ -225,17 +276,23 @@ data class ModelsUiState(
         ModelInfo("MobileBERT Embedding", "Text embedding model for RAG", "https://storage.googleapis.com/download.tensorflow.org/models/tflite/mobilebert_v2.tflite", "mobilebert_v2.tflite")
     ),
     val downloadedModels: List<String> = emptyList(),
-    val downloadProgress: Map<String, Int> = emptyMap()
+    val downloadProgress: Map<String, Int> = emptyMap(),
+    val downloadErrors: Map<String, String> = emptyMap()
 )
 
 @HiltViewModel
 class ModelsViewModel @Inject constructor(
     private val modelManager: ModelManager,
+    private val authRepository: AuthRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ModelsUiState())
     val uiState: StateFlow<ModelsUiState> = _uiState.asStateFlow()
+
+    val isLoggedIn: StateFlow<Boolean> = authRepository.authToken
+        .map { it != null }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     init {
         refreshDownloadedModels()
@@ -247,19 +304,71 @@ class ModelsViewModel @Inject constructor(
         viewModelScope.launch {
             workManager.getWorkInfosByTagFlow("model_download").collect { workInfos ->
                 val progressMap = mutableMapOf<String, Int>()
+                val errorMap = mutableMapOf<String, String>()
                 for (info in workInfos) {
+                    val fileName = info.progress.getString("fileName") ?: info.outputData.getString("fileName")
+                    
                     if (!info.state.isFinished) {
-                        val fileName = info.progress.getString("fileName")
                         val progress = info.progress.getInt("progress", 0)
                         if (fileName != null) {
                             progressMap[fileName] = progress
                         }
                     } else if (info.state == androidx.work.WorkInfo.State.SUCCEEDED) {
                         refreshDownloadedModels()
+                    } else if (info.state == androidx.work.WorkInfo.State.FAILED) {
+                        val errorCode = info.outputData.getInt("error_code", 0)
+                        if (fileName != null) {
+                            errorMap[fileName] = when (errorCode) {
+                                403 -> "Permissions/Terms required (Login below)"
+                                401 -> "Login required"
+                                else -> "Download failed"
+                            }
+                        }
                     }
                 }
-                _uiState.update { it.copy(downloadProgress = progressMap) }
+                _uiState.update { it.copy(downloadProgress = progressMap, downloadErrors = errorMap) }
             }
+        }
+    }
+
+    fun getAuthorizationRequest(): AuthorizationRequest {
+        return AuthorizationRequest.Builder(
+            ProjectConfig.authServiceConfig,
+            ProjectConfig.clientId,
+            ResponseTypeValues.CODE,
+            ProjectConfig.redirectUri.toUri(),
+        )
+        .setScope("read-repos")
+        .build()
+    }
+
+    fun handleAuthResult(result: androidx.activity.result.ActivityResult) {
+        val dataIntent = result.data ?: return
+        val response = AuthorizationResponse.fromIntent(dataIntent)
+        val exception = AuthorizationException.fromIntent(dataIntent)
+
+        if (response != null) {
+            val authService = AuthorizationService(context)
+            authService.performTokenRequest(response.createTokenExchangeRequest()) { tokenResponse, tokenEx ->
+                if (tokenResponse != null) {
+                    viewModelScope.launch {
+                        authRepository.saveToken(
+                            AuthToken(
+                                accessToken = tokenResponse.accessToken!!,
+                                refreshToken = tokenResponse.refreshToken!!,
+                                expiresAtMs = tokenResponse.accessTokenExpirationTime!!
+                            )
+                        )
+                    }
+                }
+                authService.dispose()
+            }
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            authRepository.clearToken()
         }
     }
 

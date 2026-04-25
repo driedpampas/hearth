@@ -32,30 +32,34 @@ object AppModule {
             AppDatabase::class.java,
             "charchat_db"
         )
-        .setDriver(BundledSQLiteDriver())
-        .addCallback(object : RoomDatabase.Callback() {
-            override fun onOpen(db: SupportSQLiteDatabase) {
-                super.onOpen(db)
-                // Load the sqlite-vec extension
-                db.query("SELECT load_extension('$sqliteVecPath')").close()
+            .setDriver(BundledSQLiteDriver())
+            .addCallback(object : RoomDatabase.Callback() {
+                override fun onOpen(db: SupportSQLiteDatabase) {
+                    super.onOpen(db)
+                    // Load the sqlite-vec extension
+                    db.query("SELECT load_extension('$sqliteVecPath')").close()
 
-                // Create virtual tables
-                db.execSQL("""
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_lore USING vec0(
-                        lore_id TEXT PRIMARY KEY,
-                        embedding float[256]
+                    // Create virtual tables
+                    db.execSQL(
+                        """
+                            CREATE VIRTUAL TABLE IF NOT EXISTS vec_lore USING vec0(
+                                lore_id TEXT PRIMARY KEY,
+                                embedding float[256]
+                            )
+                        """.trimIndent()
                     )
-                """.trimIndent())
 
-                db.execSQL("""
-                    CREATE VIRTUAL TABLE IF NOT EXISTS vec_memory USING vec0(
-                        memory_id TEXT PRIMARY KEY,
-                        embedding float[256]
+                    db.execSQL(
+                        """
+                            CREATE VIRTUAL TABLE IF NOT EXISTS vec_memory USING vec0(
+                                memory_id TEXT PRIMARY KEY,
+                                embedding float[256]
+                            )
+                        """.trimIndent()
                     )
-                """.trimIndent())
-            }
-        })
-        .build()
+                }
+            })
+            .build()
     }
 
     @Provides

@@ -16,3 +16,4 @@ local.properties
 AGENTS.md
 gallery
 **/*.so
+.kotlin
