@@ -1,48 +1,54 @@
 package org.eu.nl.syu.charchat.ui.screens
 
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.launch
-import androidx.compose.ui.text.font.FontWeight
-
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewModelScope
+import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import org.eu.nl.syu.charchat.data.local.CharacterDao
+import org.eu.nl.syu.charchat.data.local.toEntity
+import org.eu.nl.syu.charchat.domain.ScraperUseCase
+import org.eu.nl.syu.charchat.data.Character
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import java.util.UUID
 
 data class CreateCharacterState(
     val name: String = "",
     val tagline: String = "",
     val lore: String = "",
     val reminderMessage: String = "",
-    val modelPath: String = "Llama-3-8B-Instruct.gguf",
+    val modelPath: String = "gemma-2b.litertlm",
     val initialMessages: List<String> = listOf("Greetings! I am ready for our story."),
     val isAdvancedExpanded: Boolean = false,
     val urlToScrape: String = "",
-    val isScraping: Boolean = false
+    val isScraping: Boolean = false,
+    val isSaved: Boolean = false
 )
 
-class CreateCharacterViewModel : ViewModel() {
+@HiltViewModel
+class CreateCharacterViewModel @Inject constructor(
+    private val scraperUseCase: ScraperUseCase,
+    private val characterDao: CharacterDao
+) : ViewModel() {
     private val _uiState = MutableStateFlow(CreateCharacterState())
     val uiState: StateFlow<CreateCharacterState> = _uiState.asStateFlow()
 
@@ -75,19 +81,45 @@ class CreateCharacterViewModel : ViewModel() {
     }
 
     fun generateFromUrl() {
-        // Stub for URL scraping service
+        if (_uiState.value.urlToScrape.isBlank()) return
+        
         _uiState.update { it.copy(isScraping = true) }
-        // Simulate LLM parsing
         viewModelScope.launch {
-            kotlinx.coroutines.delay(2000)
-            _uiState.update { 
-                it.copy(
-                    isScraping = false,
-                    name = "Parsed Character",
-                    tagline = "A character born from the web",
-                    lore = "Extensive lore extracted from ${_uiState.value.urlToScrape}..."
-                )
+            val scraped = scraperUseCase.scrapeCharacterFromUrl(_uiState.value.urlToScrape)
+            if (scraped != null) {
+                _uiState.update { 
+                    it.copy(
+                        isScraping = false,
+                        name = scraped["name"] ?: it.name,
+                        tagline = scraped["tagline"] ?: it.tagline,
+                        lore = scraped["systemPromptLore"] ?: it.lore
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(isScraping = false) }
             }
+        }
+    }
+
+    fun saveCharacter(onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val character = Character(
+                id = UUID.randomUUID().toString(),
+                name = state.name,
+                tagline = state.tagline,
+                avatarUrl = null,
+                systemPromptLore = state.lore,
+                reminderMessage = state.reminderMessage,
+                modelReference = state.modelPath,
+                temp = 0.7f,
+                topP = 0.9f,
+                topK = 40,
+                sceneBackgroundUrl = null,
+                isPredefined = false
+            )
+            characterDao.insertCharacter(character.toEntity())
+            onSuccess()
         }
     }
 }
@@ -96,7 +128,7 @@ class CreateCharacterViewModel : ViewModel() {
 @Composable
 fun CreateCharacterScreen(
     onNavigateBack: () -> Unit,
-    viewModel: CreateCharacterViewModel = viewModel()
+    viewModel: CreateCharacterViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -110,7 +142,7 @@ fun CreateCharacterScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* Save logic */ }) {
+                    IconButton(onClick = { viewModel.saveCharacter(onNavigateBack) }) {
                         Icon(Icons.Filled.Save, contentDescription = "Save")
                     }
                 }
@@ -281,7 +313,7 @@ fun CreateCharacterScreen(
                 }
 
                 Button(
-                    onClick = { /* Save logic */ },
+                    onClick = { viewModel.saveCharacter(onNavigateBack) },
                     modifier = Modifier.fillMaxWidth()
                         .padding(bottom = 32.dp)
                 ) {

@@ -14,7 +14,10 @@ import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.ui.screens.ChatScreen
 import org.eu.nl.syu.charchat.ui.screens.CreateCharacterScreen
 import org.eu.nl.syu.charchat.ui.screens.HomeScreen
-import org.eu.nl.syu.charchat.ui.screens.SettingsScreen
+import org.eu.nl.syu.charchat.ui.screens.SettingsMainScreen
+import org.eu.nl.syu.charchat.ui.screens.SettingsGeneralScreen
+import org.eu.nl.syu.charchat.ui.screens.SettingsModelsScreen
+import org.eu.nl.syu.charchat.ui.screens.SettingsLiteRtModelsScreen
 import org.eu.nl.syu.charchat.ui.theme.ChatTheme
 
 import dagger.hilt.android.AndroidEntryPoint
@@ -45,7 +48,25 @@ fun CharChatApp() {
             )
         }
         composable("settings") {
-            SettingsScreen(
+            SettingsMainScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToGeneral = { navController.navigate("settings/general") },
+                onNavigateToModels = { navController.navigate("settings/models") }
+            )
+        }
+        composable("settings/general") {
+            SettingsGeneralScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable("settings/models") {
+            SettingsModelsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToLiteRt = { navController.navigate("settings/models/litert") }
+            )
+        }
+        composable("settings/models/litert") {
+            SettingsLiteRtModelsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

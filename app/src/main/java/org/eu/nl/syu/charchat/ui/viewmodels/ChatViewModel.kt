@@ -94,8 +94,23 @@ class ChatViewModel @Inject constructor(
     }
 
     private suspend fun checkAndSummarize(character: Character) {
-        // Implementation for summary logic (TODO)
-        // If context > 80%, trigger summary and replace old messages.
+        if (_uiState.value.tokenCount > 3500) { // Approx 85% of 4096
+            val prompt = "Please summarize the story so far in 2-3 paragraphs for continuity."
+            var summary = ""
+            engineWrapper.sendMessage(prompt).collect { partial ->
+                summary += partial
+            }
+            
+            // In a real app, we'd replace old messages with this summary.
+            // For now, we'll just add it as a system message.
+            val summaryMessage = ChatMessage(
+                role = MessageRole.SYSTEM,
+                content = "SUMMARY: $summary",
+                isHiddenFromAi = false
+            )
+            chatMessageDao.insertMessage(summaryMessage.toEntity(character.id))
+            _uiState.update { it.copy(messages = it.messages + summaryMessage, tokenCount = 500) }
+        }
     }
 
     override fun onCleared() {
