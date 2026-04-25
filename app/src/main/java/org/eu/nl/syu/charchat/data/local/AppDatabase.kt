@@ -5,6 +5,21 @@ import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.ChatMessage
 import org.eu.nl.syu.charchat.data.MessageRole
 
+@Entity(tableName = "lore_chunks")
+data class LoreChunkEntity(
+    @PrimaryKey val id: String,
+    val characterId: String,
+    val text: String
+)
+
+@Entity(tableName = "memory_entries")
+data class MemoryEntryEntity(
+    @PrimaryKey val id: String,
+    val characterId: String,
+    val text: String,
+    val timestamp: Long
+)
+
 @Entity(tableName = "characters")
 data class CharacterEntity(
     @PrimaryKey val id: String,
@@ -72,10 +87,20 @@ interface ChatMessageDao {
     suspend fun hideMessages(characterId: String, messageIds: List<String>)
 }
 
-@Database(entities = [CharacterEntity::class, ChatMessageEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [
+        CharacterEntity::class, 
+        ChatMessageEntity::class, 
+        LoreChunkEntity::class, 
+        MemoryEntryEntity::class
+    ], 
+    version = 2, 
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun characterDao(): CharacterDao
     abstract fun chatMessageDao(): ChatMessageDao
+    abstract fun vectorDao(): VectorDao
 }
 
 fun CharacterEntity.toDomain(): Character = Character(

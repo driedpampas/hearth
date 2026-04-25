@@ -13,6 +13,7 @@ import org.eu.nl.syu.charchat.data.local.ChatMessageDao
 import org.eu.nl.syu.charchat.data.local.toDomain
 import org.eu.nl.syu.charchat.data.local.toEntity
 import org.eu.nl.syu.charchat.runtime.LiteRtEngineWrapper
+import org.eu.nl.syu.charchat.runtime.EmbeddingEngine
 import java.util.*
 import javax.inject.Inject
 
@@ -29,7 +30,8 @@ data class ChatUiState(
 class ChatViewModel @Inject constructor(
     private val characterDao: CharacterDao,
     private val chatMessageDao: ChatMessageDao,
-    private val engineWrapper: LiteRtEngineWrapper
+    private val engineWrapper: LiteRtEngineWrapper,
+    private val embeddingEngine: EmbeddingEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -63,7 +65,15 @@ class ChatViewModel @Inject constructor(
                 tokenCount = it.tokenCount + (content.length / 4) // Simple heuristic
             ) }
 
-            val reminder = character.reminderMessage
+            // Retrieve RAG Context
+            val loreContexts = embeddingEngine.similaritySearch(content)
+            val contextInjection = if (loreContexts.isNotEmpty()) {
+                "\n\n[Lore Context:\n" + loreContexts.joinToString("\n---\n") + "]"
+            } else {
+                ""
+            }
+
+            val reminder = character.reminderMessage + contextInjection
             var fullResponse = ""
             
             engineWrapper.sendMessage(content, reminder)

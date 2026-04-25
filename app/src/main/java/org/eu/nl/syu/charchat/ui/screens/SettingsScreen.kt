@@ -1,5 +1,6 @@
 package org.eu.nl.syu.charchat.ui.screens
 
+import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.*
@@ -13,21 +14,24 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import org.eu.nl.syu.charchat.data.DownloadState
-import org.eu.nl.syu.charchat.data.ModelManager
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.eu.nl.syu.charchat.data.DownloadState
+import org.eu.nl.syu.charchat.data.ModelManager
 import javax.inject.Inject
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // --- Main Settings Screen ---
 
@@ -183,6 +187,8 @@ fun SettingsLiteRtModelsScreen(
         ) {
             items(uiState.availableModels) { model ->
                 val isDownloaded = uiState.downloadedModels.contains(model.fileName)
+                val progress = uiState.downloadProgress[model.fileName]
+                
                 ListItem(
                     headlineContent = { Text(model.name) },
                     supportingContent = { Text(model.description) },
@@ -190,6 +196,8 @@ fun SettingsLiteRtModelsScreen(
                     trailingContent = {
                         if (isDownloaded) {
                             Icon(Icons.Default.CheckCircle, contentDescription = "Downloaded", tint = MaterialTheme.colorScheme.primary)
+                        } else if (progress != null && progress < 100) {
+                            CircularProgressIndicator(progress = progress / 100f, modifier = Modifier.size(24.dp))
                         } else {
                             IconButton(onClick = { viewModel.downloadModel(model) }) {
                                 Icon(Icons.Default.Download, contentDescription = "Download")
@@ -213,16 +221,17 @@ data class ModelInfo(
 
 data class ModelsUiState(
     val availableModels: List<ModelInfo> = listOf(
-        ModelInfo("Gemma 2B (LiteRT)", "Optimized 2B parameter model", "https://example.com/gemma-2b.litertlm", "gemma-2b.litertlm"),
-        ModelInfo("DeepSeek R1 Distill (LiteRT)", "High performance reasoning model", "https://example.com/deepseek-r1.litertlm", "deepseek-r1.litertlm")
+        ModelInfo("Gemma 2B (LiteRT)", "Optimized 2B parameter model", "https://huggingface.co/google/gemma-2b-it-cpu-int4/resolve/main/gemma-2b-it-cpu-int4.bin?download=true", "gemma-2b-it-cpu-int4.bin"),
+        ModelInfo("MobileBERT Embedding", "Text embedding model for RAG", "https://storage.googleapis.com/download.tensorflow.org/models/tflite/mobilebert_v2.tflite", "mobilebert_v2.tflite")
     ),
     val downloadedModels: List<String> = emptyList(),
-    val downloadProgress: Float = 0f
+    val downloadProgress: Map<String, Int> = emptyMap()
 )
 
 @HiltViewModel
 class ModelsViewModel @Inject constructor(
-    private val modelManager: ModelManager
+    private val modelManager: ModelManager,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ModelsUiState())
@@ -230,6 +239,28 @@ class ModelsViewModel @Inject constructor(
 
     init {
         refreshDownloadedModels()
+        observeWorkManager()
+    }
+
+    private fun observeWorkManager() {
+        val workManager = WorkManager.getInstance(context)
+        viewModelScope.launch {
+            workManager.getWorkInfosByTagFlow("model_download").collect { workInfos ->
+                val progressMap = mutableMapOf<String, Int>()
+                for (info in workInfos) {
+                    if (!info.state.isFinished) {
+                        val fileName = info.progress.getString("fileName")
+                        val progress = info.progress.getInt("progress", 0)
+                        if (fileName != null) {
+                            progressMap[fileName] = progress
+                        }
+                    } else if (info.state == androidx.work.WorkInfo.State.SUCCEEDED) {
+                        refreshDownloadedModels()
+                    }
+                }
+                _uiState.update { it.copy(downloadProgress = progressMap) }
+            }
+        }
     }
 
     fun refreshDownloadedModels() {
@@ -240,7 +271,6 @@ class ModelsViewModel @Inject constructor(
     fun downloadModel(model: ModelInfo) {
         viewModelScope.launch {
             modelManager.downloadModel(model.url, model.fileName)
-            refreshDownloadedModels()
         }
     }
 }

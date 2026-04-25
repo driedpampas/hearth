@@ -22,8 +22,12 @@ playServicesTfliteJava = "16.5.0"
 playServicesTfliteGpu= "16.5.0"
 commonmark = "1.0.0-alpha04"
 richtext = "1.0.0-alpha04"
+sqliteBundled = "2.6.2"
+workRuntimeKtx = "2.11.2"
 
 [libraries]
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqliteBundled" }
+androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

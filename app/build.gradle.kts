@@ -39,6 +39,11 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
@@ -59,9 +64,13 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
 
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
+
     // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.sqlite.bundled)
     ksp(libs.androidx.room.compiler)
 
     // LiteRT

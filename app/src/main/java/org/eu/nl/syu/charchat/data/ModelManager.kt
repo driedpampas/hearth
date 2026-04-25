@@ -11,6 +11,13 @@ import java.io.File
 import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkInfo
+import kotlinx.coroutines.flow.map
+import androidx.lifecycle.asFlow
+import org.eu.nl.syu.charchat.worker.DownloadWorker
 
 sealed class DownloadState {
     data object Idle : DownloadState()
@@ -33,31 +40,22 @@ class ModelManager @Inject constructor(
     }
 
     suspend fun downloadModel(url: String, fileName: String) {
-        withContext(Dispatchers.IO) {
-            _downloadState.value = DownloadState.Progress(0f)
-            val file = File(getModelsDir(), fileName)
-            try {
-                val connection = URL(url).openConnection()
-                val totalSize = connection.contentLengthLong
-                connection.getInputStream().use { input ->
-                    file.outputStream().use { output ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        var totalBytesRead = 0L
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            totalBytesRead += bytesRead
-                            if (totalSize > 0) {
-                                _downloadState.value = DownloadState.Progress(totalBytesRead.toFloat() / totalSize)
-                            }
-                        }
-                    }
-                }
-                _downloadState.value = DownloadState.Success(file)
-            } catch (e: Exception) {
-                _downloadState.value = DownloadState.Error(e.message ?: "Unknown error")
-            }
-        }
+        val workManager = WorkManager.getInstance(context)
+        
+        val data = Data.Builder()
+            .putString("url", url)
+            .putString("fileName", fileName)
+            .build()
+            
+        val request = OneTimeWorkRequestBuilder<DownloadWorker>()
+            .setInputData(data)
+            .addTag("model_download")
+            .build()
+            
+        workManager.enqueue(request)
+        
+        // We observe the work info directly if needed, but for now we just start it.
+        // The foreground service notification will handle the UI for the global app.
     }
 
     fun getLocalModels(): List<File> {
