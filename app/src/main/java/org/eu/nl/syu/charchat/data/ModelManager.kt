@@ -28,7 +28,7 @@ sealed class DownloadState {
 
 @Singleton
 class ModelManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val downloadState = _downloadState.asStateFlow()
@@ -60,5 +60,14 @@ class ModelManager @Inject constructor(
 
     fun getLocalModels(): List<File> {
         return getModelsDir().listFiles()?.toList() ?: emptyList()
+    }
+
+    fun deleteModel(fileName: String): Boolean {
+        val file = File(getModelsDir(), fileName)
+        return if (file.exists()) {
+            file.delete()
+        } else {
+            false
+        }
     }
 }

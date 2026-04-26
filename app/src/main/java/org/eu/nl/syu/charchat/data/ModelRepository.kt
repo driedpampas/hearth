@@ -40,7 +40,7 @@ data class AllowedModel(
 
 @Singleton
 class ModelRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val hfApiService: HuggingFaceApiService,
     private val authRepository: AuthRepository
 ) {

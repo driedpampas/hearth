@@ -29,7 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
 
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import org.eu.nl.syu.charchat.ui.viewmodels.HomeViewModel
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")

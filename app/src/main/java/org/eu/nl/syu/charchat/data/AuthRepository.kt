@@ -27,7 +27,7 @@ sealed class AuthError {
 
 @Singleton
 class AuthRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val hfApiService: Provider<HuggingFaceApiService>
 ) {
     private val ACCESS_TOKEN = stringPreferencesKey("hf_access_token")

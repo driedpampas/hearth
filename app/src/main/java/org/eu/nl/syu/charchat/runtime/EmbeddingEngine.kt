@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 
 @Singleton
 class EmbeddingEngine @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val vectorDao: VectorDao,
     private val modelRepository: ModelRepository,
     private val modelManager: ModelManager

@@ -15,7 +15,7 @@ import javax.inject.Singleton
 
 @Singleton
 class LiteRtEngineWrapper @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private var engine: Engine? = null
     private var conversation: Conversation? = null

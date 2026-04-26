@@ -22,8 +22,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
 import coil.compose.SubcomposeAsyncImage
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.ViewModel
@@ -54,6 +55,11 @@ import android.content.Intent
 import android.net.Uri
 import org.eu.nl.syu.charchat.data.HuggingFaceApiService
 import org.eu.nl.syu.charchat.data.HuggingFaceApiService.AccessResult
+import android.Manifest
+import android.os.Build
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import android.content.ClipData
 
 // --- Main Settings Screen ---
 
@@ -323,6 +329,21 @@ fun SettingsLiteRtModelsScreen(
     viewModel: ModelsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var pendingModel by remember { mutableStateOf<AllowedModel?>(null) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            pendingModel?.let { viewModel.downloadModel(it) }
+        }
+        pendingModel = null
+    }
+
+    val (downloaded, available) = remember(uiState.availableModels, uiState.downloadedModelFiles) {
+        uiState.availableModels.partition { viewModel.isDownloaded(it) }
+    }
 
     Scaffold(
         topBar = {
@@ -341,47 +362,141 @@ fun SettingsLiteRtModelsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            items(uiState.availableModels) { model ->
-                val isDownloaded = viewModel.isDownloaded(model)
-                val fileName = viewModel.getDownloadFileName(model)
-                val progress = uiState.downloadProgress[fileName]
-                val error = uiState.downloadErrors[fileName]
-                
-                ListItem(
-                    headlineContent = { Text(model.name) },
-                    supportingContent = { 
-                        if (error != null) {
-                            Text(error, color = MaterialTheme.colorScheme.error)
-                        } else {
-                            Text(model.description)
-                        }
-                    },
-                    leadingContent = { Icon(Icons.Default.ModelTraining, contentDescription = null) },
-                    trailingContent = {
-                        if (isDownloaded) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = "Downloaded", tint = MaterialTheme.colorScheme.primary)
-                        } else if (progress != null && progress < 100) {
-                            CircularProgressIndicator(progress = progress / 100f, modifier = Modifier.size(24.dp))
-                        } else {
-                            if (error != null && error.contains("Accept Terms")) {
-                                val context = LocalContext.current
-                                Button(onClick = {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://huggingface.co/${model.modelId}"))
-                                    context.startActivity(intent)
-                                }) {
-                                    Text("Open HF")
+            if (downloaded.isNotEmpty()) {
+                item {
+                    Text(
+                        "Downloaded",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                items(downloaded) { model ->
+                    ModelListItem(
+                        model = model,
+                        isDownloaded = true,
+                        progress = null,
+                        error = null,
+                        onDownload = {},
+                        onDelete = { viewModel.deleteModel(model) },
+                        viewModel = viewModel
+                    )
+                }
+                item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+            }
+
+            if (available.isNotEmpty()) {
+                item {
+                    Text(
+                        "Available to Download",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                items(available) { model ->
+                    val fileName = viewModel.getDownloadFileName(model)
+                    val progress = uiState.downloadProgress[fileName]
+                    val error = uiState.downloadErrors[fileName]
+
+                    ModelListItem(
+                        model = model,
+                        isDownloaded = false,
+                        progress = progress,
+                        error = error,
+                        onDownload = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                    pendingModel = model
+                                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    viewModel.downloadModel(model)
                                 }
                             } else {
-                                IconButton(onClick = { viewModel.downloadModel(model) }) {
-                                    Icon(if (error != null) Icons.Default.Refresh else Icons.Default.Download, contentDescription = "Download")
-                                }
+                                viewModel.downloadModel(model)
                             }
-                        }
-                    }
-                )
+                        },
+                        onDelete = {},
+                        viewModel = viewModel
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+fun ModelListItem(
+    model: AllowedModel,
+    isDownloaded: Boolean,
+    progress: Int?,
+    error: String?,
+    onDownload: () -> Unit,
+    onDelete: () -> Unit,
+    viewModel: ModelsViewModel
+) {
+    ListItem(
+        headlineContent = { Text(model.name) },
+        supportingContent = {
+            Column {
+                if (error != null) {
+                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Text(model.description, style = MaterialTheme.typography.bodySmall)
+                }
+                if (progress != null && progress < 100) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { progress / 100f },
+                        modifier = Modifier.fillMaxWidth().height(4.dp),
+                    )
+                }
+            }
+        },
+        leadingContent = {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    Icons.Default.ModelTraining,
+                    contentDescription = null,
+                    tint = if (isDownloaded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                )
+            }
+        },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isDownloaded) {
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                    }
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = "Downloaded",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                } else if (progress != null && progress < 100) {
+                    Text("$progress%", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    if (error != null && error.contains("Accept Terms")) {
+                        val context = LocalContext.current
+                        Button(onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://huggingface.co/${model.modelId}"))
+                            context.startActivity(intent)
+                        }) {
+                            Text("Terms")
+                        }
+                    } else {
+                        IconButton(onClick = onDownload) {
+                            Icon(
+                                if (error != null) Icons.Default.Refresh else Icons.Default.Download,
+                                contentDescription = "Download"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    )
 }
 
 // --- Embedding Models Selection Screen ---
@@ -447,7 +562,8 @@ fun SettingsHuggingFaceAccountScreen(
     viewModel: ModelsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
     
     Scaffold(
         topBar = {
@@ -552,8 +668,10 @@ fun SettingsHuggingFaceAccountScreen(
                         )
                         
                         IconButton(onClick = {
-                            uiState.accessToken?.let {
-                                clipboardManager.setText(AnnotatedString(it))
+                            uiState.accessToken?.let { token ->
+                                scope.launch {
+                                    clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Access Token", token)))
+                                }
                             }
                         }) {
                             Icon(Icons.Default.ContentCopy, contentDescription = "Copy token")
@@ -587,7 +705,6 @@ fun SettingsHuggingFaceAccountScreen(
 
 data class ModelsUiState(
     val availableModels: List<AllowedModel> = emptyList(),
-    val downloadedModels: List<String> = emptyList(),
     val downloadProgress: Map<String, Int> = emptyMap(),
     val downloadErrors: Map<String, String> = emptyMap(),
     val selectedEmbeddingModel: String? = null,
@@ -596,7 +713,8 @@ data class ModelsUiState(
     val userEmail: String? = null,
     val accessToken: String? = null,
     val profilePicture: String? = null,
-    val communityAuthors: Set<String> = emptySet()
+    val communityAuthors: Set<String> = emptySet(),
+    val downloadedModelFiles: Set<String> = emptySet()
 )
 
 @HiltViewModel
@@ -605,7 +723,7 @@ class ModelsViewModel @Inject constructor(
     private val modelRepository: ModelRepository,
     private val authRepository: AuthRepository,
     private val hfApiService: HuggingFaceApiService,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ModelsUiState())
@@ -763,16 +881,30 @@ class ModelsViewModel @Inject constructor(
     }
 
     fun refreshDownloadedModels() {
-        val downloaded = modelManager.getLocalModels().map { it.name }
-        _uiState.update { it.copy(downloadedModels = downloaded) }
+        val downloadedFiles = modelManager.getLocalModels().map { it.name }.toSet()
+        _uiState.update { it.copy(downloadedModelFiles = downloadedFiles) }
         
         // Automatic selection logic for embedding models
         val downloadedEmbeddingModels = _uiState.value.availableModels
-            .filter { it.taskTypes.contains("embedding") && downloaded.contains(modelRepository.getDownloadFileName(it)) }
+            .filter { it.taskTypes.contains("embedding") && isDownloaded(it) }
         
         if (downloadedEmbeddingModels.size == 1 && _uiState.value.selectedEmbeddingModel == null) {
             selectEmbeddingModel(downloadedEmbeddingModels[0])
         }
+    }
+
+    fun deleteModel(model: AllowedModel) {
+        viewModelScope.launch {
+            val fileName = modelRepository.getDownloadFileName(model)
+            if (modelManager.deleteModel(fileName)) {
+                refreshDownloadedModels()
+            }
+        }
+    }
+
+    fun isDownloaded(model: AllowedModel): Boolean {
+        val fileName = modelRepository.getDownloadFileName(model)
+        return _uiState.value.downloadedModelFiles.contains(fileName)
     }
 
     fun downloadModel(model: AllowedModel) {
@@ -820,10 +952,6 @@ class ModelsViewModel @Inject constructor(
         }
     }
 
-    fun isDownloaded(model: AllowedModel): Boolean {
-        val fileName = modelRepository.getDownloadFileName(model)
-        return uiState.value.downloadedModels.contains(fileName)
-    }
 
     fun getDownloadFileName(model: AllowedModel): String {
         return modelRepository.getDownloadFileName(model)
