@@ -79,11 +79,8 @@ class ModelRepository @Inject constructor(
     }
 
     fun getSoc(): String {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Build.SOC_MODEL ?: ""
-        } else {
-            ""
-        }.lowercase()
+        return Build.SOC_MODEL
+            .lowercase()
     }
 
     suspend fun getAvailableModels(): List<AllowedModel> {
