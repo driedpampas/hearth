@@ -3,6 +3,7 @@ package org.eu.nl.syu.charchat.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,11 +29,8 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,10 +59,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.eu.nl.syu.charchat.data.ModelManager
 import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.local.CharacterDao
 import org.eu.nl.syu.charchat.data.local.toEntity
 import org.eu.nl.syu.charchat.domain.ScraperUseCase
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 
@@ -70,7 +73,8 @@ data class CreateCharacterState(
     val tagline: String = "",
     val lore: String = "",
     val reminderMessage: String = "",
-    val modelPath: String = "gemma-2b.litertlm",
+    val modelPath: String = "",
+    val availableModels: List<File> = emptyList(),
     val initialMessages: List<String> = listOf("Greetings! I am ready for our story."),
     val isAdvancedExpanded: Boolean = false,
     val urlToScrape: String = "",
@@ -81,10 +85,15 @@ data class CreateCharacterState(
 @HiltViewModel
 class CreateCharacterViewModel @Inject constructor(
     private val scraperUseCase: ScraperUseCase,
-    private val characterDao: CharacterDao
+    private val characterDao: CharacterDao,
+    private val modelManager: ModelManager
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CreateCharacterState())
     val uiState: StateFlow<CreateCharacterState> = _uiState.asStateFlow()
+
+    init {
+        refreshModels()
+    }
 
     fun updateName(name: String) = _uiState.update { it.copy(name = name) }
     fun updateTagline(tagline: String) = _uiState.update { it.copy(tagline = tagline) }
@@ -93,6 +102,24 @@ class CreateCharacterViewModel @Inject constructor(
     fun updateModel(model: String) = _uiState.update { it.copy(modelPath = model) }
     fun toggleAdvanced() = _uiState.update { it.copy(isAdvancedExpanded = !it.isAdvancedExpanded) }
     fun updateUrl(url: String) = _uiState.update { it.copy(urlToScrape = url) }
+
+    fun refreshModels() {
+        val models = modelManager.getLocalModels()
+            .filter { it.name.endsWith(".tflite") || it.name.endsWith(".litertlm") }
+            .sortedWith(
+                compareBy<File> { it.name.contains("embedding", ignoreCase = true) }
+                    .thenBy { it.name.lowercase() }
+            )
+
+        val currentPath = _uiState.value.modelPath
+        val nextPath = when {
+            currentPath.isNotBlank() && models.any { it.absolutePath == currentPath } -> currentPath
+            models.isNotEmpty() -> models.first().absolutePath
+            else -> ""
+        }
+
+        _uiState.update { it.copy(availableModels = models, modelPath = nextPath) }
+    }
 
     fun addInitialMessage() = _uiState.update { 
         it.copy(initialMessages = it.initialMessages + "") 
@@ -138,6 +165,7 @@ class CreateCharacterViewModel @Inject constructor(
     fun saveCharacter(onSuccess: () -> Unit) {
         viewModelScope.launch {
             val state = _uiState.value
+            if (state.modelPath.isBlank()) return@launch
             val character = Character(
                 id = UUID.randomUUID().toString(),
                 name = state.name,
@@ -166,6 +194,20 @@ fun CreateCharacterScreen(
     viewModel: CreateCharacterViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showModelPicker by rememberSaveable { mutableStateOf(false) }
+
+    if (showModelPicker) {
+        CreateCharacterModelPickerScreen(
+            availableModels = uiState.availableModels,
+            selectedModelPath = uiState.modelPath,
+            onDismiss = { showModelPicker = false },
+            onSelectModel = { model ->
+                viewModel.updateModel(model.absolutePath)
+                showModelPicker = false
+            }
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -289,36 +331,28 @@ fun CreateCharacterScreen(
                             supportingText = { Text("Helps prevent personality drift.") }
                         )
 
-                        // Model Selection (Mock)
-                        var expanded by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = !expanded },
+                        ElevatedCard(
+                            onClick = { showModelPicker = true },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            OutlinedTextField(
-                                value = uiState.modelPath,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Model Selection") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                modifier = Modifier.menuAnchor(),
-                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
-                            ) {
-                                listOf("Llama-3-8B-Instruct.gguf", "Mistral-7B-v0.3.litert", "Gemma-2b-it.gguf").forEach { model ->
-                                    DropdownMenuItem(
-                                        text = { Text(model) },
-                                        onClick = {
-                                            viewModel.updateModel(model)
-                                            expanded = false
-                                        }
-                                    )
-                                }
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("Model Selection", style = MaterialTheme.typography.titleSmall)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = uiState.modelPath.takeIf { it.isNotBlank() }?.let { File(it).name }
+                                        ?: if (uiState.availableModels.isEmpty()) "No local models downloaded" else "Select a model",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
+                        }
+
+                        if (uiState.availableModels.isEmpty()) {
+                            Text(
+                                text = "Download a model in Settings first.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
 
                         // Scenario Editor
@@ -349,10 +383,77 @@ fun CreateCharacterScreen(
 
                 Button(
                     onClick = { viewModel.saveCharacter(onNavigateBack) },
+                    enabled = uiState.modelPath.isNotBlank(),
                     modifier = Modifier.fillMaxWidth()
                         .padding(bottom = 32.dp)
                 ) {
                     Text("Create Character")
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateCharacterModelPickerScreen(
+    availableModels: List<File>,
+    selectedModelPath: String,
+    onDismiss: () -> Unit,
+    onSelectModel: (File) -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Select Model") },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        if (availableModels.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("No local models downloaded. Download one in Settings.")
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)
+            ) {
+                items(availableModels) { model ->
+                    ElevatedCard(
+                        onClick = { onSelectModel(model) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(model.name, fontWeight = FontWeight.Medium)
+                                Text(
+                                    if (model.name.contains("embedding", ignoreCase = true)) "Embedding model" else "Chat model",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (model.absolutePath == selectedModelPath) {
+                                Icon(Icons.Filled.Save, contentDescription = null)
+                            }
+                        }
+                    }
                 }
             }
         }
