@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,7 +19,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import coil.compose.SubcomposeAsyncImage
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -43,6 +50,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import javax.inject.Inject
 import androidx.core.net.toUri
+import android.content.Intent
+import android.net.Uri
+import org.eu.nl.syu.charchat.data.HuggingFaceApiService
+import org.eu.nl.syu.charchat.data.HuggingFaceApiService.AccessResult
 
 // --- Main Settings Screen ---
 
@@ -135,7 +146,8 @@ fun SettingsGeneralScreen(
 fun SettingsModelsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToLiteRt: () -> Unit,
-    onNavigateToEmbeddingModels: () -> Unit
+    onNavigateToEmbeddingModels: () -> Unit,
+    onNavigateToHuggingFace: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -192,13 +204,33 @@ fun SettingsModelsScreen(
 
             ListItem(
                 headlineContent = { Text("HuggingFace Account") },
-                supportingContent = { Text(if (isLoggedIn) "Logged in" else "Not logged in") },
-                leadingContent = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
+                supportingContent = { 
+                    if (isLoggedIn) {
+                        Text("Logged in${if (uiState.preferredUsername != null) " as ${uiState.preferredUsername}" else ""}")
+                    } else {
+                        Text("Not logged in")
+                    }
+                },
+                leadingContent = { 
+                    if (isLoggedIn && uiState.profilePicture != null) {
+                        SubcomposeAsyncImage(
+                            model = uiState.profilePicture,
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp).clip(CircleShape),
+                            loading = {
+                                CircularProgressIndicator(modifier = Modifier.padding(8.dp))
+                            },
+                            error = {
+                                Icon(Icons.Default.AccountCircle, contentDescription = null)
+                            }
+                        )
+                    } else {
+                        Icon(Icons.Default.AccountCircle, contentDescription = null)
+                    }
+                },
                 trailingContent = {
                     if (isLoggedIn) {
-                        TextButton(onClick = { hfViewModel.logout() }) {
-                            Text("Logout", color = MaterialTheme.colorScheme.error)
-                        }
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                     } else {
                         Button(onClick = {
                             val authRequest = hfViewModel.getAuthorizationRequest()
@@ -210,8 +242,74 @@ fun SettingsModelsScreen(
                             Text("Login")
                         }
                     }
-                }
+                },
+                modifier = if (isLoggedIn) Modifier.clickable { onNavigateToHuggingFace() } else Modifier
             )
+
+            if (isLoggedIn) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                
+                ListItem(
+                    headlineContent = { Text("Community Models") },
+                    supportingContent = { Text("Manage indexed authors") },
+                    leadingContent = { Icon(Icons.Default.Groups, contentDescription = null) }
+                )
+
+                var showAddDialog by remember { mutableStateOf(false) }
+                var newAuthorName by remember { mutableStateOf("") }
+
+                uiState.communityAuthors.ifEmpty { setOf("litert-community") }.forEach { author ->
+                    ListItem(
+                        headlineContent = { Text(author) },
+                        trailingContent = {
+                            IconButton(onClick = { viewModel.removeCommunityAuthor(author) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete")
+                            }
+                        },
+                        modifier = Modifier.padding(start = 16.dp)
+                    )
+                }
+
+                TextButton(
+                    onClick = { showAddDialog = true },
+                    modifier = Modifier.padding(start = 16.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Add Author")
+                }
+
+                if (showAddDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showAddDialog = false },
+                        title = { Text("Add Community Author") },
+                        text = {
+                            TextField(
+                                value = newAuthorName,
+                                onValueChange = { newAuthorName = it },
+                                placeholder = { Text("e.g. google") },
+                                singleLine = true
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                if (newAuthorName.isNotBlank()) {
+                                    viewModel.addCommunityAuthor(newAuthorName.trim())
+                                    newAuthorName = ""
+                                    showAddDialog = false
+                                }
+                            }) {
+                                Text("Add")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showAddDialog = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
+            }
         }
     }
 }
@@ -265,8 +363,18 @@ fun SettingsLiteRtModelsScreen(
                         } else if (progress != null && progress < 100) {
                             CircularProgressIndicator(progress = progress / 100f, modifier = Modifier.size(24.dp))
                         } else {
-                            IconButton(onClick = { viewModel.downloadModel(model) }) {
-                                Icon(if (error != null) Icons.Default.Refresh else Icons.Default.Download, contentDescription = "Download")
+                            if (error != null && error.contains("Accept Terms")) {
+                                val context = LocalContext.current
+                                Button(onClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://huggingface.co/${model.modelId}"))
+                                    context.startActivity(intent)
+                                }) {
+                                    Text("Open HF")
+                                }
+                            } else {
+                                IconButton(onClick = { viewModel.downloadModel(model) }) {
+                                    Icon(if (error != null) Icons.Default.Refresh else Icons.Default.Download, contentDescription = "Download")
+                                }
                             }
                         }
                     }
@@ -330,6 +438,151 @@ fun SettingsEmbeddingModelsScreen(
     }
 }
 
+// --- HuggingFace Account Screen ---
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsHuggingFaceAccountScreen(
+    onNavigateBack: () -> Unit,
+    viewModel: ModelsViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val clipboardManager = LocalClipboardManager.current
+    
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("HuggingFace Account") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (uiState.profilePicture != null) {
+                SubcomposeAsyncImage(
+                    model = uiState.profilePicture,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp).clip(CircleShape),
+                    loading = {
+                        CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                    },
+                    error = {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(80.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                text = uiState.userName ?: "Unknown User",
+                style = MaterialTheme.typography.headlineMedium
+            )
+            
+            uiState.preferredUsername?.let { username ->
+                Text(
+                    text = "@$username",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            uiState.userEmail?.let { email ->
+                Text(
+                    text = email,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Access Token",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val displayToken = uiState.accessToken?.let {
+                            if (it.length > 8) {
+                                "${it.take(4)}...${it.takeLast(4)}"
+                            } else {
+                                "****"
+                            }
+                        } ?: "No token found"
+                        
+                        Text(
+                            text = displayToken,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        IconButton(onClick = {
+                            uiState.accessToken?.let {
+                                clipboardManager.setText(AnnotatedString(it))
+                            }
+                        }) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy token")
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
+            Button(
+                onClick = { 
+                    viewModel.logout()
+                    onNavigateBack()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                )
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Logout")
+            }
+        }
+    }
+}
+
 // --- ViewModel and Helper Classes ---
 
 data class ModelsUiState(
@@ -337,7 +590,13 @@ data class ModelsUiState(
     val downloadedModels: List<String> = emptyList(),
     val downloadProgress: Map<String, Int> = emptyMap(),
     val downloadErrors: Map<String, String> = emptyMap(),
-    val selectedEmbeddingModel: String? = null
+    val selectedEmbeddingModel: String? = null,
+    val userName: String? = null,
+    val preferredUsername: String? = null,
+    val userEmail: String? = null,
+    val accessToken: String? = null,
+    val profilePicture: String? = null,
+    val communityAuthors: Set<String> = emptySet()
 )
 
 @HiltViewModel
@@ -345,6 +604,7 @@ class ModelsViewModel @Inject constructor(
     private val modelManager: ModelManager,
     private val modelRepository: ModelRepository,
     private val authRepository: AuthRepository,
+    private val hfApiService: HuggingFaceApiService,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -356,10 +616,63 @@ class ModelsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     init {
-        _uiState.update { it.copy(availableModels = modelRepository.getAvailableModels()) }
-        refreshDownloadedModels()
+        viewModelScope.launch {
+            _uiState.update { it.copy(availableModels = modelRepository.getAvailableModels()) }
+            refreshDownloadedModels()
+        }
         observeWorkManager()
         observeSelectedEmbeddingModel()
+        observeAuthToken()
+        observeCommunityAuthors()
+    }
+
+    private fun observeCommunityAuthors() {
+        viewModelScope.launch {
+            modelRepository.communityAuthors.collect { authors ->
+                _uiState.update { it.copy(communityAuthors = authors) }
+                // Refresh models when authors change
+                _uiState.update { it.copy(availableModels = modelRepository.getAvailableModels()) }
+            }
+        }
+    }
+
+    fun addCommunityAuthor(author: String) {
+        viewModelScope.launch {
+            modelRepository.addCommunityAuthor(author)
+        }
+    }
+
+    fun removeCommunityAuthor(author: String) {
+        viewModelScope.launch {
+            modelRepository.removeCommunityAuthor(author)
+        }
+    }
+
+    private fun observeAuthToken() {
+        viewModelScope.launch {
+            authRepository.authToken.collect { token ->
+                if (token != null) {
+                    val userInfo = hfApiService.whoami(token.accessToken)
+                    _uiState.update { 
+                        it.copy(
+                            userName = userInfo?.name,
+                            preferredUsername = userInfo?.preferredUsername,
+                            userEmail = userInfo?.email,
+                            accessToken = token.accessToken,
+                            profilePicture = userInfo?.picture
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(
+                        userName = null, 
+                        preferredUsername = null,
+                        userEmail = null, 
+                        accessToken = null,
+                        profilePicture = null
+                    ) }
+                }
+            }
+        }
     }
 
     private fun observeSelectedEmbeddingModel() {
@@ -464,8 +777,43 @@ class ModelsViewModel @Inject constructor(
 
     fun downloadModel(model: AllowedModel) {
         viewModelScope.launch {
-            val url = modelRepository.getDownloadUrl(model)
             val fileName = modelRepository.getDownloadFileName(model)
+            
+            // Clear previous error
+            _uiState.update { 
+                val newErrors = it.downloadErrors.toMutableMap()
+                newErrors.remove(fileName)
+                it.copy(downloadErrors = newErrors) 
+            }
+
+            // Check access if it's a gated community model
+            if (model.modelId.contains("/")) { // Basic check for HF models
+                val token = authRepository.getAccessToken()
+                if (token != null) {
+                    val access = hfApiService.checkModelAccess(token, model.modelId)
+                    if (access is AccessResult.Forbidden) {
+                        _uiState.update { 
+                            val newErrors = it.downloadErrors.toMutableMap()
+                            newErrors[fileName] = "Gated - Accept Terms"
+                            it.copy(downloadErrors = newErrors) 
+                        }
+                        return@launch
+                    } else if (access is AccessResult.Unauthorized) {
+                        _uiState.update { 
+                            val newErrors = it.downloadErrors.toMutableMap()
+                            newErrors[fileName] = "Unauthorized - Please relogin"
+                            it.copy(downloadErrors = newErrors) 
+                        }
+                        return@launch
+                    }
+                } else {
+                    // Try to download without token, it will fail if it's strictly gated,
+                    // but we let DownloadWorker handle it. For HF models, if we have no token,
+                    // we could prompt for login, but we'll let it proceed for public models.
+                }
+            }
+
+            val url = modelRepository.getDownloadUrl(model)
             modelManager.downloadModel(url, fileName)
         }
     }

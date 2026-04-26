@@ -9,10 +9,12 @@ import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import android.util.Log
 
 private val Context.modelDataStore: DataStore<Preferences> by preferencesDataStore(name = "model_prefs")
 
@@ -37,13 +39,34 @@ data class AllowedModel(
 
 @Singleton
 class ModelRepository @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val hfApiService: HuggingFaceApiService,
+    private val authRepository: AuthRepository
 ) {
     private val gson = Gson()
     private val SELECTED_EMBEDDING_MODEL = stringPreferencesKey("selected_embedding_model")
+    private val COMMUNITY_AUTHORS = stringSetPreferencesKey("community_authors")
 
     val selectedEmbeddingModel: Flow<String?> = context.modelDataStore.data.map { preferences ->
         preferences[SELECTED_EMBEDDING_MODEL]
+    }
+
+    val communityAuthors: Flow<Set<String>> = context.modelDataStore.data.map { preferences ->
+        preferences[COMMUNITY_AUTHORS] ?: emptySet()
+    }
+
+    suspend fun addCommunityAuthor(author: String) {
+        context.modelDataStore.edit { preferences ->
+            val current = preferences[COMMUNITY_AUTHORS] ?: emptySet()
+            preferences[COMMUNITY_AUTHORS] = current + author
+        }
+    }
+
+    suspend fun removeCommunityAuthor(author: String) {
+        context.modelDataStore.edit { preferences ->
+            val current = preferences[COMMUNITY_AUTHORS] ?: emptySet()
+            preferences[COMMUNITY_AUTHORS] = current - author
+        }
     }
 
     suspend fun setSelectedEmbeddingModel(name: String) {
@@ -60,7 +83,7 @@ class ModelRepository @Inject constructor(
         }.lowercase()
     }
 
-    fun getAvailableModels(): List<AllowedModel> {
+    suspend fun getAvailableModels(): List<AllowedModel> {
         val models = mutableListOf<AllowedModel>()
         
         // 1. Load from assets (Gallery models)
@@ -74,6 +97,38 @@ class ModelRepository @Inject constructor(
 
         // 2. Add EmbeddingGemma-300m manually
         models.add(getEmbeddingGemmaModel())
+
+        // 3. Fetch from Hugging Face if token is available
+        try {
+            val token = authRepository.getAccessToken()
+            if (token != null) {
+                val authorsFlow = context.modelDataStore.data.map { preferences ->
+                    preferences[COMMUNITY_AUTHORS] ?: setOf("litert-community")
+                }
+                val authors = authorsFlow.first().ifEmpty { setOf("litert-community") }
+                
+                authors.forEach { author ->
+                    Log.d("ModelRepository", "Fetching models from author: $author")
+                    val hfModels = hfApiService.fetchCommunityModels(token, author)
+                    hfModels.forEach { hfModel ->
+                        val tfliteFile = hfModel.siblings?.find { it.rfilename.endsWith(".tflite") }?.rfilename
+                        if (tfliteFile != null) {
+                            models.add(AllowedModel(
+                                name = hfModel.id.substringAfter("/"),
+                                modelId = hfModel.id,
+                                modelFile = tfliteFile,
+                                commitHash = "main",
+                                description = "Community model from $author.",
+                                sizeInBytes = 0,
+                                taskTypes = if (hfModel.pipelineTag != null) listOf(hfModel.pipelineTag) else emptyList()
+                            ))
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ModelRepository", "Error fetching dynamic models", e)
+        }
 
         return models
     }

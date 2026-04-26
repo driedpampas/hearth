@@ -52,6 +52,7 @@ class DownloadWorker @AssistedInject constructor(
 
         return withContext(Dispatchers.IO) {
             try {
+                Log.d(TAG, "Starting download: $fileName from $urlStr")
                 setForeground(createForegroundInfo(0, fileName))
 
                 val url = URL(urlStr)
@@ -62,24 +63,30 @@ class DownloadWorker @AssistedInject constructor(
                     val token = authRepository.getAccessToken()
                     if (token != null) {
                         connection.setRequestProperty("Authorization", "Bearer $token")
-                        Log.d(TAG, "Using HuggingFace Auth Token")
+                        Log.d(TAG, "Applied HuggingFace Auth Token for $fileName")
+                    } else {
+                        Log.w(TAG, "HuggingFace URL detected but no Auth Token found. Attempting public access.")
                     }
                 }
 
+                Log.d(TAG, "Connecting to ${url.host}...")
                 connection.connect()
 
-                if (connection.responseCode == HttpURLConnection.HTTP_FORBIDDEN || connection.responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
-                    Log.e(TAG, "Auth failed: ${connection.responseCode}")
+                val responseCode = connection.responseCode
+                Log.d(TAG, "Server responded with HTTP $responseCode")
+
+                if (responseCode == HttpURLConnection.HTTP_FORBIDDEN || responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                    Log.e(TAG, "Authentication failed (HTTP $responseCode) for $fileName. Check if the model is gated.")
                     return@withContext Result.failure(
                         Data.Builder()
-                            .putInt("error_code", connection.responseCode)
+                            .putInt("error_code", responseCode)
                             .putString("fileName", fileName)
                             .build()
                     )
                 }
 
-                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                    Log.e(TAG, "HTTP error: ${connection.responseCode}")
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    Log.e(TAG, "Download failed for $fileName: Unexpected HTTP $responseCode")
                     return@withContext Result.failure(
                         Data.Builder()
                             .putString("fileName", fileName)
@@ -88,8 +95,13 @@ class DownloadWorker @AssistedInject constructor(
                 }
 
                 val totalBytes = connection.contentLengthLong
+                Log.d(TAG, "File size: ${totalBytes / (1024 * 1024)} MB")
+                
                 val modelsDir = File(applicationContext.filesDir, "models")
-                if (!modelsDir.exists()) modelsDir.mkdirs()
+                if (!modelsDir.exists()) {
+                    Log.d(TAG, "Creating models directory: ${modelsDir.absolutePath}")
+                    modelsDir.mkdirs()
+                }
 
                 val outputFile = File(modelsDir, fileName)
                 val tmpFile = File(modelsDir, "$fileName.tmp")
@@ -97,37 +109,47 @@ class DownloadWorker @AssistedInject constructor(
                 val inputStream = connection.inputStream
                 val outputStream = FileOutputStream(tmpFile)
 
-                val buffer = ByteArray(8192)
+                val buffer = ByteArray(16384) // Increased buffer size
                 var bytesRead: Int
                 var downloadedBytes = 0L
                 var lastProgressUpdate = 0L
 
+                Log.d(TAG, "Downloading $fileName to ${tmpFile.name}...")
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                     outputStream.write(buffer, 0, bytesRead)
                     downloadedBytes += bytesRead
 
                     val currentTime = System.currentTimeMillis()
-                    if (currentTime - lastProgressUpdate > 500 && totalBytes > 0) {
+                    if (currentTime - lastProgressUpdate > 1000 && totalBytes > 0) { // Update every 1s
                         val progress = (downloadedBytes * 100 / totalBytes).toInt()
+                        Log.v(TAG, "Download progress for $fileName: $progress%")
                         setProgress(Data.Builder().putInt("progress", progress).build())
                         setForeground(createForegroundInfo(progress, fileName))
                         lastProgressUpdate = currentTime
                     }
                 }
 
+                outputStream.flush()
                 outputStream.close()
                 inputStream.close()
 
+                Log.d(TAG, "Download completed. Verifying and moving to final destination...")
                 if (outputFile.exists()) {
+                    Log.d(TAG, "Overwriting existing model file: $fileName")
                     outputFile.delete()
                 }
-                tmpFile.renameTo(outputFile)
-
-                setProgress(Data.Builder().putInt("progress", 100).build())
-                Result.success()
+                
+                if (tmpFile.renameTo(outputFile)) {
+                    Log.i(TAG, "Successfully downloaded and saved: $fileName")
+                    setProgress(Data.Builder().putInt("progress", 100).build())
+                    Result.success()
+                } else {
+                    Log.e(TAG, "Failed to rename temporary file to $fileName")
+                    Result.failure(Data.Builder().putString("error", "Rename failed").build())
+                }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Download failed", e)
+                Log.e(TAG, "Exception during download of $fileName", e)
                 Result.failure(Data.Builder().putString("error", e.message).build())
             }
         }

@@ -75,6 +75,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
 
     // Hilt
     implementation(libs.hilt.android)
