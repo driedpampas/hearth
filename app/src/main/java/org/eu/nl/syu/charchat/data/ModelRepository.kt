@@ -49,6 +49,10 @@ class ModelRepository @Inject constructor(
     private val gson = Gson()
     private val SELECTED_EMBEDDING_MODEL = stringPreferencesKey("selected_embedding_model")
     private val COMMUNITY_AUTHORS = stringSetPreferencesKey("community_authors")
+    private val EXPERIMENTAL_NPU_ENABLED = androidx.datastore.preferences.core.booleanPreferencesKey("experimental_npu_enabled")
+    private val MODEL_BACKEND_CACHE = stringPreferencesKey("model_backend_cache")
+    private val PREFERRED_BACKEND = stringPreferencesKey("preferred_backend")
+    private val DEFAULT_MAX_TOKENS = androidx.datastore.preferences.core.intPreferencesKey("default_max_tokens")
 
     val selectedEmbeddingModel: Flow<String?> = context.modelDataStore.data.map { preferences ->
         preferences[SELECTED_EMBEDDING_MODEL]
@@ -75,6 +79,60 @@ class ModelRepository @Inject constructor(
     suspend fun setSelectedEmbeddingModel(name: String) {
         context.modelDataStore.edit { preferences ->
             preferences[SELECTED_EMBEDDING_MODEL] = name
+        }
+    }
+
+    val experimentalNpuEnabled: Flow<Boolean> = context.modelDataStore.data.map { preferences ->
+        preferences[EXPERIMENTAL_NPU_ENABLED] ?: false
+    }
+
+    suspend fun setExperimentalNpuEnabled(enabled: Boolean) {
+        context.modelDataStore.edit { preferences ->
+            preferences[EXPERIMENTAL_NPU_ENABLED] = enabled
+        }
+    }
+
+    suspend fun getCachedBackend(modelHash: String): String? {
+        val cacheJson = context.modelDataStore.data.first()[MODEL_BACKEND_CACHE] ?: return null
+        val cache = try {
+            gson.fromJson(cacheJson, Map::class.java) as? Map<String, String>
+        } catch (e: Exception) {
+            null
+        }
+        return cache?.get(modelHash)
+    }
+
+    suspend fun setCachedBackend(modelHash: String, backend: String) {
+        context.modelDataStore.edit { preferences ->
+            val currentJson = preferences[MODEL_BACKEND_CACHE]
+            val currentCache = try {
+                if (currentJson != null) gson.fromJson(currentJson, Map::class.java) as? MutableMap<String, String> else mutableMapOf()
+            } catch (e: Exception) {
+                mutableMapOf()
+            } ?: mutableMapOf()
+            
+            currentCache[modelHash] = backend
+            preferences[MODEL_BACKEND_CACHE] = gson.toJson(currentCache)
+        }
+    }
+
+    val preferredBackend: Flow<String> = context.modelDataStore.data.map { preferences ->
+        preferences[PREFERRED_BACKEND] ?: "Automatic"
+    }
+
+    suspend fun setPreferredBackend(backend: String) {
+        context.modelDataStore.edit { preferences ->
+            preferences[PREFERRED_BACKEND] = backend
+        }
+    }
+
+    val defaultMaxTokens: Flow<Int> = context.modelDataStore.data.map { preferences ->
+        preferences[DEFAULT_MAX_TOKENS] ?: 4096
+    }
+
+    suspend fun setDefaultMaxTokens(maxTokens: Int) {
+        context.modelDataStore.edit { preferences ->
+            preferences[DEFAULT_MAX_TOKENS] = maxTokens
         }
     }
 

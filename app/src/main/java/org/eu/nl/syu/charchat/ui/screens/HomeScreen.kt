@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,25 +22,39 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material.icons.outlined.Widgets
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingActionButtonMenu
 import androidx.compose.material3.FloatingActionButtonMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ToggleFloatingActionButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -61,6 +77,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.compose.AsyncImage
 import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.ui.viewmodels.HomeViewModel
+import org.eu.nl.syu.charchat.ui.viewmodels.HomeUiState
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -76,6 +93,16 @@ fun HomeScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var showModelMenu by remember { mutableStateOf(false) }
+    var showModelSettings by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.notification) {
+        uiState.notification?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearNotification()
+        }
+    }
 
     val filteredCharacters = remember(searchQuery, uiState.characters) {
         if (searchQuery.isEmpty()) uiState.characters
@@ -97,6 +124,7 @@ fun HomeScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             if (isFabVisible || fabMenuExpanded) {
                 Box {
@@ -155,13 +183,82 @@ fun HomeScreen(
                         onExpandedChange = { searchActive = it },
                         placeholder = { Text("Search characters") },
                         leadingIcon = {
-                            IconButton(onClick = { /* Menu */ }) {
-                                Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                            if (!searchActive) {
+                                Box {
+                                    IconButton(onClick = { showModelMenu = true }) {
+                                        Icon(
+                                            imageVector = if (uiState.selectedModel != null) Icons.Filled.Widgets else Icons.Outlined.Widgets,
+                                            contentDescription = "Model Selection",
+                                            tint = if (uiState.selectedModel != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = showModelMenu,
+                                        onDismissRequest = { showModelMenu = false }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                "Select Model",
+                                                style = MaterialTheme.typography.labelLarge
+                                            )
+                                            IconButton(
+                                                onClick = { 
+                                                    showModelSettings = true
+                                                    showModelMenu = false
+                                                },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(Icons.Default.Tune, contentDescription = "Model Settings", modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                        HorizontalDivider()
+                                        if (uiState.downloadedModels.isEmpty()) {
+                                            DropdownMenuItem(
+                                                text = { Text("No models downloaded") },
+                                                onClick = { showModelMenu = false },
+                                                enabled = false
+                                            )
+                                        } else {
+                                            uiState.downloadedModels.forEach { file ->
+                                                DropdownMenuItem(
+                                                    text = { 
+                                                        Text(
+                                                            file.name,
+                                                            fontWeight = if (uiState.selectedModel == file.name) FontWeight.Bold else FontWeight.Normal
+                                                        ) 
+                                                    },
+                                                    onClick = {
+                                                        viewModel.selectModel(file)
+                                                        showModelMenu = false
+                                                    },
+                                                    trailingIcon = {
+                                                        if (uiState.selectedModel == file.name) {
+                                                            Icon(Icons.Default.Widgets, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         },
                         trailingIcon = {
-                            IconButton(onClick = onNavigateToSettings) {
-                                Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                            if (searchActive) {
+                                IconButton(onClick = { 
+                                    if (searchQuery.isNotEmpty()) searchQuery = "" 
+                                    else searchActive = false 
+                                }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                }
+                            } else {
+                                IconButton(onClick = onNavigateToSettings) {
+                                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                                }
                             }
                         }
                     )
@@ -173,6 +270,19 @@ fun HomeScreen(
                     .padding(horizontal = if (searchActive) 0.dp else 16.dp, vertical = 0.dp),
             ) {
                 // Search suggestions or results could go here
+            }
+
+            if (uiState.isModelLoading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp))
+            }
+
+            if (showModelSettings) {
+                ModelSettingsDialog(
+                    uiState = uiState,
+                    onDismiss = { showModelSettings = false },
+                    onSaveBackend = { viewModel.setPreferredBackend(it) },
+                    onSaveMaxTokens = { viewModel.setDefaultMaxTokens(it) }
+                )
             }
 
             Text(
@@ -266,4 +376,50 @@ fun CharacterCard(
             )
         }
     }
+}
+
+@Composable
+fun ModelSettingsDialog(
+    uiState: HomeUiState,
+    onDismiss: () -> Unit,
+    onSaveBackend: (String) -> Unit,
+    onSaveMaxTokens: (Int) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Model Settings") },
+        text = {
+            Column {
+                Text("Preferred Hardware", style = MaterialTheme.typography.labelMedium)
+                for (backend in listOf("Automatic", "CPU", "GPU", "NPU")) {
+                    if (backend == "NPU" && !uiState.experimentalNpuEnabled) continue
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { onSaveBackend(backend) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = uiState.preferredBackend == backend,
+                            onClick = { onSaveBackend(backend) }
+                        )
+                        Text(backend)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text("Max Context Tokens: ${uiState.defaultMaxTokens}", style = MaterialTheme.typography.labelMedium)
+                Slider(
+                    value = uiState.defaultMaxTokens.toFloat(),
+                    onValueChange = { onSaveMaxTokens(it.toInt()) },
+                    valueRange = 1024f..16384f,
+                    steps = 15
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        }
+    )
 }

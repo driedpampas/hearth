@@ -15,24 +15,85 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import org.eu.nl.syu.charchat.data.Character
+import org.eu.nl.syu.charchat.data.ModelRepository
+import java.io.File
+import java.io.FileInputStream
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class LiteRtEngineWrapper @Inject constructor(
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    private val modelRepository: ModelRepository
 ) {
     private var engine: Engine? = null
     private var conversation: Conversation? = null
 
     fun isInitialized(): Boolean = engine != null
 
-    suspend fun initialize(modelPath: String, backend: Backend = Backend.GPU()) {
+    private fun calculateHash(filePath: String): String {
+        val file = File(filePath)
+        if (!file.exists()) return ""
+        val digest = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(8192)
+        val fis = FileInputStream(file)
+        var bytesRead: Int
+        while (fis.read(buffer).also { bytesRead = it } != -1) {
+            digest.update(buffer, 0, bytesRead)
+        }
+        fis.close()
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    suspend fun initialize(
+        modelPath: String, 
+        preferredBackend: Backend? = null,
+        maxTokens: Int = 4096,
+        onFallback: ((String) -> Unit)? = null
+    ) {
+        val hash = calculateHash(modelPath)
+        val backendToUse = if (preferredBackend != null) {
+            preferredBackend
+        } else {
+            // Automatic mode
+            val cachedBackendLabel = modelRepository.getCachedBackend(hash)
+            when (cachedBackendLabel) {
+                "GPU" -> Backend.GPU()
+                "CPU" -> Backend.CPU()
+                "NPU" -> Backend.NPU(context.applicationInfo.nativeLibraryDir)
+                else -> null // Try GPU first
+            }
+        }
+
+        if (backendToUse != null) {
+            try {
+                loadModel(modelPath, backendToUse, maxTokens)
+                return
+            } catch (e: Exception) {
+                onFallback?.invoke("Cached/Preferred backend failed, falling back to CPU.")
+            }
+        }
+
+        // Automatic fallback chain: GPU -> CPU
+        try {
+            loadModel(modelPath, Backend.GPU(), maxTokens)
+            modelRepository.setCachedBackend(hash, "GPU")
+        } catch (e: Exception) {
+            onFallback?.invoke("GPU not supported for this model. Falling back to CPU.")
+            loadModel(modelPath, Backend.CPU(), maxTokens)
+            modelRepository.setCachedBackend(hash, "CPU")
+        }
+    }
+
+    private fun loadModel(modelPath: String, backend: Backend, maxTokens: Int) {
         val config = EngineConfig(
             modelPath = modelPath,
             backend = backend,
+            maxNumTokens = maxTokens,
             cacheDir = context.cacheDir.path
         )
+        engine?.close()
         engine = Engine(config).apply { initialize() }
     }
 

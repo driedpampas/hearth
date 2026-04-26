@@ -82,6 +82,7 @@ import androidx.work.WorkManager
 import coil.compose.SubcomposeAsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -156,8 +157,12 @@ fun SettingsMainScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsGeneralScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: ModelsViewModel = hiltViewModel()
 ) {
+    val experimentalNpuEnabled by viewModel.experimentalNpuEnabled.collectAsStateWithLifecycle(initialValue = false)
+    var showNpuWarning by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -185,6 +190,50 @@ fun SettingsGeneralScreen(
                 supportingContent = { Text("Vibrate on message") },
                 trailingContent = { Switch(checked = true, onCheckedChange = {}) }
             )
+            
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            Text(
+                "Advanced",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(16.dp),
+                color = MaterialTheme.colorScheme.primary
+            )
+            
+            ListItem(
+                headlineContent = { Text("Enable Experimental NPU Support") },
+                supportingContent = { Text("Allows forced NPU execution for compatible models. May cause instability or OOM crashes.") },
+                trailingContent = { 
+                    Switch(
+                        checked = experimentalNpuEnabled, 
+                        onCheckedChange = { 
+                            if (it) showNpuWarning = true 
+                            else viewModel.setExperimentalNpuEnabled(false)
+                        }
+                    ) 
+                }
+            )
+
+            if (showNpuWarning) {
+                AlertDialog(
+                    onDismissRequest = { showNpuWarning = false },
+                    title = { Text("Experimental NPU Support") },
+                    text = { Text("NPUs often lack the complex operator support required for Large Language Models. Enabling this may cause the app to crash or run out of memory. Proceed with caution.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.setExperimentalNpuEnabled(true)
+                            showNpuWarning = false
+                        }) {
+                            Text("Enable")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showNpuWarning = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -797,6 +846,14 @@ class ModelsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ModelsUiState())
     val uiState: StateFlow<ModelsUiState> = _uiState.asStateFlow()
+
+    val experimentalNpuEnabled: Flow<Boolean> = modelRepository.experimentalNpuEnabled
+
+    fun setExperimentalNpuEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            modelRepository.setExperimentalNpuEnabled(enabled)
+        }
+    }
 
     val isLoggedIn: StateFlow<Boolean> = authRepository.authToken
         .map { it != null }
