@@ -22,16 +22,55 @@ import org.eu.nl.syu.charchat.ui.screens.SettingsEmbeddingModelsScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsHuggingFaceAccountScreen
 import org.eu.nl.syu.charchat.ui.theme.ChatTheme
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import org.eu.nl.syu.charchat.data.AuthRepository
+import org.eu.nl.syu.charchat.data.AuthError
+import javax.inject.Inject
+
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject lateinit var authRepository: AuthRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             ChatTheme {
+                val authError by authRepository.authError.collectAsStateWithLifecycle()
+                
                 CharChatApp()
+                
+                authError?.let { error ->
+                    AlertDialog(
+                        onDismissRequest = { authRepository.clearAuthError() },
+                        title = { Text("Authentication Error") },
+                        text = { 
+                            Text("Your Hugging Face session has expired and could not be refreshed. Would you like to log out and log in again?")
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                lifecycleScope.launch {
+                                    authRepository.clearToken()
+                                }
+                            }) {
+                                Text("Logout")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { authRepository.clearAuthError() }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
             }
         }
     }

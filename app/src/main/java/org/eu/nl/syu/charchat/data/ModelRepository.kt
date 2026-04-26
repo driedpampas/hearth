@@ -109,7 +109,7 @@ class ModelRepository @Inject constructor(
                 
                 authors.forEach { author ->
                     Log.d("ModelRepository", "Fetching models from author: $author")
-                    val hfModels = hfApiService.fetchCommunityModels(token, author)
+                    val hfModels = hfApiService.fetchCommunityModels(author)
                     hfModels.forEach { hfModel ->
                         val tfliteFile = hfModel.siblings?.find { it.rfilename.endsWith(".tflite") }?.rfilename
                         if (tfliteFile != null) {

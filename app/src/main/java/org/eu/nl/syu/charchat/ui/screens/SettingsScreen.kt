@@ -652,7 +652,7 @@ class ModelsViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.authToken.collect { token ->
                 if (token != null) {
-                    val userInfo = hfApiService.whoami(token.accessToken)
+                    val userInfo = hfApiService.whoami()
                     _uiState.update { 
                         it.copy(
                             userName = userInfo?.name,
@@ -790,7 +790,7 @@ class ModelsViewModel @Inject constructor(
             if (model.modelId.contains("/")) { // Basic check for HF models
                 val token = authRepository.getAccessToken()
                 if (token != null) {
-                    val access = hfApiService.checkModelAccess(token, model.modelId)
+                    val access = hfApiService.checkModelAccess(model.modelId)
                     if (access is AccessResult.Forbidden) {
                         _uiState.update { 
                             val newErrors = it.downloadErrors.toMutableMap()
