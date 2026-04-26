@@ -17,3 +17,4 @@ AGENTS.md
 gallery
 **/*.so
 .kotlin
+*-openapi.md

@@ -19,16 +19,12 @@ class HuggingFaceApiService @Inject constructor(
     private val gson = Gson()
     private val TAG = "HuggingFaceApiService"
 
-    /**
-     * Executes a block that requires an auth token. 
-     * Handles 401 by refreshing and retrying once.
-     */
     suspend fun <T> authorizedRequest(block: suspend (token: String) -> Pair<T?, Int>): T? {
         val authRepository = authRepositoryProvider.get()
         var token = authRepository.getAccessToken() ?: return null
-        
+
         var (result, code) = block(token)
-        
+
         if (code == 401) {
             Log.w(TAG, "Got 401, attempting refresh...")
             token = authRepository.refreshAccessToken() ?: return null
@@ -39,7 +35,7 @@ class HuggingFaceApiService @Inject constructor(
             }
             return retryResult
         }
-        
+
         return result
     }
 
@@ -67,56 +63,64 @@ class HuggingFaceApiService @Inject constructor(
         null to -1
     }
 
-    suspend fun checkModelAccess(modelId: String): AccessResult = authorizedRequest { token ->
-        val (result, code) = checkModelAccessInternal(token, modelId)
+    suspend fun checkModelAccess(author: String, modelId: String): AccessResult = authorizedRequest { token ->
+        val (result, code) = checkModelAccessInternal(token, author, modelId)
         result to code
     } ?: AccessResult.Error("Unauthorized")
 
-    private suspend fun checkModelAccessInternal(token: String, modelId: String): Pair<AccessResult, Int> = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Checking access for gated model: $modelId")
-        try {
-            val url = URL("https://huggingface.co/api/models/$modelId")
-            val connection = url.openConnection() as HttpURLConnection
-            connection.setRequestProperty("Authorization", "Bearer $token")
+    private suspend fun checkModelAccessInternal(
+        token: String,
+        author: String,
+        modelId: String
+    ): Pair<AccessResult, Int> =
+        withContext(Dispatchers.IO) {
+            val fullId = "$author/$modelId"
+            Log.d(TAG, "Checking access for gated model: $fullId")
+            try {
+                val url = URL("https://huggingface.co/api/models/$fullId")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.setRequestProperty("Authorization", "Bearer $token")
 
-            val responseCode = connection.responseCode
-            val result = when (responseCode) {
-                200 -> AccessResult.Granted
-                401 -> AccessResult.Unauthorized
-                403 -> AccessResult.Forbidden
-                else -> AccessResult.Error("HTTP $responseCode")
+                val responseCode = connection.responseCode
+                val result = when (responseCode) {
+                    200 -> AccessResult.Granted
+                    401 -> AccessResult.Unauthorized
+                    403 -> AccessResult.Forbidden
+                    else -> AccessResult.Error("HTTP $responseCode")
+                }
+                return@withContext result to responseCode
+            } catch (e: Exception) {
+                Log.e(TAG, "Error while checking model access for $fullId", e)
+                return@withContext AccessResult.Error(e.message ?: "Unknown error") to -1
             }
-            return@withContext result to responseCode
-        } catch (e: Exception) {
-            Log.e(TAG, "Error while checking model access for $modelId", e)
-            return@withContext AccessResult.Error(e.message ?: "Unknown error") to -1
         }
-    }
 
     suspend fun fetchCommunityModels(author: String): List<HFModel> = authorizedRequest { token ->
         fetchCommunityModelsInternal(token, author)
     } ?: emptyList()
 
-    private suspend fun fetchCommunityModelsInternal(token: String, author: String): Pair<List<HFModel>?, Int> = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Indexing models from $author...")
-        try {
-            val url =
-                URL("https://huggingface.co/api/models?author=$author&pipeline_tag=text-generation&full=True")
-            val connection = url.openConnection() as HttpURLConnection
-            connection.setRequestProperty("Authorization", "Bearer $token")
+    private suspend fun fetchCommunityModelsInternal(token: String, author: String): Pair<List<HFModel>?, Int> =
+        withContext(Dispatchers.IO) {
+            Log.d(TAG, "Indexing models from $author...")
+            try {
+                val url =
+                    URL("https://huggingface.co/api/models?author=$author&library=litert-lm&full=true")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.setRequestProperty("Authorization", "Bearer $token")
 
-            val responseCode = connection.responseCode
-            if (responseCode == 200) {
-                val reader = InputStreamReader(connection.inputStream)
-                val models: Array<HFModel> = gson.fromJson(reader, Array<HFModel>::class.java)
-                return@withContext models.toList() to responseCode
+                val responseCode = connection.responseCode
+                if (responseCode == 200) {
+                    val reader = InputStreamReader(connection.inputStream)
+                    val models: Array<HFModel> = gson.fromJson(reader, Array<HFModel>::class.java)
+                    return@withContext models.toList() to responseCode
+                }
+                return@withContext null to responseCode
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during model indexing from $author", e)
             }
-            return@withContext null to responseCode
-        } catch (e: Exception) {
-            Log.e(TAG, "Error during model indexing from $author", e)
+            null to -1
         }
-        null to -1
-    }
+
     data class UserInfo(
         val sub: String,
         val name: String,
@@ -139,7 +143,8 @@ class HuggingFaceApiService @Inject constructor(
         val id: String,
         val siblings: List<Sibling>? = null,
         val gated: Boolean = false,
-        @SerializedName("pipeline_tag") val pipelineTag: String? = null
+        @SerializedName("pipeline_tag") val pipelineTag: String? = null,
+        @SerializedName("library_name") val libraryName: String? = null
     )
 
     data class Sibling(
@@ -165,7 +170,7 @@ class HuggingFaceApiService @Inject constructor(
 
             val clientId = org.eu.nl.syu.charchat.common.ProjectConfig.clientId
             val postData = "grant_type=refresh_token&refresh_token=$refreshToken&client_id=$clientId"
-            
+
             connection.outputStream.use { os ->
                 os.write(postData.toByteArray())
             }
@@ -184,6 +189,5 @@ class HuggingFaceApiService @Inject constructor(
             Log.e(TAG, "Error during token refresh", e)
         }
         null
-    }GET https://huggingface.co/api/models/litert-community/model-id
-    Authorization: Bearer hf_your_token
+    }
 }

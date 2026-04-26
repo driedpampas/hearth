@@ -32,6 +32,7 @@ data class AllowedModel(
     val commitHash: String,
     val description: String,
     val sizeInBytes: Long,
+    val author: String? = null,
     val url: String? = null,
     val socToModelFiles: Map<String, SocModelFile>? = null,
     val taskTypes: List<String> = emptyList()
@@ -86,19 +87,10 @@ class ModelRepository @Inject constructor(
     suspend fun getAvailableModels(): List<AllowedModel> {
         val models = mutableListOf<AllowedModel>()
         
-        // 1. Load from assets (Gallery models)
-        try {
-            val json = context.assets.open("model_allowlist.json").bufferedReader().use { it.readText() }
-            val allowlist = gson.fromJson(json, ModelAllowlist::class.java)
-            models.addAll(allowlist.models)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        // 2. Add EmbeddingGemma-300m manually
+        // 1. Add EmbeddingGemma-300m manually
         models.add(getEmbeddingGemmaModel())
 
-        // 3. Fetch from Hugging Face if token is available
+        // 2. Fetch from Hugging Face if token is available
         try {
             val token = authRepository.getAccessToken()
             if (token != null) {
@@ -111,17 +103,24 @@ class ModelRepository @Inject constructor(
                     Log.d("ModelRepository", "Fetching models from author: $author")
                     val hfModels = hfApiService.fetchCommunityModels(author)
                     hfModels.forEach { hfModel ->
-                        val tfliteFile = hfModel.siblings?.find { it.rfilename.endsWith(".tflite") }?.rfilename
-                        if (tfliteFile != null) {
-                            models.add(AllowedModel(
-                                name = hfModel.id.substringAfter("/"),
-                                modelId = hfModel.id,
-                                modelFile = tfliteFile,
-                                commitHash = "main",
-                                description = "Community model from $author.",
-                                sizeInBytes = 0,
-                                taskTypes = if (hfModel.pipelineTag != null) listOf(hfModel.pipelineTag) else emptyList()
-                            ))
+                        // Only include models with library_name "litert-lm" (primary filter)
+                        if (hfModel.libraryName == "litert-lm") {
+                            // Look for .litertlm first (LLM container), fallback to .tflite
+                            val modelFile = hfModel.siblings?.find { it.rfilename.endsWith(".litertlm") }?.rfilename
+                                ?: hfModel.siblings?.find { it.rfilename.endsWith(".tflite") }?.rfilename
+
+                            if (modelFile != null) {
+                                models.add(AllowedModel(
+                                    name = hfModel.id.substringAfter("/"),
+                                    modelId = hfModel.id,
+                                    author = author,
+                                    modelFile = modelFile,
+                                    commitHash = "main",
+                                    description = "Community model from $author.",
+                                    sizeInBytes = 0,
+                                    taskTypes = if (hfModel.pipelineTag != null) listOf(hfModel.pipelineTag) else emptyList()
+                                ))
+                            }
                         }
                     }
                 }
@@ -150,6 +149,7 @@ class ModelRepository @Inject constructor(
         return AllowedModel(
             name = "EmbeddingGemma-300m",
             modelId = modelId,
+            author = "litert-community",
             modelFile = "embeddinggemma-300M_seq1024_mixed-precision.tflite",
             commitHash = commitHash,
             description = "High-performance text embedding model based on Gemma architecture.",
@@ -176,6 +176,3 @@ class ModelRepository @Inject constructor(
     }
 }
 
-data class ModelAllowlist(
-    val models: List<AllowedModel>
-)

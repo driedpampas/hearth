@@ -790,7 +790,9 @@ class ModelsViewModel @Inject constructor(
             if (model.modelId.contains("/")) { // Basic check for HF models
                 val token = authRepository.getAccessToken()
                 if (token != null) {
-                    val access = hfApiService.checkModelAccess(model.modelId)
+                    val author = model.author ?: model.modelId.substringBefore("/")
+                    val repoName = model.modelId.substringAfter("/")
+                    val access = hfApiService.checkModelAccess(author, repoName)
                     if (access is AccessResult.Forbidden) {
                         _uiState.update { 
                             val newErrors = it.downloadErrors.toMutableMap()
