@@ -48,8 +48,10 @@ class ChatViewModel @Inject constructor(
             val characterEntity = characterDao.getCharacterById(characterId)
             val character = characterEntity?.toDomain()
             if (character != null) {
+                val openedAt = System.currentTimeMillis()
+                characterDao.updateLastUsedAt(character.id, openedAt)
                 val messages = chatMessageDao.getMessagesForCharacter(characterId).map { it.toDomain() }
-                _uiState.update { it.copy(character = character, messages = messages) }
+                _uiState.update { it.copy(character = character.copy(lastUsedAt = openedAt), messages = messages) }
                 
                 // Initialize engine if needed
                 engineWrapper.initialize(character.modelReference)

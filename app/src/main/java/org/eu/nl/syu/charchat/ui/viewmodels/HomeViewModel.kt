@@ -24,6 +24,7 @@ import javax.inject.Singleton
 data class HomeUiState(
     val characters: List<Character> = emptyList(),
     val downloadedModels: List<File> = emptyList(),
+    val availableModels: List<AllowedModel> = emptyList(),
     val selectedModel: String? = null,
     val isModelLoading: Boolean = false,
     val isLoading: Boolean = false,
@@ -90,9 +91,20 @@ class HomeViewModel @Inject constructor(
 
     fun refreshModels() {
         viewModelScope.launch {
-            val models = modelManager.getLocalModels().filter { it.name.endsWith(".tflite") || it.name.endsWith(".litertlm") }
-            _uiState.update { it.copy(downloadedModels = models) }
+            val availableModels = modelRepository.getAvailableModels()
+            val models = modelManager.getLocalModels()
+                .filter { it.name.endsWith(".tflite") || it.name.endsWith(".litertlm") }
+                .sortedWith(
+                    compareBy<File> { isEmbeddingModel(it, availableModels) }
+                        .thenBy { it.name.lowercase() }
+                )
+            _uiState.update { it.copy(downloadedModels = models, availableModels = availableModels) }
         }
+    }
+
+    private fun isEmbeddingModel(file: File, availableModels: List<AllowedModel>): Boolean {
+        val matchingModel = availableModels.firstOrNull { modelRepository.getDownloadFileName(it) == file.name }
+        return matchingModel?.taskTypes?.contains("embedding") == true || file.name.contains("embedding", ignoreCase = true)
     }
 
     fun selectModel(file: File) {
@@ -115,6 +127,13 @@ class HomeViewModel @Inject constructor(
                 }
             )
             _uiState.update { it.copy(isModelLoading = false) }
+        }
+    }
+
+    fun markCharacterOpened(characterId: String) {
+        viewModelScope.launch {
+            characterDao.updateLastUsedAt(characterId, System.currentTimeMillis())
+            loadCharacters()
         }
     }
 

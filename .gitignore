@@ -18,3 +18,4 @@ gallery
 **/*.so
 .kotlin
 *-openapi.md
+.kilo

@@ -43,7 +43,8 @@ data class CharacterEntity(
     val topP: Float,
     val topK: Int,
     val sceneBackgroundUrl: String?,
-    val isPredefined: Boolean
+    val isPredefined: Boolean,
+    val lastUsedAt: Long
 )
 
 @Entity(
@@ -69,7 +70,7 @@ data class ChatMessageEntity(
 
 @Dao
 interface CharacterDao {
-    @Query("SELECT * FROM characters")
+    @Query("SELECT * FROM characters ORDER BY lastUsedAt DESC, name COLLATE NOCASE ASC")
     suspend fun getAllCharacters(): List<CharacterEntity>
 
     @Query("SELECT * FROM characters WHERE id = :id")
@@ -77,6 +78,9 @@ interface CharacterDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCharacter(character: CharacterEntity)
+
+    @Query("UPDATE characters SET lastUsedAt = :lastUsedAt WHERE id = :id")
+    suspend fun updateLastUsedAt(id: String, lastUsedAt: Long)
 
     @Delete
     suspend fun deleteCharacter(character: CharacterEntity)
@@ -104,7 +108,7 @@ interface ChatMessageDao {
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 2, 
+    version = 3, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -125,7 +129,8 @@ fun CharacterEntity.toDomain(): Character = Character(
     topP = topP,
     topK = topK,
     sceneBackgroundUrl = sceneBackgroundUrl,
-    isPredefined = isPredefined
+    isPredefined = isPredefined,
+    lastUsedAt = lastUsedAt
 )
 
 fun Character.toEntity(): CharacterEntity = CharacterEntity(
@@ -140,7 +145,8 @@ fun Character.toEntity(): CharacterEntity = CharacterEntity(
     topP = topP,
     topK = topK,
     sceneBackgroundUrl = sceneBackgroundUrl,
-    isPredefined = isPredefined
+    isPredefined = isPredefined,
+    lastUsedAt = lastUsedAt
 )
 
 fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(

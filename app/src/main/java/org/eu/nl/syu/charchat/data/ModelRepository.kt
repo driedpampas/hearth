@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.google.gson.annotations.SerializedName
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -47,6 +48,7 @@ class ModelRepository @Inject constructor(
     private val authRepository: AuthRepository
 ) {
     private val gson = Gson()
+    private val socFilenameRegex = Regex("""(?:^|[._-])(sm\d{4}|mt\d{4})(?:[._-]|$)""", RegexOption.IGNORE_CASE)
     private val SELECTED_EMBEDDING_MODEL = stringPreferencesKey("selected_embedding_model")
     private val COMMUNITY_AUTHORS = stringSetPreferencesKey("community_authors")
     private val EXPERIMENTAL_NPU_ENABLED = androidx.datastore.preferences.core.booleanPreferencesKey("experimental_npu_enabled")
@@ -95,7 +97,8 @@ class ModelRepository @Inject constructor(
     suspend fun getCachedBackend(modelHash: String): String? {
         val cacheJson = context.modelDataStore.data.first()[MODEL_BACKEND_CACHE] ?: return null
         val cache = try {
-            gson.fromJson(cacheJson, Map::class.java) as? Map<String, String>
+            val type = object : TypeToken<Map<String, String>>() {}.type
+            gson.fromJson<Map<String, String>>(cacheJson, type)
         } catch (e: Exception) {
             null
         }
@@ -106,7 +109,8 @@ class ModelRepository @Inject constructor(
         context.modelDataStore.edit { preferences ->
             val currentJson = preferences[MODEL_BACKEND_CACHE]
             val currentCache = try {
-                if (currentJson != null) gson.fromJson(currentJson, Map::class.java) as? MutableMap<String, String> else mutableMapOf()
+                val type = object : TypeToken<MutableMap<String, String>>() {}.type
+                if (currentJson != null) gson.fromJson<MutableMap<String, String>>(currentJson, type) else mutableMapOf()
             } catch (e: Exception) {
                 mutableMapOf()
             } ?: mutableMapOf()
@@ -143,11 +147,8 @@ class ModelRepository @Inject constructor(
 
     suspend fun getAvailableModels(): List<AllowedModel> {
         val models = mutableListOf<AllowedModel>()
-        
-        // 1. Add EmbeddingGemma-300m manually
-        models.add(getEmbeddingGemmaModel())
 
-        // 2. Fetch from Hugging Face if token is available
+        // Fetch from Hugging Face if token is available
         try {
             val token = authRepository.getAccessToken()
             if (token != null) {
@@ -162,9 +163,25 @@ class ModelRepository @Inject constructor(
                     hfModels.forEach { hfModel ->
                         // Only include models with library_name "litert-lm" (primary filter)
                         if (hfModel.libraryName == "litert-lm") {
-                            // Look for .litertlm first (LLM container), fallback to .tflite
-                            val modelFile = hfModel.siblings?.find { it.rfilename.endsWith(".litertlm") }?.rfilename
-                                ?: hfModel.siblings?.find { it.rfilename.endsWith(".tflite") }?.rfilename
+                            val siblings = hfModel.siblings.orEmpty()
+                            val socToModelFiles = siblings.mapNotNull { sibling ->
+                                extractSocTag(sibling.rfilename)?.let { soc ->
+                                    soc to SocModelFile(
+                                        modelFile = sibling.rfilename,
+                                        url = null,
+                                        commitHash = "main",
+                                        sizeInBytes = null
+                                    )
+                                }
+                            }.toMap()
+
+                            // Prefer a generic file as the default, then fall back to any available file.
+                            val modelFile = siblings
+                                .firstOrNull { it.rfilename.endsWith(".litertlm") && extractSocTag(it.rfilename) == null }
+                                ?.rfilename
+                                ?: siblings.firstOrNull { it.rfilename.endsWith(".tflite") && extractSocTag(it.rfilename) == null }?.rfilename
+                                ?: siblings.firstOrNull { it.rfilename.endsWith(".litertlm") }?.rfilename
+                                ?: siblings.firstOrNull { it.rfilename.endsWith(".tflite") }?.rfilename
 
                             if (modelFile != null) {
                                 models.add(AllowedModel(
@@ -175,6 +192,7 @@ class ModelRepository @Inject constructor(
                                     commitHash = "main",
                                     description = "Community model from $author.",
                                     sizeInBytes = 0,
+                                    socToModelFiles = socToModelFiles.ifEmpty { null },
                                     taskTypes = if (hfModel.pipelineTag != null) listOf(hfModel.pipelineTag) else emptyList()
                                 ))
                             }
@@ -186,7 +204,11 @@ class ModelRepository @Inject constructor(
             Log.e("ModelRepository", "Error fetching dynamic models", e)
         }
 
-        return models
+        // Keep normal chat models ahead of embedding models.
+        return models.sortedWith(
+            compareBy<AllowedModel> { it.taskTypes.contains("embedding") }
+                .thenBy { it.name.lowercase() }
+        ) + getEmbeddingGemmaModel()
     }
 
     private fun getEmbeddingGemmaModel(): AllowedModel {
@@ -242,5 +264,8 @@ class ModelRepository @Inject constructor(
         val socFile = model.socToModelFiles?.entries?.find { soc.contains(it.key) }?.value
         return socFile?.modelFile ?: model.modelFile
     }
-}
 
+    private fun extractSocTag(fileName: String): String? {
+        return socFilenameRegex.find(fileName)?.groupValues?.getOrNull(1)?.lowercase()
+    }
+}
