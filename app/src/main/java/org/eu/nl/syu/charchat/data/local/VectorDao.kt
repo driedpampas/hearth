@@ -1,11 +1,8 @@
 package org.eu.nl.syu.charchat.data.local
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.SkipQueryVerification
-import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * Data class to represent search results from the virtual vec0 table.

@@ -13,14 +13,14 @@ import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import org.eu.nl.syu.charchat.data.AuthRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.eu.nl.syu.charchat.data.AuthRepository
 import java.io.File
 import java.io.FileOutputStream
-import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
 private const val TAG = "DownloadWorker"
 private const val CHANNEL_ID = "model_download_channel"
@@ -201,7 +201,7 @@ class DownloadWorker @AssistedInject constructor(
     private fun createForegroundInfo(progress: Int, fileName: String, speed: Long, eta: Long): ForegroundInfo {
         val speedStr = if (speed > 0) {
             val kb = speed / 1024
-            if (kb > 1024) "${String.format("%.1f", kb / 1024f)} MB/s" else "$kb KB/s"
+            if (kb > 1024) "${String.format(Locale.US, "%.1f", kb / 1024f)} MB/s" else "$kb KB/s"
         } else ""
 
         val etaStr = if (eta > 0) {
@@ -220,7 +220,7 @@ class DownloadWorker @AssistedInject constructor(
             .setSmallIcon(org.eu.nl.syu.charchat.R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setProgress(100, progress, progress <= 0 && progress != 100)
+            .setProgress(100, progress, progress <= 0)
             .build()
 
         return ForegroundInfo(

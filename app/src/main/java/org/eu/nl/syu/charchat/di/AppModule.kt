@@ -3,6 +3,8 @@ package org.eu.nl.syu.charchat.di
 import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -12,10 +14,8 @@ import org.eu.nl.syu.charchat.data.local.AppDatabase
 import org.eu.nl.syu.charchat.data.local.CharacterDao
 import org.eu.nl.syu.charchat.data.local.ChatMessageDao
 import org.eu.nl.syu.charchat.data.local.VectorDao
-import javax.inject.Singleton
-import androidx.sqlite.driver.bundled.BundledSQLiteDriver
-import androidx.sqlite.db.SupportSQLiteDatabase
 import java.io.File
+import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)

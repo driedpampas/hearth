@@ -2,17 +2,17 @@ package org.eu.nl.syu.charchat.runtime
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import org.eu.nl.syu.charchat.data.local.VectorDao
-import org.eu.nl.syu.charchat.data.ModelRepository
-import org.eu.nl.syu.charchat.data.ModelManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import org.eu.nl.syu.charchat.data.ModelManager
+import org.eu.nl.syu.charchat.data.ModelRepository
+import org.eu.nl.syu.charchat.data.local.VectorDao
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @Singleton
 class EmbeddingEngine @Inject constructor(

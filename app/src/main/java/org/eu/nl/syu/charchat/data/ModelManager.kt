@@ -1,23 +1,16 @@
 package org.eu.nl.syu.charchat.data
 
 import android.content.Context
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.withContext
-import java.io.File
-import java.net.URL
-import javax.inject.Inject
-import javax.inject.Singleton
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import androidx.work.WorkInfo
-import kotlinx.coroutines.flow.map
-import androidx.lifecycle.asFlow
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.eu.nl.syu.charchat.worker.DownloadWorker
+import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
 
 sealed class DownloadState {
     data object Idle : DownloadState()

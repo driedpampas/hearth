@@ -1,15 +1,20 @@
 package org.eu.nl.syu.charchat.runtime
 
 import android.content.Context
-import com.google.ai.edge.litertlm.*
+import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Conversation
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.MessageCallback
+import com.google.ai.edge.litertlm.SamplerConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import org.eu.nl.syu.charchat.data.Character
-import org.eu.nl.syu.charchat.data.ChatMessage
-import org.eu.nl.syu.charchat.data.MessageRole
 import javax.inject.Inject
 import javax.inject.Singleton
 

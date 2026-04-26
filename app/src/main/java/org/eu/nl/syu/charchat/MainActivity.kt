@@ -4,36 +4,32 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import org.eu.nl.syu.charchat.data.Character
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+import org.eu.nl.syu.charchat.data.AuthRepository
 import org.eu.nl.syu.charchat.ui.screens.ChatScreen
 import org.eu.nl.syu.charchat.ui.screens.CreateCharacterScreen
 import org.eu.nl.syu.charchat.ui.screens.HomeScreen
-import org.eu.nl.syu.charchat.ui.screens.SettingsMainScreen
-import org.eu.nl.syu.charchat.ui.screens.SettingsGeneralScreen
-import org.eu.nl.syu.charchat.ui.screens.SettingsModelsScreen
-import org.eu.nl.syu.charchat.ui.screens.SettingsLiteRtModelsScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsEmbeddingModelsScreen
+import org.eu.nl.syu.charchat.ui.screens.SettingsGeneralScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsHuggingFaceAccountScreen
+import org.eu.nl.syu.charchat.ui.screens.SettingsLiteRtModelsScreen
+import org.eu.nl.syu.charchat.ui.screens.SettingsMainScreen
+import org.eu.nl.syu.charchat.ui.screens.SettingsModelsScreen
 import org.eu.nl.syu.charchat.ui.theme.ChatTheme
-
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
-import org.eu.nl.syu.charchat.data.AuthRepository
-import org.eu.nl.syu.charchat.data.AuthError
 import javax.inject.Inject
-
-import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {

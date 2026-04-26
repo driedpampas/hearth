@@ -2,7 +2,6 @@ package org.eu.nl.syu.charchat.domain
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.collect
 import org.eu.nl.syu.charchat.runtime.LiteRtEngineWrapper
 import java.net.URL
 import javax.inject.Inject
