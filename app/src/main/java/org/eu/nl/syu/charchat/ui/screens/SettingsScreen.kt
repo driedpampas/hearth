@@ -429,27 +429,43 @@ fun SettingsLiteRtModelsScreen(
 fun ModelListItem(
     model: AllowedModel,
     isDownloaded: Boolean,
-    progress: Int?,
+    progress: DownloadStats?,
     error: String?,
     onDownload: () -> Unit,
     onDelete: () -> Unit,
     viewModel: ModelsViewModel
 ) {
+    val stats = progress
     ListItem(
         headlineContent = { Text(model.name) },
         supportingContent = {
             Column {
                 if (error != null) {
                     Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                } else {
-                    Text(model.description, style = MaterialTheme.typography.bodySmall)
-                }
-                if (progress != null && progress < 100) {
+                } else if (stats != null && stats.progress < 100) {
+                    // Hidden description during download
                     Spacer(modifier = Modifier.height(4.dp))
                     LinearProgressIndicator(
-                        progress = { progress / 100f },
+                        progress = { stats.progress / 100f },
                         modifier = Modifier.fillMaxWidth().height(4.dp),
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    val downloadedMb = String.format("%.1f", stats.downloadedBytes / (1024f * 1024f))
+                    val totalMb = String.format("%.1f", stats.totalBytes / (1024f * 1024f))
+                    val speedKb = stats.speed / 1024
+                    val speedStr = if (speedKb > 1024) "${String.format("%.1f", speedKb / 1024f)} MB/s" else "$speedKb KB/s"
+                    val etaStr = if (stats.eta > 0) {
+                        if (stats.eta > 60) "${stats.eta / 60}m ${stats.eta % 60}s" else "${stats.eta}s"
+                    } else ""
+                    
+                    Text(
+                        text = "$downloadedMb MB / $totalMb MB • $speedStr" + if (etaStr.isNotEmpty()) " • $etaStr left" else "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(model.description, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -474,13 +490,14 @@ fun ModelListItem(
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 8.dp)
                     )
-                } else if (progress != null && progress < 100) {
-                    Text("$progress%", style = MaterialTheme.typography.bodySmall)
+                } else if (progress != null && progress.progress < 100) {
+                    Text("${progress.progress}%", style = MaterialTheme.typography.bodySmall)
                 } else {
                     if (error != null && error.contains("Accept Terms")) {
                         val context = LocalContext.current
                         Button(onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://huggingface.co/${model.modelId}"))
+                            val intent = Intent(Intent.ACTION_VIEW,
+                                "https://huggingface.co/${model.modelId}".toUri())
                             context.startActivity(intent)
                         }) {
                             Text("Terms")
@@ -703,9 +720,17 @@ fun SettingsHuggingFaceAccountScreen(
 
 // --- ViewModel and Helper Classes ---
 
+data class DownloadStats(
+    val progress: Int,
+    val downloadedBytes: Long = 0,
+    val totalBytes: Long = 0,
+    val speed: Long = 0,
+    val eta: Long = -1
+)
+
 data class ModelsUiState(
     val availableModels: List<AllowedModel> = emptyList(),
-    val downloadProgress: Map<String, Int> = emptyMap(),
+    val downloadProgress: Map<String, DownloadStats> = emptyMap(),
     val downloadErrors: Map<String, String> = emptyMap(),
     val selectedEmbeddingModel: String? = null,
     val userName: String? = null,
@@ -811,15 +836,26 @@ class ModelsViewModel @Inject constructor(
         val workManager = WorkManager.getInstance(context)
         viewModelScope.launch {
             workManager.getWorkInfosByTagFlow("model_download").collect { workInfos ->
-                val progressMap = mutableMapOf<String, Int>()
+                val progressMap = mutableMapOf<String, DownloadStats>()
                 val errorMap = mutableMapOf<String, String>()
                 for (info in workInfos) {
                     val fileName = info.progress.getString("fileName") ?: info.outputData.getString("fileName")
                     
                     if (!info.state.isFinished) {
                         val progress = info.progress.getInt("progress", 0)
+                        val downloadedBytes = info.progress.getLong("downloadedBytes", 0)
+                        val totalBytes = info.progress.getLong("totalBytes", 0)
+                        val speed = info.progress.getLong("speed", 0)
+                        val eta = info.progress.getLong("eta", -1)
+                        
                         if (fileName != null) {
-                            progressMap[fileName] = progress
+                            progressMap[fileName] = DownloadStats(
+                                progress = progress,
+                                downloadedBytes = downloadedBytes,
+                                totalBytes = totalBytes,
+                                speed = speed,
+                                eta = eta
+                            )
                         }
                     } else if (info.state == androidx.work.WorkInfo.State.SUCCEEDED) {
                         refreshDownloadedModels()

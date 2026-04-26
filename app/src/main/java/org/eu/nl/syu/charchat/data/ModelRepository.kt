@@ -161,12 +161,23 @@ class ModelRepository @Inject constructor(
 
     fun getDownloadUrl(model: AllowedModel): String {
         val soc = getSoc()
-        val socFile = model.socToModelFiles?.entries?.find { soc.contains(it.key) }?.value
+        Log.d("ModelRepository", "Determining download URL for model: ${model.name}, detected SOC: $soc")
+        
+        val socEntry = model.socToModelFiles?.entries?.find { soc.contains(it.key) }
+        val socFile = socEntry?.value
+        
+        if (socFile != null) {
+            Log.i("ModelRepository", "Matched SOC variant: ${socEntry.key} for $soc")
+        } else {
+            Log.w("ModelRepository", "No SOC-specific variant found for $soc in ${model.socToModelFiles?.keys}. Falling back to default: ${model.modelFile}")
+        }
         
         val fileName = socFile?.modelFile ?: model.modelFile
         val hash = socFile?.commitHash ?: model.commitHash
         
-        return socFile?.url ?: "https://huggingface.co/${model.modelId}/resolve/$hash/$fileName?download=true"
+        val url = socFile?.url ?: "https://huggingface.co/${model.modelId}/resolve/$hash/$fileName?download=true"
+        Log.d("ModelRepository", "Final download URL: $url")
+        return url
     }
 
     fun getDownloadFileName(model: AllowedModel): String {

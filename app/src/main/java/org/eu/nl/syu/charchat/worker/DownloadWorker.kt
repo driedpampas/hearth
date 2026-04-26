@@ -39,7 +39,7 @@ class DownloadWorker @AssistedInject constructor(
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Model Downloading",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             )
             notificationManager.createNotificationChannel(channel)
             channelCreated = true
@@ -53,12 +53,13 @@ class DownloadWorker @AssistedInject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Starting download: $fileName from $urlStr")
-                setForeground(createForegroundInfo(0, fileName))
+                setForeground(createForegroundInfo(0, fileName, 0, -1))
+                // Also set initial progress with fileName
+                setProgress(Data.Builder().putInt("progress", 0).putString("fileName", fileName).build())
 
                 val url = URL(urlStr)
                 val connection = url.openConnection() as HttpURLConnection
                 
-                // Add Authorization header if it's a HuggingFace URL
                 if (urlStr.contains("huggingface.co")) {
                     val token = authRepository.getAccessToken()
                     if (token != null) {
@@ -109,10 +110,11 @@ class DownloadWorker @AssistedInject constructor(
                 val inputStream = connection.inputStream
                 val outputStream = FileOutputStream(tmpFile)
 
-                val buffer = ByteArray(16384) // Increased buffer size
+                val buffer = ByteArray(16384)
                 var bytesRead: Int
                 var downloadedBytes = 0L
-                var lastProgressUpdate = 0L
+                var lastProgressUpdate = System.currentTimeMillis()
+                var lastDownloadedBytes = 0L
 
                 Log.d(TAG, "Downloading $fileName to ${tmpFile.name}...")
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
@@ -120,12 +122,34 @@ class DownloadWorker @AssistedInject constructor(
                     downloadedBytes += bytesRead
 
                     val currentTime = System.currentTimeMillis()
-                    if (currentTime - lastProgressUpdate > 1000 && totalBytes > 0) { // Update every 1s
-                        val progress = (downloadedBytes * 100 / totalBytes).toInt()
-                        Log.v(TAG, "Download progress for $fileName: $progress%")
-                        setProgress(Data.Builder().putInt("progress", progress).build())
-                        setForeground(createForegroundInfo(progress, fileName))
+                    val timeDiff = currentTime - lastProgressUpdate
+                    if (timeDiff >= 1000) { // Update every 1s
+                        val progress = if (totalBytes > 0) (downloadedBytes * 100 / totalBytes).toInt() else 0
+                        
+                        val bytesSinceLast = downloadedBytes - lastDownloadedBytes
+                        val speed = (bytesSinceLast * 1000 / timeDiff) // bytes per second
+                        
+                        val eta = if (totalBytes > 0 && speed > 0) {
+                            (totalBytes - downloadedBytes) / speed
+                        } else {
+                            -1L
+                        }
+
+                        Log.v(TAG, "Download progress for $fileName: $progress% (${downloadedBytes / 1024} KB/s)")
+                        
+                        setProgress(Data.Builder()
+                            .putInt("progress", progress)
+                            .putString("fileName", fileName)
+                            .putLong("downloadedBytes", downloadedBytes)
+                            .putLong("totalBytes", totalBytes)
+                            .putLong("speed", speed)
+                            .putLong("eta", eta)
+                            .build())
+                        
+                        setForeground(createForegroundInfo(progress, fileName, speed, eta))
+                        
                         lastProgressUpdate = currentTime
+                        lastDownloadedBytes = downloadedBytes
                     }
                 }
 
@@ -141,31 +165,62 @@ class DownloadWorker @AssistedInject constructor(
                 
                 if (tmpFile.renameTo(outputFile)) {
                     Log.i(TAG, "Successfully downloaded and saved: $fileName")
-                    setProgress(Data.Builder().putInt("progress", 100).build())
-                    Result.success()
+                    return@withContext Result.success(
+                        Data.Builder()
+                            .putInt("progress", 100)
+                            .putString("fileName", fileName)
+                            .build()
+                    )
                 } else {
                     Log.e(TAG, "Failed to rename temporary file to $fileName")
-                    Result.failure(Data.Builder().putString("error", "Rename failed").build())
+                    return@withContext Result.failure(
+                        Data.Builder()
+                            .putString("fileName", fileName)
+                            .putString("error", "Rename failed")
+                            .build()
+                    )
                 }
 
             } catch (e: Exception) {
                 Log.e(TAG, "Exception during download of $fileName", e)
-                Result.failure(Data.Builder().putString("error", e.message).build())
+                return@withContext Result.failure(
+                    Data.Builder()
+                        .putString("fileName", fileName)
+                        .putString("error", e.message)
+                        .build()
+                )
             }
         }
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        return createForegroundInfo(0, "Model")
+        val fileName = inputData.getString("fileName") ?: "Model"
+        return createForegroundInfo(0, fileName, 0, -1)
     }
 
-    private fun createForegroundInfo(progress: Int, fileName: String): ForegroundInfo {
+    private fun createForegroundInfo(progress: Int, fileName: String, speed: Long, eta: Long): ForegroundInfo {
+        val speedStr = if (speed > 0) {
+            val kb = speed / 1024
+            if (kb > 1024) "${String.format("%.1f", kb / 1024f)} MB/s" else "$kb KB/s"
+        } else ""
+
+        val etaStr = if (eta > 0) {
+            if (eta > 60) "${eta / 60}m ${eta % 60}s left" else "${eta}s left"
+        } else ""
+
+        val contentText = if (speedStr.isNotEmpty() || etaStr.isNotEmpty()) {
+            "Progress: $progress% • $speedStr • $etaStr"
+        } else {
+            "Progress: $progress%"
+        }
+
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle("Downloading $fileName")
-            .setContentText("Progress: $progress%")
-            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentText(contentText)
+            .setSmallIcon(org.eu.nl.syu.charchat.R.drawable.ic_launcher_foreground)
             .setOngoing(true)
-            .setProgress(100, progress, false)
+            .setOnlyAlertOnce(true)
+            .setProgress(100, progress, progress <= 0 && progress != 100)
             .build()
 
         return ForegroundInfo(
