@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Settings
@@ -31,8 +32,9 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SearchBar
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingActionButtonMenu
 import androidx.compose.material3.FloatingActionButtonMenuItem
@@ -42,13 +44,13 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleFloatingActionButton
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -199,51 +201,50 @@ fun HomeScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Characters",
-                    style = MaterialTheme.typography.titleLarge
-                )
-                IconButton(onClick = onNavigateToSettings) {
-                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                }
-            }
-
-            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                ElevatedCard(
-                    onClick = { showModelPicker = true },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = if (uiState.selectedModel != null) Icons.Filled.Widgets else Icons.Outlined.Widgets,
-                                contentDescription = "Model Selection",
-                                tint = if (uiState.selectedModel != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text("Model", style = MaterialTheme.typography.labelMedium)
-                                Text(
-                                    uiState.selectedModel ?: "Select a model",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontWeight = if (uiState.selectedModel != null) FontWeight.Medium else FontWeight.Normal
-                                )
+            SearchBar(
+                inputField = {
+                    androidx.compose.material3.SearchBarDefaults.InputField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onSearch = { searchActive = false },
+                        expanded = searchActive,
+                        onExpandedChange = { searchActive = it },
+                        placeholder = { Text("Search characters") },
+                        leadingIcon = {
+                            if (!searchActive) {
+                                IconButton(onClick = { showModelPicker = true }) {
+                                    Icon(
+                                        imageVector = if (uiState.selectedModel != null) Icons.Filled.Widgets else Icons.Outlined.Widgets,
+                                        contentDescription = "Model Selection",
+                                        tint = if (uiState.selectedModel != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        },
+                        trailingIcon = {
+                            if (searchActive) {
+                                IconButton(onClick = {
+                                    if (searchQuery.isNotEmpty()) searchQuery = "" else searchActive = false
+                                }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                }
+                            } else {
+                                IconButton(onClick = onNavigateToSettings) {
+                                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                                }
                             }
                         }
-                        Icon(Icons.Default.Tune, contentDescription = "Model Settings")
-                    }
-                }
+                    )
+                },
+                expanded = searchActive,
+                onExpandedChange = { searchActive = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = if (searchActive) 0.dp else 16.dp, vertical = 0.dp)
+            ) { }
+
+            if (!searchActive) {
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
             if (uiState.isModelLoading) {

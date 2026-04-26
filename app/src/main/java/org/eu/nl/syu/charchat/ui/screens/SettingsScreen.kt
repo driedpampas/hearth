@@ -57,6 +57,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +73,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -79,9 +83,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
+import androidx.work.await
 import coil.compose.SubcomposeAsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -91,6 +97,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.openid.appauth.AuthorizationException
 import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
@@ -248,6 +255,31 @@ fun SettingsModelsScreen(
     onNavigateToEmbeddingModels: () -> Unit,
     onNavigateToHuggingFace: () -> Unit
 ) {
+    val viewModel: ModelsViewModel = hiltViewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        viewModel.handleAuthResult(result)
+    }
+    val context = LocalContext.current
+
+    val downloadedModels = remember(uiState.availableModels, uiState.downloadedModelFiles) {
+        uiState.availableModels.filter { model ->
+            !model.taskTypes.contains("embedding") && viewModel.isDownloaded(model)
+        }
+    }
+
+    val downloadedEmbeddingModels = remember(uiState.availableModels, uiState.downloadedModelFiles) {
+        uiState.availableModels.filter { model ->
+            model.taskTypes.contains("embedding") && viewModel.isDownloaded(model)
+        }
+    }
+
+    var showAddDialog by remember { mutableStateOf(false) }
+    var newAuthorName by remember { mutableStateOf("") }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -260,104 +292,168 @@ fun SettingsModelsScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            ListItem(
-                headlineContent = { Text("LiteRT Models") },
-                supportingContent = { Text("Optimized for Android") },
-                trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
-                modifier = Modifier.clickable { onNavigateToLiteRt() }
-            )
-            
-            val viewModel: ModelsViewModel = hiltViewModel()
-            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-            
-            ListItem(
-                headlineContent = { Text("Embedding Model") },
-                supportingContent = { Text(uiState.selectedEmbeddingModel ?: "None selected") },
-                trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
-                modifier = Modifier.clickable { onNavigateToEmbeddingModels() }
-            )
-
-            ListItem(
-                headlineContent = { Text("GGUF Models") },
-                supportingContent = { Text("Coming Soon") },
-                trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.Gray) },
-                modifier = Modifier.alpha(0.5f)
-            )
-            
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            
-            val hfViewModel: ModelsViewModel = hiltViewModel()
-            val isLoggedIn by hfViewModel.isLoggedIn.collectAsStateWithLifecycle()
-            
-            val launcher = rememberLauncherForActivityResult(
-                ActivityResultContracts.StartActivityForResult()
-            ) { result ->
-                hfViewModel.handleAuthResult(result)
+            item {
+                ListItem(
+                    headlineContent = { Text("LiteRT Models") },
+                    supportingContent = { Text("Optimized for Android") },
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+                    modifier = Modifier.clickable { onNavigateToLiteRt() }
+                )
             }
-            val context = LocalContext.current
 
-            ListItem(
-                headlineContent = { Text("HuggingFace Account") },
-                supportingContent = { 
-                    if (isLoggedIn) {
-                        Text("Logged in${if (uiState.preferredUsername != null) " as ${uiState.preferredUsername}" else ""}")
-                    } else {
-                        Text("Not logged in")
-                    }
-                },
-                leadingContent = { 
-                    if (isLoggedIn && uiState.profilePicture != null) {
-                        SubcomposeAsyncImage(
-                            model = uiState.profilePicture,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp).clip(CircleShape),
-                            loading = {
-                                CircularProgressIndicator(modifier = Modifier.padding(8.dp))
-                            },
-                            error = {
-                                Icon(Icons.Default.AccountCircle, contentDescription = null)
-                            }
-                        )
-                    } else {
-                        Icon(Icons.Default.AccountCircle, contentDescription = null)
-                    }
-                },
-                trailingContent = {
-                    if (isLoggedIn) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
-                    } else {
-                        Button(onClick = {
-                            val authRequest = hfViewModel.getAuthorizationRequest()
-                            val authService = AuthorizationService(context)
-                            val authIntent = authService.getAuthorizationRequestIntent(authRequest)
-                            launcher.launch(authIntent)
-                            authService.dispose()
-                        }) {
-                            Text("Login")
+            item {
+                Text(
+                    text = "Installed LiteRT Models",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            if (downloadedModels.isEmpty()) {
+                item {
+                    Text(
+                        text = "No LiteRT models downloaded yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            } else {
+                items(downloadedModels) { model ->
+                    ModelListItem(
+                        model = model,
+                        isDownloaded = true,
+                        progress = null,
+                        error = null,
+                        onDownload = {},
+                        onDelete = { viewModel.deleteModel(model) },
+                        viewModel = viewModel
+                    )
+                }
+            }
+
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Embedding Model") },
+                    supportingContent = { Text(uiState.selectedEmbeddingModel ?: "None selected") },
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+                    modifier = Modifier.clickable { onNavigateToEmbeddingModels() }
+                )
+            }
+
+            if (downloadedEmbeddingModels.isEmpty()) {
+                item {
+                    Text(
+                        text = "No embedding models downloaded yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            } else {
+                items(downloadedEmbeddingModels) { model ->
+                    val isSelected = uiState.selectedEmbeddingModel == model.name
+                    ListItem(
+                        headlineContent = { Text(model.name) },
+                        supportingContent = { Text(model.description) },
+                        trailingContent = {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { viewModel.selectEmbeddingModel(model) }
+                            )
+                        },
+                        modifier = Modifier.clickable { viewModel.selectEmbeddingModel(model) }
+                    )
+                }
+            }
+
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("GGUF Models") },
+                    supportingContent = { Text("Coming Soon") },
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.Gray) },
+                    modifier = Modifier.alpha(0.5f)
+                )
+            }
+
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("HuggingFace Account") },
+                    supportingContent = {
+                        if (isLoggedIn) {
+                            Text("Logged in${if (uiState.preferredUsername != null) " as ${uiState.preferredUsername}" else ""}")
+                        } else {
+                            Text("Not logged in")
                         }
-                    }
-                },
-                modifier = if (isLoggedIn) Modifier.clickable { onNavigateToHuggingFace() } else Modifier
-            )
+                    },
+                    leadingContent = {
+                        if (isLoggedIn && uiState.profilePicture != null) {
+                            SubcomposeAsyncImage(
+                                model = uiState.profilePicture,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp).clip(CircleShape),
+                                loading = {
+                                    CircularProgressIndicator(modifier = Modifier.padding(8.dp))
+                                },
+                                error = {
+                                    Icon(Icons.Default.AccountCircle, contentDescription = null)
+                                }
+                            )
+                        } else {
+                            Icon(Icons.Default.AccountCircle, contentDescription = null)
+                        }
+                    },
+                    trailingContent = {
+                        if (isLoggedIn) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                        } else {
+                            Button(onClick = {
+                                val authRequest = viewModel.getAuthorizationRequest()
+                                val authService = AuthorizationService(context)
+                                val authIntent = authService.getAuthorizationRequestIntent(authRequest)
+                                launcher.launch(authIntent)
+                                authService.dispose()
+                            }) {
+                                Text("Login")
+                            }
+                        }
+                    },
+                    modifier = if (isLoggedIn) Modifier.clickable { onNavigateToHuggingFace() } else Modifier
+                )
+            }
 
             if (isLoggedIn) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                
-                ListItem(
-                    headlineContent = { Text("Community Models") },
-                    supportingContent = { Text("Manage indexed authors") },
-                    leadingContent = { Icon(Icons.Default.Groups, contentDescription = null) }
-                )
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                }
 
-                var showAddDialog by remember { mutableStateOf(false) }
-                var newAuthorName by remember { mutableStateOf("") }
+                item {
+                    ListItem(
+                        headlineContent = { Text("Community Models") },
+                        supportingContent = { Text("Manage indexed authors") },
+                        leadingContent = { Icon(Icons.Default.Groups, contentDescription = null) }
+                    )
+                }
 
-                uiState.communityAuthors.ifEmpty { setOf("litert-community") }.forEach { author ->
+                items(uiState.communityAuthors.ifEmpty { setOf("litert-community") }.toList()) { author ->
                     ListItem(
                         headlineContent = { Text(author) },
                         trailingContent = {
@@ -369,47 +465,49 @@ fun SettingsModelsScreen(
                     )
                 }
 
-                TextButton(
-                    onClick = { showAddDialog = true },
-                    modifier = Modifier.padding(start = 16.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add Author")
-                }
-
-                if (showAddDialog) {
-                    AlertDialog(
-                        onDismissRequest = { showAddDialog = false },
-                        title = { Text("Add Community Author") },
-                        text = {
-                            TextField(
-                                value = newAuthorName,
-                                onValueChange = { newAuthorName = it },
-                                placeholder = { Text("e.g. google") },
-                                singleLine = true
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                if (newAuthorName.isNotBlank()) {
-                                    viewModel.addCommunityAuthor(newAuthorName.trim())
-                                    newAuthorName = ""
-                                    showAddDialog = false
-                                }
-                            }) {
-                                Text("Add")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showAddDialog = false }) {
-                                Text("Cancel")
-                            }
-                        }
-                    )
+                item {
+                    TextButton(
+                        onClick = { showAddDialog = true },
+                        modifier = Modifier.padding(start = 16.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add Author")
+                    }
                 }
             }
         }
+    }
+
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text("Add Community Author") },
+            text = {
+                TextField(
+                    value = newAuthorName,
+                    onValueChange = { newAuthorName = it },
+                    placeholder = { Text("e.g. google") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newAuthorName.isNotBlank()) {
+                        viewModel.addCommunityAuthor(newAuthorName.trim())
+                        newAuthorName = ""
+                        showAddDialog = false
+                    }
+                }) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -423,7 +521,10 @@ fun SettingsLiteRtModelsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val pullToRefreshState = rememberPullToRefreshState()
     var pendingModel by remember { mutableStateOf<AllowedModel?>(null) }
+    var termsModel by remember { mutableStateOf<AllowedModel?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -450,72 +551,118 @@ fun SettingsLiteRtModelsScreen(
             )
         }
     ) { paddingValues ->
-        LazyColumn(
+        PullToRefreshBox(
+            isRefreshing = false,
+            onRefresh = { viewModel.syncDownloadedModels() },
+            state = pullToRefreshState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (downloaded.isNotEmpty()) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
                 item {
                     Text(
-                        "Downloaded",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.primary
+                        "Pull to refresh after accepting terms",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outline
                     )
                 }
-                items(downloaded) { model ->
-                    ModelListItem(
-                        model = model,
-                        isDownloaded = true,
-                        progress = null,
-                        error = null,
-                        onDownload = {},
-                        onDelete = { viewModel.deleteModel(model) },
-                        viewModel = viewModel
-                    )
-                }
-                item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-            }
 
-            if (available.isNotEmpty()) {
-                item {
-                    Text(
-                        "Available to Download",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.secondary
-                    )
+                if (downloaded.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Downloaded",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    items(downloaded) { model ->
+                        ModelListItem(
+                            model = model,
+                            isDownloaded = true,
+                            progress = null,
+                            error = null,
+                            onDownload = {},
+                            onDelete = { viewModel.deleteModel(model) },
+                            viewModel = viewModel
+                        )
+                    }
+                    item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
                 }
-                items(available) { model ->
-                    val fileName = viewModel.getDownloadFileName(model)
-                    val progress = uiState.downloadProgress[fileName]
-                    val error = uiState.downloadErrors[fileName]
 
-                    ModelListItem(
-                        model = model,
-                        isDownloaded = false,
-                        progress = progress,
-                        error = error,
-                        onDownload = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                                    pendingModel = model
-                                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                if (available.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Available to Download",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    items(available) { model ->
+                        val fileName = viewModel.getDownloadFileName(model)
+                        val progress = uiState.downloadProgress[fileName]
+                        val error = uiState.downloadErrors[fileName]
+
+                        ModelListItem(
+                            model = model,
+                            isDownloaded = false,
+                            progress = progress,
+                            error = error,
+                            onDownload = {
+                                if (isTermsRequiredError(error)) {
+                                    termsModel = model
+                                    return@ModelListItem
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                        pendingModel = model
+                                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        viewModel.downloadModel(model)
+                                    }
                                 } else {
                                     viewModel.downloadModel(model)
                                 }
-                            } else {
-                                viewModel.downloadModel(model)
-                            }
-                        },
-                        onDelete = {},
-                        viewModel = viewModel
-                    )
+                            },
+                            onDelete = {},
+                            onAcceptTerms = { termsModel = model },
+                            viewModel = viewModel
+                        )
+                    }
                 }
             }
         }
     }
+
+    if (termsModel != null) {
+        AlertDialog(
+            onDismissRequest = { termsModel = null },
+            title = { Text("Accept model terms") },
+            text = { Text("Open the model page to review and accept the terms. Refusing keeps you on this screen.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val model = termsModel
+                    termsModel = null
+                    if (model != null) {
+                        uriHandler.openUri("https://huggingface.co/${model.modelId}")
+                    }
+                }) { Text("Open model page") }
+            },
+            dismissButton = {
+                TextButton(onClick = { termsModel = null }) { Text("Refuse") }
+            }
+        )
+    }
+}
+
+private fun isTermsRequiredError(error: String?): Boolean {
+    if (error == null) return false
+    return error.contains("Accept Terms", ignoreCase = true) ||
+        error.contains("Permissions/Terms required", ignoreCase = true) ||
+        error.contains("Terms required", ignoreCase = true)
 }
 
 @Composable
@@ -526,6 +673,7 @@ fun ModelListItem(
     error: String?,
     onDownload: () -> Unit,
     onDelete: () -> Unit,
+    onAcceptTerms: (() -> Unit)? = null,
     viewModel: ModelsViewModel
 ) {
     val stats = progress
@@ -586,13 +734,8 @@ fun ModelListItem(
                 } else if (progress != null && progress.progress < 100) {
                     Text("${progress.progress}%", style = MaterialTheme.typography.bodySmall)
                 } else {
-                    if (error != null && error.contains("Accept Terms")) {
-                        val context = LocalContext.current
-                        Button(onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW,
-                                "https://huggingface.co/${model.modelId}".toUri())
-                            context.startActivity(intent)
-                        }) {
+                    if (isTermsRequiredError(error)) {
+                        Button(onClick = onAcceptTerms ?: onDownload) {
                             Text("Terms")
                         }
                     } else {
@@ -862,7 +1005,7 @@ class ModelsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             _uiState.update { it.copy(availableModels = modelRepository.getAvailableModels()) }
-            refreshDownloadedModels()
+            syncDownloadedModels()
         }
         observeWorkManager()
         observeSelectedEmbeddingModel()
@@ -889,6 +1032,15 @@ class ModelsViewModel @Inject constructor(
     fun removeCommunityAuthor(author: String) {
         viewModelScope.launch {
             modelRepository.removeCommunityAuthor(author)
+        }
+    }
+
+    fun syncDownloadedModels() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                WorkManager.getInstance(context).pruneWork().await()
+            }
+            refreshDownloadedModels()
         }
     }
 
@@ -964,7 +1116,7 @@ class ModelsViewModel @Inject constructor(
                         val errorCode = info.outputData.getInt("error_code", 0)
                         if (fileName != null) {
                             errorMap[fileName] = when (errorCode) {
-                                403 -> "Permissions/Terms required (Login below)"
+                                403 -> "Permissions/Terms required"
                                 401 -> "Login required"
                                 else -> "Download failed"
                             }
@@ -1034,7 +1186,7 @@ class ModelsViewModel @Inject constructor(
         viewModelScope.launch {
             val fileName = modelRepository.getDownloadFileName(model)
             if (modelManager.deleteModel(fileName)) {
-                refreshDownloadedModels()
+                syncDownloadedModels()
             }
         }
     }
@@ -1065,7 +1217,7 @@ class ModelsViewModel @Inject constructor(
                     if (access is AccessResult.Forbidden) {
                         _uiState.update { 
                             val newErrors = it.downloadErrors.toMutableMap()
-                            newErrors[fileName] = "Gated - Accept Terms"
+                            newErrors[fileName] = "Terms required"
                             it.copy(downloadErrors = newErrors) 
                         }
                         return@launch
@@ -1094,4 +1246,3 @@ class ModelsViewModel @Inject constructor(
         return modelRepository.getDownloadFileName(model)
     }
 }
-

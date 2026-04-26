@@ -74,6 +74,7 @@ object AppModule {
             """.trimIndent()
         )
 
+        normalizeDefaultAssistant(db)
         seedDefaultAssistant(db)
     }
 
@@ -99,7 +100,22 @@ object AppModule {
             """.trimIndent()
         )
 
+        normalizeDefaultAssistant(connection)
         seedDefaultAssistant(connection)
+    }
+
+    private fun normalizeDefaultAssistant(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "UPDATE characters SET modelReference = '' WHERE id = ? AND isPredefined = 1",
+            arrayOf(DefaultCharacters.ASSISTANT_CHARACTER_ID)
+        )
+    }
+
+    private fun normalizeDefaultAssistant(connection: SQLiteConnection) {
+        connection.prepare("UPDATE characters SET modelReference = '' WHERE id = ?1 AND isPredefined = 1").use { statement ->
+            statement.bindText(1, DefaultCharacters.ASSISTANT_CHARACTER_ID)
+            statement.step()
+        }
     }
 
     private fun seedDefaultAssistant(db: SupportSQLiteDatabase) {

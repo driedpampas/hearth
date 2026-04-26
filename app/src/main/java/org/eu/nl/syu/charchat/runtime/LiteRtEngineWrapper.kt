@@ -93,8 +93,15 @@ class LiteRtEngineWrapper @Inject constructor(
             maxNumTokens = maxTokens,
             cacheDir = context.cacheDir.path
         )
-        engine?.close()
-        engine = Engine(config).apply { initialize() }
+        val nextEngine = Engine(config)
+        try {
+            nextEngine.initialize()
+            engine?.close()
+            engine = nextEngine
+        } catch (e: Exception) {
+            nextEngine.close()
+            throw e
+        }
     }
 
     fun createConversation(character: Character): Flow<String> = callbackFlow {

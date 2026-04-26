@@ -105,7 +105,7 @@ class CreateCharacterViewModel @Inject constructor(
 
     fun refreshModels() {
         val models = modelManager.getLocalModels()
-            .filter { it.name.endsWith(".tflite") || it.name.endsWith(".litertlm") }
+            .filter { it.name.endsWith(".litertlm") }
             .sortedWith(
                 compareBy<File> { it.name.contains("embedding", ignoreCase = true) }
                     .thenBy { it.name.lowercase() }

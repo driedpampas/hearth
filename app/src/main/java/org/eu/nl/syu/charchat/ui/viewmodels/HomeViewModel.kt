@@ -93,7 +93,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val availableModels = modelRepository.getAvailableModels()
             val models = modelManager.getLocalModels()
-                .filter { it.name.endsWith(".tflite") || it.name.endsWith(".litertlm") }
+                .filter { it.name.endsWith(".litertlm") }
                 .sortedWith(
                     compareBy<File> { isEmbeddingModel(it, availableModels) }
                         .thenBy { it.name.lowercase() }
@@ -109,6 +109,16 @@ class HomeViewModel @Inject constructor(
 
     fun selectModel(file: File) {
         viewModelScope.launch {
+            if (isEmbeddingModel(file, _uiState.value.availableModels)) {
+                _uiState.update {
+                    it.copy(
+                        isModelLoading = false,
+                        notification = "Embedding models cannot be used for chat. Select a LiteRT LM model instead."
+                    )
+                }
+                return@launch
+            }
+
             _uiState.update { it.copy(isModelLoading = true, selectedModel = file.name) }
             
             val backend = when (_uiState.value.preferredBackend) {
@@ -118,14 +128,25 @@ class HomeViewModel @Inject constructor(
                 else -> null
             }
 
-            engineWrapper.initialize(
-                modelPath = file.absolutePath,
-                preferredBackend = backend,
-                maxTokens = _uiState.value.defaultMaxTokens,
-                onFallback = { message ->
-                    _uiState.update { it.copy(notification = message) }
+            try {
+                engineWrapper.initialize(
+                    modelPath = file.absolutePath,
+                    preferredBackend = backend,
+                    maxTokens = _uiState.value.defaultMaxTokens,
+                    onFallback = { message ->
+                        _uiState.update { it.copy(notification = message) }
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isModelLoading = false,
+                        notification = "This model cannot be used for chat. Select a LiteRT LM model instead."
+                    )
                 }
-            )
+                return@launch
+            }
+
             _uiState.update { it.copy(isModelLoading = false) }
         }
     }

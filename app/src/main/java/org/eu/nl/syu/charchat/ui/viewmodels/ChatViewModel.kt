@@ -12,9 +12,11 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.ChatMessage
 import org.eu.nl.syu.charchat.data.MessageRole
+import org.eu.nl.syu.charchat.data.ModelManager
 import org.eu.nl.syu.charchat.data.local.CharacterDao
 import org.eu.nl.syu.charchat.data.local.ChatMessageDao
 import org.eu.nl.syu.charchat.data.local.toDomain
@@ -22,6 +24,7 @@ import org.eu.nl.syu.charchat.data.local.toEntity
 import org.eu.nl.syu.charchat.runtime.EmbeddingEngine
 import org.eu.nl.syu.charchat.runtime.LiteRtEngineWrapper
 import javax.inject.Inject
+import java.io.IOException
 
 data class ChatUiState(
     val character: Character? = null,
@@ -29,7 +32,8 @@ data class ChatUiState(
     val isGenerating: Boolean = false,
     val currentGeneratingText: String = "",
     val tokenCount: Int = 0,
-    val maxTokens: Int = 4096
+    val maxTokens: Int = 4096,
+    val modelError: String? = null
 )
 
 @HiltViewModel
@@ -37,7 +41,8 @@ class ChatViewModel @Inject constructor(
     private val characterDao: CharacterDao,
     private val chatMessageDao: ChatMessageDao,
     private val engineWrapper: LiteRtEngineWrapper,
-    private val embeddingEngine: EmbeddingEngine
+    private val embeddingEngine: EmbeddingEngine,
+    private val modelManager: ModelManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -48,16 +53,71 @@ class ChatViewModel @Inject constructor(
             val characterEntity = characterDao.getCharacterById(characterId)
             val character = characterEntity?.toDomain()
             if (character != null) {
+                val modelPath = resolveModelPath(character.modelReference)
+                if (modelPath == null && !engineWrapper.isInitialized()) {
+                    _uiState.update {
+                        it.copy(
+                            character = character,
+                            modelError = if (character.modelReference.isBlank()) {
+                                "Select a model first."
+                            } else {
+                                "Model file not found: ${character.modelReference}.\nDid you download it?"
+                            }
+                        )
+                    }
+                    return@launch
+                }
+
                 val openedAt = System.currentTimeMillis()
                 characterDao.updateLastUsedAt(character.id, openedAt)
                 val messages = chatMessageDao.getMessagesForCharacter(characterId).map { it.toDomain() }
-                _uiState.update { it.copy(character = character.copy(lastUsedAt = openedAt), messages = messages) }
+                _uiState.update { it.copy(character = character.copy(lastUsedAt = openedAt), messages = messages, modelError = null) }
                 
                 // Initialize engine if needed
-                engineWrapper.initialize(character.modelReference)
+                if (modelPath != null) {
+                    try {
+                        engineWrapper.initialize(modelPath)
+                    } catch (e: Exception) {
+                        val message = if (isUnsupportedChatModel(character.modelReference)) {
+                            "This model cannot be used for chat. Select a LiteRT LM chat model instead."
+                        } else {
+                            "Failed to initialize the model: ${e.message}"
+                        }
+                        _uiState.update {
+                            it.copy(
+                                character = character.copy(lastUsedAt = openedAt),
+                                messages = messages,
+                                modelError = message
+                            )
+                        }
+                        return@launch
+                    }
+                }
                 engineWrapper.createConversation(character).collect()
             }
         }
+    }
+
+    private fun isUnsupportedChatModel(modelReference: String): Boolean {
+        val lower = modelReference.lowercase()
+        return lower.endsWith(".tflite") && !lower.contains("chat") && !lower.contains("lm")
+    }
+
+    private fun resolveModelPath(modelReference: String): String? {
+        if (modelReference.isBlank()) return null
+
+        val explicit = File(modelReference)
+        if (explicit.exists() && explicit.isFile) return explicit.absolutePath
+
+        val modelsDir = modelManager.getModelsDir()
+        val localFile = File(modelsDir, modelReference)
+        if (localFile.exists() && localFile.isFile) return localFile.absolutePath
+
+        val baseName = modelReference.substringBeforeLast('.')
+        val inferred = modelManager.getLocalModels().firstOrNull { file ->
+            file.isFile && (file.name == modelReference || file.nameWithoutExtension == baseName)
+        }
+        return inferred?.absolutePath
     }
 
     fun sendMessage(content: String) {

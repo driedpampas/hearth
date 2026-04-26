@@ -2,7 +2,6 @@ package org.eu.nl.syu.charchat.data
 
 object DefaultCharacters {
     const val ASSISTANT_CHARACTER_ID = "assistant"
-    const val DEFAULT_MODEL_REFERENCE = "gemma-2b.litertlm"
 
     const val ASSISTANT_NAME = "Assistant"
     const val ASSISTANT_TAGLINE = "A helpful, concise companion"
@@ -24,7 +23,7 @@ object DefaultCharacters {
         avatarUrl = null,
         systemPromptLore = ASSISTANT_SYSTEM_PROMPT,
         reminderMessage = ASSISTANT_REMINDER,
-        modelReference = DEFAULT_MODEL_REFERENCE,
+        modelReference = "",
         temp = 0.7f,
         topP = 0.9f,
         topK = 40,

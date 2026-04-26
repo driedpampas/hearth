@@ -135,50 +135,68 @@ fun ChatScreen(
                 )
             },
             bottomBar = {
-                ChatInput(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    onSend = {
-                        if (inputText.isNotBlank()) {
-                            viewModel.sendMessage(inputText)
-                            inputText = ""
+                if (uiState.modelError == null) {
+                    ChatInput(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        onSend = {
+                            if (inputText.isNotBlank()) {
+                                viewModel.sendMessage(inputText)
+                                inputText = ""
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         ) { paddingValues ->
-            LazyColumn(
-                state = scrollState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(uiState.messages) { message ->
-                    ChatBubble(message)
-                }
-                
-                if (uiState.currentGeneratingText.isNotEmpty()) {
-                    item {
-                        ChatBubble(
-                            ChatMessage(
-                                role = MessageRole.MODEL,
-                                content = uiState.currentGeneratingText
-                            )
-                        )
+            if (uiState.modelError != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                    ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Assistant unavailable")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(uiState.modelError ?: "Model unavailable")
                     }
                 }
-                
-                if (uiState.isGenerating && uiState.currentGeneratingText.isEmpty()) {
-                    item {
-                        TypingIndicator()
+            } else {
+                LazyColumn(
+                    state = scrollState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(uiState.messages) { message ->
+                        ChatBubble(message)
+                    }
+
+                    if (uiState.currentGeneratingText.isNotEmpty()) {
+                        item {
+                            ChatBubble(
+                                ChatMessage(
+                                    role = MessageRole.MODEL,
+                                    content = uiState.currentGeneratingText
+                                )
+                            )
+                        }
+                    }
+
+                    if (uiState.isGenerating && uiState.currentGeneratingText.isEmpty()) {
+                        item {
+                            TypingIndicator()
+                        }
                     }
                 }
             }
         }
     }
 }
+
 
 @Composable
 fun TokenIndicator(current: Int, max: Int) {
