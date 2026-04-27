@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.compose.AsyncImage
 import org.eu.nl.syu.charchat.data.Character
+import org.eu.nl.syu.charchat.data.ChatThread
 import org.eu.nl.syu.charchat.data.DefaultCharacters
 import org.eu.nl.syu.charchat.ui.viewmodels.HomeViewModel
 import org.eu.nl.syu.charchat.ui.viewmodels.HomeUiState
@@ -115,35 +116,24 @@ fun HomeScreen(
         }
     }
 
-    val recentCharacters = remember(visibleCharacters) {
-        visibleCharacters
-            .filter { it.lastUsedAt > 0L }
-            .sortedByDescending { it.lastUsedAt }
-            .take(4)
-    }
-
-    val recentIds = remember(recentCharacters) {
-        recentCharacters.map { it.id }.toSet()
-    }
-
-    val chronologicalCharacters = remember(visibleCharacters, recentIds) {
-        visibleCharacters
-            .filterNot { it.id in recentIds }
-            .sortedWith(
-                compareBy<Character> { if (it.lastUsedAt <= 0L) Long.MAX_VALUE else it.lastUsedAt }
-                    .thenBy { it.name.lowercase() }
-            )
-    }
-
     val assistantCharacters = remember(uiState.characters) {
         uiState.characters
             .filter { it.id == DefaultCharacters.ASSISTANT_CHARACTER_ID }
             .sortedWith(compareByDescending<Character> { it.lastUsedAt }.thenBy { it.name.lowercase() })
     }
 
+    val filteredThreads = remember(searchQuery, uiState.chatThreads, visibleCharacters) {
+        val characterIds = visibleCharacters.map { it.id }.toSet()
+        uiState.chatThreads.filter { it.characterId in characterIds }
+    }
+
     val openCharacter: (Character) -> Unit = { character ->
         viewModel.markCharacterOpened(character.id)
         onNavigateToChat(character.id)
+    }
+
+    val openThread: (ChatThread) -> Unit = { thread ->
+        onNavigateToChat(thread.id)
     }
 
     BackHandler(fabMenuExpanded || showModelPicker || showCharacterPicker || showModelSettings) {
@@ -293,33 +283,34 @@ fun HomeScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (recentCharacters.isNotEmpty()) {
+                if (filteredThreads.isNotEmpty()) {
                     item {
                         Text(
-                            text = "Recently used",
+                            text = "Chats",
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
 
-                    items(recentCharacters, key = { it.id }) { character ->
-                        CharacterCard(
-                            character = character,
-                            onClick = { openCharacter(character) }
+                    items(filteredThreads, key = { it.id }) { thread ->
+                        ThreadCard(
+                            thread = thread,
+                            character = uiState.characters.firstOrNull { it.id == thread.characterId },
+                            onClick = { openThread(thread) }
                         )
                     }
                 }
 
-                if (chronologicalCharacters.isNotEmpty()) {
+                if (visibleCharacters.isNotEmpty()) {
                     item {
                         Text(
-                            text = if (recentCharacters.isEmpty()) "Chats" else "All chats",
+                            text = if (filteredThreads.isEmpty()) "Characters" else "Start a new chat",
                             style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = if (recentCharacters.isNotEmpty()) 4.dp else 0.dp, bottom = 4.dp)
+                            modifier = Modifier.padding(top = if (filteredThreads.isNotEmpty()) 4.dp else 0.dp, bottom = 4.dp)
                         )
                     }
 
-                    items(chronologicalCharacters, key = { it.id }) { character ->
+                    items(visibleCharacters, key = { it.id }) { character ->
                         CharacterCard(
                             character = character,
                             onClick = { openCharacter(character) }
@@ -327,6 +318,24 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ThreadCard(
+    thread: ChatThread,
+    character: Character?,
+    onClick: () -> Unit
+) {
+    ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+        Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+            Text(text = character?.name ?: thread.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = "Last updated ${thread.lastMessageAt}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

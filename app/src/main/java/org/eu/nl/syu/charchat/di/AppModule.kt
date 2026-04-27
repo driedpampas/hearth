@@ -16,6 +16,7 @@ import org.eu.nl.syu.charchat.data.DefaultCharacters
 import org.eu.nl.syu.charchat.data.local.AppDatabase
 import org.eu.nl.syu.charchat.data.local.CharacterDao
 import org.eu.nl.syu.charchat.data.local.ChatMessageDao
+import org.eu.nl.syu.charchat.data.local.ChatThreadDao
 import org.eu.nl.syu.charchat.data.local.VectorDao
 import java.io.File
 import javax.inject.Singleton
@@ -39,7 +40,7 @@ object AppModule {
             "charchat_db"
         )
             .setDriver(driver)
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
@@ -105,17 +106,11 @@ object AppModule {
     }
 
     private fun normalizeDefaultAssistant(db: SupportSQLiteDatabase) {
-        db.execSQL(
-            "UPDATE characters SET modelReference = '' WHERE id = ? AND isPredefined = 1",
-            arrayOf(DefaultCharacters.ASSISTANT_CHARACTER_ID)
-        )
+        // Keep any persisted Assistant model selection intact across launches.
     }
 
     private fun normalizeDefaultAssistant(connection: SQLiteConnection) {
-        connection.prepare("UPDATE characters SET modelReference = '' WHERE id = ?1 AND isPredefined = 1").use { statement ->
-            statement.bindText(1, DefaultCharacters.ASSISTANT_CHARACTER_ID)
-            statement.step()
-        }
+        // Keep any persisted Assistant model selection intact across launches.
     }
 
     private fun seedDefaultAssistant(db: SupportSQLiteDatabase) {
@@ -202,6 +197,11 @@ object AppModule {
     }
 
     @Provides
+    fun provideChatThreadDao(database: AppDatabase): ChatThreadDao {
+        return database.chatThreadDao()
+    }
+
+    @Provides
     fun provideVectorDao(database: AppDatabase): VectorDao {
         return database.vectorDao()
     }
@@ -226,5 +226,16 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
         connection.prepare("ALTER TABLE chat_messages ADD COLUMN tokensPerSecond REAL").use { statement ->
             statement.step()
         }
+    }
+}
+
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.prepare("CREATE TABLE IF NOT EXISTS chat_threads (id TEXT NOT NULL PRIMARY KEY, characterId TEXT NOT NULL, title TEXT NOT NULL, createdAt INTEGER NOT NULL, lastMessageAt INTEGER NOT NULL)").use { it.step() }
+        connection.prepare("CREATE TABLE IF NOT EXISTS chat_messages_new (id TEXT NOT NULL PRIMARY KEY, characterId TEXT NOT NULL, threadId TEXT, role TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL, isHiddenFromAi INTEGER NOT NULL, modelReference TEXT, generationTimeMs INTEGER, tokensPerSecond REAL, FOREIGN KEY(threadId) REFERENCES chat_threads(id) ON DELETE CASCADE)").use { it.step() }
+        connection.prepare("INSERT INTO chat_messages_new (id, characterId, threadId, role, content, timestamp, isHiddenFromAi, modelReference, generationTimeMs, tokensPerSecond) SELECT id, characterId, NULL, role, content, timestamp, isHiddenFromAi, modelReference, generationTimeMs, tokensPerSecond FROM chat_messages").use { it.step() }
+        connection.prepare("DROP TABLE chat_messages").use { it.step() }
+        connection.prepare("ALTER TABLE chat_messages_new RENAME TO chat_messages").use { it.step() }
+        connection.prepare("CREATE INDEX IF NOT EXISTS index_chat_messages_threadId ON chat_messages(threadId)").use { it.step() }
     }
 }

@@ -13,7 +13,9 @@ import androidx.room.Query
 import androidx.room.RoomDatabase
 import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.ChatMessage
+import org.eu.nl.syu.charchat.data.ChatThread
 import org.eu.nl.syu.charchat.data.MessageRole
+import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "lore_chunks")
 data class LoreChunkEntity(
@@ -28,6 +30,15 @@ data class MemoryEntryEntity(
     val characterId: String,
     val text: String,
     val timestamp: Long
+)
+
+@Entity(tableName = "chat_threads")
+data class ChatThreadEntity(
+    @PrimaryKey val id: String,
+    val characterId: String,
+    val title: String,
+    val createdAt: Long,
+    val lastMessageAt: Long
 )
 
 @Entity(tableName = "characters")
@@ -51,17 +62,18 @@ data class CharacterEntity(
     tableName = "chat_messages",
     foreignKeys = [
         ForeignKey(
-            entity = CharacterEntity::class,
+            entity = ChatThreadEntity::class,
             parentColumns = ["id"],
-            childColumns = ["characterId"],
+            childColumns = ["threadId"],
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("characterId")]
+    indices = [Index("threadId")]
 )
 data class ChatMessageEntity(
     @PrimaryKey val id: String,
     val characterId: String,
+    val threadId: String? = null,
     val role: String,
     val content: String,
     val timestamp: Long,
@@ -85,37 +97,60 @@ interface CharacterDao {
     @Query("UPDATE characters SET lastUsedAt = :lastUsedAt WHERE id = :id")
     suspend fun updateLastUsedAt(id: String, lastUsedAt: Long)
 
+    @Query("UPDATE characters SET modelReference = :modelReference WHERE id = :id")
+    suspend fun updateModelReference(id: String, modelReference: String)
+
     @Delete
     suspend fun deleteCharacter(character: CharacterEntity)
 }
 
 @Dao
+interface ChatThreadDao {
+    @Query("SELECT * FROM chat_threads ORDER BY lastMessageAt DESC, createdAt DESC")
+    fun getAllThreads(): Flow<List<ChatThreadEntity>>
+
+    @Query("SELECT * FROM chat_threads WHERE id = :id")
+    suspend fun getThreadById(id: String): ChatThreadEntity?
+
+    @Query("SELECT * FROM chat_threads WHERE characterId = :characterId ORDER BY lastMessageAt DESC, createdAt DESC")
+    suspend fun getThreadsForCharacter(characterId: String): List<ChatThreadEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertThread(thread: ChatThreadEntity)
+
+    @Query("UPDATE chat_threads SET lastMessageAt = :lastMessageAt WHERE id = :id")
+    suspend fun updateLastMessageAt(id: String, lastMessageAt: Long)
+}
+
+@Dao
 interface ChatMessageDao {
-    @Query("SELECT * FROM chat_messages WHERE characterId = :characterId ORDER BY timestamp ASC")
-    suspend fun getMessagesForCharacter(characterId: String): List<ChatMessageEntity>
+    @Query("SELECT * FROM chat_messages WHERE threadId = :threadId ORDER BY timestamp ASC")
+    suspend fun getMessagesForThread(threadId: String): List<ChatMessageEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: ChatMessageEntity)
 
-    @Query("DELETE FROM chat_messages WHERE characterId = :characterId")
-    suspend fun deleteMessagesForCharacter(characterId: String)
+    @Query("DELETE FROM chat_messages WHERE threadId = :threadId")
+    suspend fun deleteMessagesForThread(threadId: String)
 
-    @Query("UPDATE chat_messages SET isHiddenFromAi = 1 WHERE characterId = :characterId AND id IN (:messageIds)")
-    suspend fun hideMessages(characterId: String, messageIds: List<String>)
+    @Query("UPDATE chat_messages SET isHiddenFromAi = 1 WHERE threadId = :threadId AND id IN (:messageIds)")
+    suspend fun hideMessages(threadId: String, messageIds: List<String>)
 }
 
 @Database(
     entities = [
         CharacterEntity::class, 
+        ChatThreadEntity::class,
         ChatMessageEntity::class, 
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 4, 
+    version = 5, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun characterDao(): CharacterDao
+    abstract fun chatThreadDao(): ChatThreadDao
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun vectorDao(): VectorDao
 }
@@ -152,6 +187,22 @@ fun Character.toEntity(): CharacterEntity = CharacterEntity(
     lastUsedAt = lastUsedAt
 )
 
+fun ChatThreadEntity.toDomain(): ChatThread = ChatThread(
+    id = id,
+    characterId = characterId,
+    title = title,
+    createdAt = createdAt,
+    lastMessageAt = lastMessageAt
+)
+
+fun ChatThread.toEntity(): ChatThreadEntity = ChatThreadEntity(
+    id = id,
+    characterId = characterId,
+    title = title,
+    createdAt = createdAt,
+    lastMessageAt = lastMessageAt
+)
+
 fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(
     id = id,
     role = MessageRole.valueOf(role),
@@ -163,9 +214,10 @@ fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(
     tokensPerSecond = tokensPerSecond
 )
 
-fun ChatMessage.toEntity(characterId: String): ChatMessageEntity = ChatMessageEntity(
+fun ChatMessage.toEntity(characterId: String, threadId: String?): ChatMessageEntity = ChatMessageEntity(
     id = id,
     characterId = characterId,
+    threadId = threadId,
     role = role.name,
     content = content,
     timestamp = timestamp,

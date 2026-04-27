@@ -6,16 +6,20 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eu.nl.syu.charchat.data.AllowedModel
+import org.eu.nl.syu.charchat.data.DefaultCharacters
+import org.eu.nl.syu.charchat.data.ChatThread
 import org.eu.nl.syu.charchat.data.ModelManager
 import org.eu.nl.syu.charchat.data.ModelRepository
 import org.eu.nl.syu.charchat.runtime.LiteRtEngineWrapper
 import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.local.CharacterDao
+import org.eu.nl.syu.charchat.data.local.ChatThreadDao
 import org.eu.nl.syu.charchat.data.local.toDomain
 import com.google.ai.edge.litertlm.Backend
 import kotlinx.coroutines.flow.first
@@ -24,6 +28,7 @@ import javax.inject.Inject
 
 data class HomeUiState(
     val characters: List<Character> = emptyList(),
+    val chatThreads: List<ChatThread> = emptyList(),
     val downloadedModels: List<File> = emptyList(),
     val availableModels: List<AllowedModel> = emptyList(),
     val selectedModel: String? = null,
@@ -33,12 +38,14 @@ data class HomeUiState(
     val notification: String? = null,
     val preferredBackend: String = "Automatic",
     val defaultMaxTokens: Int = 4096,
-    val experimentalNpuEnabled: Boolean = false
+    val experimentalNpuEnabled: Boolean = false,
+    val autoLoadChatModel: Boolean = false
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val characterDao: CharacterDao,
+    private val chatThreadDao: ChatThreadDao,
     private val modelRepository: ModelRepository,
     private val modelManager: ModelManager,
     private val engineWrapper: LiteRtEngineWrapper
@@ -49,6 +56,7 @@ class HomeViewModel @Inject constructor(
 
     init {
         loadCharacters()
+        loadThreads()
         refreshModels()
         observeSettings()
     }
@@ -69,6 +77,11 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { it.copy(experimentalNpuEnabled = enabled) }
             }
         }
+        viewModelScope.launch {
+            modelRepository.autoLoadChatModel.collect { enabled ->
+                _uiState.update { it.copy(autoLoadChatModel = enabled) }
+            }
+        }
     }
 
     fun setPreferredBackend(backend: String) {
@@ -83,12 +96,48 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun setAutoLoadChatModel(enabled: Boolean) {
+        viewModelScope.launch {
+            modelRepository.setAutoLoadChatModel(enabled)
+        }
+    }
+
     fun loadCharacters() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val characters = characterDao.getAllCharacters().map { it.toDomain() }
-            _uiState.update { it.copy(characters = characters, isLoading = false) }
+            val selectedChatModel = characters
+                .firstOrNull { it.id == DefaultCharacters.ASSISTANT_CHARACTER_ID }
+                ?.modelReference
+                ?.takeIf { it.isNotBlank() }
+                ?.let { File(it).name }
+            _uiState.update {
+                it.copy(
+                    characters = characters,
+                    selectedModel = selectedChatModel,
+                    isModelLoaded = selectedChatModel != null,
+                    isLoading = false
+                )
+            }
         }
+    }
+
+    fun loadThreads() {
+        viewModelScope.launch {
+            chatThreadDao.getAllThreads().collectLatest { threads ->
+                _uiState.update { it.copy(chatThreads = threads.map { thread -> thread.toDomain() }) }
+            }
+        }
+    }
+
+    fun createThreadForCharacter(character: Character): ChatThread {
+        val now = System.currentTimeMillis()
+        return ChatThread(
+            characterId = character.id,
+            title = character.name,
+            createdAt = now,
+            lastMessageAt = now
+        )
     }
 
     fun refreshModels() {
@@ -149,6 +198,7 @@ class HomeViewModel @Inject constructor(
                         }
                     )
                 }
+                characterDao.updateModelReference(org.eu.nl.syu.charchat.data.DefaultCharacters.ASSISTANT_CHARACTER_ID, file.absolutePath)
                 _uiState.update { it.copy(isModelLoading = false, selectedModel = file.name, isModelLoaded = true, notification = null) }
             } catch (e: Exception) {
                 val msg = when {

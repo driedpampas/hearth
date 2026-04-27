@@ -8,24 +8,26 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
 import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.ChatMessage
+import org.eu.nl.syu.charchat.data.ChatThread
 import org.eu.nl.syu.charchat.data.MessageRole
 import org.eu.nl.syu.charchat.data.ModelManager
 import org.eu.nl.syu.charchat.data.ModelRepository
 import org.eu.nl.syu.charchat.data.local.CharacterDao
 import org.eu.nl.syu.charchat.data.local.ChatMessageDao
+import org.eu.nl.syu.charchat.data.local.ChatThreadDao
 import org.eu.nl.syu.charchat.data.local.toDomain
 import org.eu.nl.syu.charchat.data.local.toEntity
 import org.eu.nl.syu.charchat.runtime.EmbeddingEngine
 import org.eu.nl.syu.charchat.runtime.LiteRtEngineWrapper
+import java.io.File
 import javax.inject.Inject
-import java.io.IOException
 
 data class ChatUiState(
     val character: Character? = null,
@@ -34,12 +36,14 @@ data class ChatUiState(
     val currentGeneratingText: String = "",
     val tokenCount: Int = 0,
     val maxTokens: Int = 4096,
-    val modelError: String? = null
+    val modelError: String? = null,
+    val isLoadingModel: Boolean = false
 )
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val characterDao: CharacterDao,
+    private val chatThreadDao: ChatThreadDao,
     private val chatMessageDao: ChatMessageDao,
     private val engineWrapper: LiteRtEngineWrapper,
     private val embeddingEngine: EmbeddingEngine,
@@ -49,66 +53,113 @@ class ChatViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
+    private var activeThreadId: String? = null
 
-    fun loadCharacter(characterId: String) {
+    fun loadConversation(conversationId: String) {
         viewModelScope.launch {
-            val characterEntity = characterDao.getCharacterById(characterId)
-            val character = characterEntity?.toDomain()
-            if (character != null) {
-                val modelPath = resolveModelPath(character.modelReference)
-                if (modelPath == null && !engineWrapper.isInitialized()) {
+            val threadEntity = chatThreadDao.getThreadById(conversationId)
+            val character = when {
+                threadEntity != null -> characterDao.getCharacterById(threadEntity.characterId)?.toDomain()
+                else -> characterDao.getCharacterById(conversationId)?.toDomain()
+            } ?: return@launch
+
+            val threadId = threadEntity?.id ?: createNewThread(character).id
+            activeThreadId = threadId
+
+            val modelPath = resolveModelPath(character.modelReference)
+            val autoLoadEnabled = modelRepository.autoLoadChatModel.first()
+            if (!engineWrapper.isInitialized() && !autoLoadEnabled) {
+                _uiState.update {
+                    it.copy(
+                        character = character,
+                        modelError = if (character.modelReference.isBlank()) {
+                            "Select a model first."
+                        } else {
+                            "Model file not found: ${character.modelReference}.\nDid you download it?"
+                        }
+                    )
+                }
+                return@launch
+            }
+
+            if (modelPath == null && !engineWrapper.isInitialized()) {
+                _uiState.update {
+                    it.copy(
+                        character = character,
+                        modelError = if (character.modelReference.isBlank()) {
+                            "Select a model first."
+                        } else {
+                            "Model file not found: ${character.modelReference}.\nDid you download it?"
+                        }
+                    )
+                }
+                return@launch
+            }
+
+            if (!engineWrapper.isInitialized() && autoLoadEnabled) {
+                if (modelPath == null) {
                     _uiState.update {
                         it.copy(
                             character = character,
-                            modelError = if (character.modelReference.isBlank()) {
-                                "Select a model first."
-                            } else {
-                                "Model file not found: ${character.modelReference}.\nDid you download it?"
-                            }
+                            modelError = "Select a model first."
                         )
                     }
                     return@launch
                 }
 
-                val openedAt = System.currentTimeMillis()
-                characterDao.updateLastUsedAt(character.id, openedAt)
-                val messages = chatMessageDao.getMessagesForCharacter(characterId).map { it.toDomain() }
-                _uiState.update { it.copy(character = character.copy(lastUsedAt = openedAt), messages = messages, modelError = null) }
+                _uiState.update { it.copy(character = character, isLoadingModel = true, modelError = null) }
 
-                // Initialize engine if needed
-                if (modelPath != null) {
-                    val modelFile = File(modelPath)
-                    try {
-                        engineWrapper.initialize(modelPath)
-                    } catch (e: Exception) {
-                        val msg = when {
-                            isInputTensorMissing(e) -> {
-                                // Quarantine the broken model and clear reference
-                                modelRepository.quarantineModel(modelFile)
-                                // Also clear the character's modelReference so it doesn't keep pointing to nothing
-                                // (in a real app you'd update the character record too)
-                                "This model is corrupted/incompatible and has been removed. Please select a compatible LiteRT LM chat model."
-                            }
-                            isUnsupportedChatModel(character.modelReference) -> {
-                                "This model cannot be used for chat. Select a LiteRT LM model instead."
-                            }
-                            else -> {
-                                "Failed to initialize the model: ${e.message}"
-                            }
+                val modelFile = File(modelPath)
+                try {
+                    engineWrapper.initialize(modelPath)
+                } catch (e: Exception) {
+                    val msg = when {
+                        isInputTensorMissing(e) -> {
+                            modelRepository.quarantineModel(modelFile)
+                            "This model is corrupted/incompatible and has been removed. Please select a compatible LiteRT LM chat model."
                         }
-                        _uiState.update {
-                            it.copy(
-                                character = character.copy(lastUsedAt = openedAt),
-                                messages = messages,
-                                modelError = msg
-                            )
+                        isUnsupportedChatModel(character.modelReference) -> {
+                            "This model cannot be used for chat. Select a LiteRT LM model instead."
                         }
-                        return@launch
+                        else -> {
+                            "Failed to initialize the model: ${e.message}"
+                        }
                     }
+                    _uiState.update {
+                        it.copy(
+                            character = character,
+                            modelError = msg,
+                            isLoadingModel = false
+                        )
+                    }
+                    return@launch
                 }
-                engineWrapper.createConversation(character).collect()
             }
+
+            val openedAt = System.currentTimeMillis()
+            characterDao.updateLastUsedAt(character.id, openedAt)
+            val messages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
+            _uiState.update {
+                it.copy(
+                    character = character.copy(lastUsedAt = openedAt),
+                    messages = messages,
+                    modelError = null,
+                    isLoadingModel = false,
+                    tokenCount = messages.sumOf { message -> (message.content.length / 4).coerceAtLeast(0) }
+                )
+            }
+
+            engineWrapper.createConversation(character).collect()
         }
+    }
+
+    private suspend fun createNewThread(character: Character): ChatThread {
+        val thread = ChatThread(
+            characterId = character.id,
+            title = character.name
+        )
+        chatThreadDao.insertThread(thread.toEntity())
+        return thread
     }
 
     private fun isUnsupportedChatModel(modelReference: String): Boolean {
@@ -142,24 +193,25 @@ class ChatViewModel @Inject constructor(
 
     fun sendMessage(content: String) {
         val character = _uiState.value.character ?: return
+        val threadId = activeThreadId ?: return
         val userMessage = ChatMessage(
             role = MessageRole.USER,
             content = content,
             modelReference = character.modelReference
         )
-        
+
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
-            
-            // Save user message
-            chatMessageDao.insertMessage(userMessage.toEntity(character.id))
-            _uiState.update { it.copy(
-                messages = it.messages + userMessage,
-                isGenerating = true,
-                tokenCount = it.tokenCount + (content.length / 4) // Simple heuristic
-            ) }
 
-            // Retrieve RAG Context
+            chatMessageDao.insertMessage(userMessage.toEntity(character.id, threadId))
+            _uiState.update {
+                it.copy(
+                    messages = it.messages + userMessage,
+                    isGenerating = true,
+                    tokenCount = it.tokenCount + (content.length / 4)
+                )
+            }
+
             val loreContexts = embeddingEngine.similaritySearch(content)
             val contextInjection = if (loreContexts.isNotEmpty()) {
                 "\n\n[Lore Context:\n" + loreContexts.joinToString("\n---\n") + "]"
@@ -169,7 +221,7 @@ class ChatViewModel @Inject constructor(
 
             val reminder = character.reminderMessage + contextInjection
             var fullResponse = ""
-            
+
             engineWrapper.sendMessage(content, reminder)
                 .onEach { partial ->
                     fullResponse += partial
@@ -180,7 +232,7 @@ class ChatViewModel @Inject constructor(
                     val generationTimeMs = endTime - startTime
                     val responseTokenCount = fullResponse.length / 4
                     val tps = if (generationTimeMs > 0) responseTokenCount / (generationTimeMs / 1000f) else null
-                    
+
                     val modelMessage = ChatMessage(
                         role = MessageRole.MODEL,
                         content = fullResponse,
@@ -188,8 +240,9 @@ class ChatViewModel @Inject constructor(
                         generationTimeMs = generationTimeMs,
                         tokensPerSecond = tps
                     )
-                    chatMessageDao.insertMessage(modelMessage.toEntity(character.id))
-                    _uiState.update { 
+                    chatMessageDao.insertMessage(modelMessage.toEntity(character.id, threadId))
+                    chatThreadDao.updateLastMessageAt(threadId, endTime)
+                    _uiState.update {
                         it.copy(
                             messages = it.messages + modelMessage,
                             isGenerating = false,
@@ -197,9 +250,8 @@ class ChatViewModel @Inject constructor(
                             tokenCount = it.tokenCount + responseTokenCount
                         )
                     }
-                    
-                    // Check context window and summarize if needed (TODO)
-                    checkAndSummarize(character)
+
+                    checkAndSummarize(threadId, character)
                 }
                 .catch { e ->
                     _uiState.update { it.copy(isGenerating = false, currentGeneratingText = "Error: ${e.message}") }
@@ -208,39 +260,36 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private suspend fun checkAndSummarize(character: Character) {
-        if (_uiState.value.tokenCount > 3500) { // Approx 85% of 4096
+    private suspend fun checkAndSummarize(threadId: String, character: Character) {
+        if (_uiState.value.tokenCount > 3500) {
             val prompt = "Please summarize the story so far in 2-3 paragraphs for continuity."
             var summary = ""
             engineWrapper.sendMessage(prompt).collect { partial ->
                 summary += partial
             }
-            
+
             val visibleMessages = _uiState.value.messages.filter { !it.isHiddenFromAi }
-            // Keep the last 6 messages for immediate context, hide the rest
             if (visibleMessages.size > 6) {
                 val messagesToHide = visibleMessages.dropLast(6)
                 val messageIdsToHide = messagesToHide.map { it.id }
-                
-                chatMessageDao.hideMessages(character.id, messageIdsToHide)
-                
+
+                chatMessageDao.hideMessages(threadId, messageIdsToHide)
+
                 val summaryMessage = ChatMessage(
                     role = MessageRole.SYSTEM,
                     content = "SUMMARY OF PAST EVENTS: $summary",
                     isHiddenFromAi = false
                 )
-                chatMessageDao.insertMessage(summaryMessage.toEntity(character.id))
-                
-                // Refresh UI state with updated messages
-                val updatedMessages = chatMessageDao.getMessagesForCharacter(character.id).map { it.toDomain() }
-                _uiState.update { it.copy(messages = updatedMessages, tokenCount = 1500) } // Reset token count heuristic
+                chatMessageDao.insertMessage(summaryMessage.toEntity(character.id, threadId))
+                chatThreadDao.updateLastMessageAt(threadId, System.currentTimeMillis())
+
+                val updatedMessages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
+                _uiState.update { it.copy(messages = updatedMessages, tokenCount = 1500) }
             }
         }
     }
 
-
     override fun onCleared() {
         super.onCleared()
-        engineWrapper.close()
     }
 }

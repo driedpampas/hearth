@@ -59,6 +59,7 @@ class ModelRepository @Inject constructor(
     private val MODEL_BACKEND_CACHE = stringPreferencesKey("model_backend_cache")
     private val PREFERRED_BACKEND = stringPreferencesKey("preferred_backend")
     private val DEFAULT_MAX_TOKENS = androidx.datastore.preferences.core.intPreferencesKey("default_max_tokens")
+    private val AUTO_LOAD_CHAT_MODEL = androidx.datastore.preferences.core.booleanPreferencesKey("auto_load_chat_model")
     private val BLACKLISTED_MODEL_HASHES = stringSetPreferencesKey("blacklisted_model_hashes")
 
     val selectedEmbeddingModel: Flow<String?> = context.modelDataStore.data.map { preferences ->
@@ -149,9 +150,19 @@ class ModelRepository @Inject constructor(
         preferences[DEFAULT_MAX_TOKENS] ?: 4096
     }
 
+    val autoLoadChatModel: Flow<Boolean> = context.modelDataStore.data.map { preferences ->
+        preferences[AUTO_LOAD_CHAT_MODEL] ?: false
+    }
+
     suspend fun setDefaultMaxTokens(maxTokens: Int) {
         context.modelDataStore.edit { preferences ->
             preferences[DEFAULT_MAX_TOKENS] = maxTokens
+        }
+    }
+
+    suspend fun setAutoLoadChatModel(enabled: Boolean) {
+        context.modelDataStore.edit { preferences ->
+            preferences[AUTO_LOAD_CHAT_MODEL] = enabled
         }
     }
 

@@ -169,6 +169,7 @@ fun SettingsMainScreen(
  ) {
      val experimentalNpuEnabled by viewModel.experimentalNpuEnabled.collectAsStateWithLifecycle(initialValue = false)
      val statsForNerdsEnabled by viewModel.statsForNerdsEnabled.collectAsStateWithLifecycle(initialValue = false)
+     val autoLoadChatModel by viewModel.autoLoadChatModel.collectAsStateWithLifecycle(initialValue = false)
      var showNpuWarning by remember { mutableStateOf(false) }
 
      Scaffold(
@@ -208,19 +209,30 @@ fun SettingsMainScreen(
                  color = MaterialTheme.colorScheme.primary
              )
              
-             ListItem(
-                 headlineContent = { Text("Stats for Nerds") },
-                 supportingContent = { Text("Show generation speed and timing per message") },
-                 trailingContent = { 
-                     Switch(
-                         checked = statsForNerdsEnabled, 
-                         onCheckedChange = { viewModel.setStatsForNerdsEnabled(it) }
-                     ) 
-                 }
-             )
-             
-             ListItem(
-                 headlineContent = { Text("Enable Experimental NPU Support") },
+              ListItem(
+                  headlineContent = { Text("Stats for Nerds") },
+                  supportingContent = { Text("Show generation speed and timing per message") },
+                  trailingContent = {
+                      Switch(
+                          checked = statsForNerdsEnabled,
+                          onCheckedChange = { viewModel.setStatsForNerdsEnabled(it) }
+                      )
+                  }
+              )
+
+              ListItem(
+                  headlineContent = { Text("Auto-load chat model") },
+                  supportingContent = { Text("Load the selected Assistant model when opening chat") },
+                  trailingContent = {
+                      Switch(
+                          checked = autoLoadChatModel,
+                          onCheckedChange = { viewModel.setAutoLoadChatModel(it) }
+                      )
+                  }
+              )
+
+              ListItem(
+                  headlineContent = { Text("Enable Experimental NPU Support") },
                  supportingContent = { Text("Allows forced NPU execution for compatible models. May cause instability or OOM crashes.") },
                  trailingContent = { 
                      Switch(
@@ -1006,6 +1018,8 @@ class ModelsViewModel @Inject constructor(
 
     val statsForNerdsEnabled: Flow<Boolean> = modelRepository.statsForNerdsEnabled
 
+    val autoLoadChatModel: Flow<Boolean> = modelRepository.autoLoadChatModel
+
     fun setExperimentalNpuEnabled(enabled: Boolean) {
         viewModelScope.launch {
             modelRepository.setExperimentalNpuEnabled(enabled)
@@ -1015,6 +1029,12 @@ class ModelsViewModel @Inject constructor(
     fun setStatsForNerdsEnabled(enabled: Boolean) {
         viewModelScope.launch {
             modelRepository.setStatsForNerdsEnabled(enabled)
+        }
+    }
+
+    fun setAutoLoadChatModel(enabled: Boolean) {
+        viewModelScope.launch {
+            modelRepository.setAutoLoadChatModel(enabled)
         }
     }
 

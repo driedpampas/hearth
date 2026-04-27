@@ -4,16 +4,22 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavType
@@ -35,6 +41,17 @@ import org.eu.nl.syu.charchat.ui.screens.SettingsMainScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsModelsScreen
 import org.eu.nl.syu.charchat.ui.theme.ChatTheme
 import javax.inject.Inject
+
+private const val USE_CUSTOM_NAV_FADE = true
+private const val NAV_FADE_DURATION_MS = 220
+
+private fun navFadeSpec(): FiniteAnimationSpec<Float> = tween(durationMillis = NAV_FADE_DURATION_MS)
+
+private fun navEnterTransition(): EnterTransition? =
+    if (USE_CUSTOM_NAV_FADE) fadeIn(animationSpec = navFadeSpec()) else null
+
+private fun navExitTransition(): ExitTransition? =
+    if (USE_CUSTOM_NAV_FADE) fadeOut(animationSpec = navFadeSpec()) else null
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -81,115 +98,121 @@ class MainActivity : ComponentActivity() {
 fun CharChatApp() {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "home") {
-        composable(
-            route = "home",
-            enterTransition = { fadeIn(animationSpec = tween(220)) },
-            exitTransition = { fadeOut(animationSpec = tween(220)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-            popExitTransition = { fadeOut(animationSpec = tween(220)) }
-        ) {
-            HomeScreen(
-                onNavigateToChat = { id -> navController.navigate("chat/$id") },
-                onNavigateToSettings = { navController.navigate("settings") },
-                onNavigateToCreateCharacter = { navController.navigate("create_character") }
-            )
-        }
-        composable(
-            route = "settings",
-            enterTransition = { fadeIn(animationSpec = tween(500)) },
-            exitTransition = { fadeOut(animationSpec = tween(220)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-            popExitTransition = { fadeOut(animationSpec = tween(220)) }
-        ) {
-            SettingsMainScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToGeneral = { navController.navigate("settings/general") },
-                onNavigateToModels = { navController.navigate("settings/models") }
-            )
-        }
-        composable(
-            route = "settings/general",
-            enterTransition = { fadeIn(animationSpec = tween(220)) },
-            exitTransition = { fadeOut(animationSpec = tween(220)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-            popExitTransition = { fadeOut(animationSpec = tween(220)) }
-        ) {
-            SettingsGeneralScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable(
-            route = "settings/models",
-            enterTransition = { fadeIn(animationSpec = tween(220)) },
-            exitTransition = { fadeOut(animationSpec = tween(220)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-            popExitTransition = { fadeOut(animationSpec = tween(220)) }
-        ) {
-            SettingsModelsScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToLiteRt = { navController.navigate("settings/models/litert") },
-                onNavigateToEmbeddingModels = { navController.navigate("settings/models/embedding") },
-                onNavigateToHuggingFace = { navController.navigate("settings/models/huggingface") }
-            )
-        }
-        composable(
-            route = "settings/models/huggingface",
-            enterTransition = { fadeIn(animationSpec = tween(220)) },
-            exitTransition = { fadeOut(animationSpec = tween(220)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-            popExitTransition = { fadeOut(animationSpec = tween(220)) }
-        ) {
-            SettingsHuggingFaceAccountScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable(
-            route = "settings/models/litert",
-            enterTransition = { fadeIn(animationSpec = tween(220)) },
-            exitTransition = { fadeOut(animationSpec = tween(220)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-            popExitTransition = { fadeOut(animationSpec = tween(220)) }
-        ) {
-            SettingsLiteRtModelsScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable(
-            route = "settings/models/embedding",
-            enterTransition = { fadeIn(animationSpec = tween(220)) },
-            exitTransition = { fadeOut(animationSpec = tween(220)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-            popExitTransition = { fadeOut(animationSpec = tween(220)) }
-        ) {
-            SettingsEmbeddingModelsScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable(
-            route = "create_character",
-            enterTransition = { fadeIn(animationSpec = tween(220)) },
-            exitTransition = { fadeOut(animationSpec = tween(220)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-            popExitTransition = { fadeOut(animationSpec = tween(220)) }
-        ) {
-            CreateCharacterScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable(
-            route = "chat/{characterId}",
-            arguments = listOf(navArgument("characterId") { type = NavType.StringType }),
-            enterTransition = { fadeIn(animationSpec = tween(220)) },
-            exitTransition = { fadeOut(animationSpec = tween(220)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-            popExitTransition = { fadeOut(animationSpec = tween(220)) }
-        ) { backStackEntry ->
-            val characterId = backStackEntry.arguments?.getString("characterId") ?: ""
-            ChatScreen(
-                characterId = characterId,
-                onNavigateBack = { navController.popBackStack() }
-            )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        NavHost(navController = navController, startDestination = "home") {
+            composable(
+                route = "home",
+                enterTransition = { navEnterTransition() },
+                exitTransition = { navExitTransition() },
+                popEnterTransition = { navEnterTransition() },
+                popExitTransition = { navExitTransition() }
+            ) {
+                HomeScreen(
+                    onNavigateToChat = { id -> navController.navigate("chat/$id") },
+                    onNavigateToSettings = { navController.navigate("settings") },
+                    onNavigateToCreateCharacter = { navController.navigate("create_character") }
+                )
+            }
+            composable(
+                route = "settings",
+                enterTransition = { navEnterTransition() },
+                exitTransition = { navExitTransition() },
+                popEnterTransition = { navEnterTransition() },
+                popExitTransition = { navExitTransition() }
+            ) {
+                SettingsMainScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToGeneral = { navController.navigate("settings/general") },
+                    onNavigateToModels = { navController.navigate("settings/models") }
+                )
+            }
+            composable(
+                route = "settings/general",
+                enterTransition = { navEnterTransition() },
+                exitTransition = { navExitTransition() },
+                popEnterTransition = { navEnterTransition() },
+                popExitTransition = { navExitTransition() }
+            ) {
+                SettingsGeneralScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "settings/models",
+                enterTransition = { navEnterTransition() },
+                exitTransition = { navExitTransition() },
+                popEnterTransition = { navEnterTransition() },
+                popExitTransition = { navExitTransition() }
+            ) {
+                SettingsModelsScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToLiteRt = { navController.navigate("settings/models/litert") },
+                    onNavigateToEmbeddingModels = { navController.navigate("settings/models/embedding") },
+                    onNavigateToHuggingFace = { navController.navigate("settings/models/huggingface") }
+                )
+            }
+            composable(
+                route = "settings/models/huggingface",
+                enterTransition = { navEnterTransition() },
+                exitTransition = { navExitTransition() },
+                popEnterTransition = { navEnterTransition() },
+                popExitTransition = { navExitTransition() }
+            ) {
+                SettingsHuggingFaceAccountScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "settings/models/litert",
+                enterTransition = { navEnterTransition() },
+                exitTransition = { navExitTransition() },
+                popEnterTransition = { navEnterTransition() },
+                popExitTransition = { navExitTransition() }
+            ) {
+                SettingsLiteRtModelsScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "settings/models/embedding",
+                enterTransition = { navEnterTransition() },
+                exitTransition = { navExitTransition() },
+                popEnterTransition = { navEnterTransition() },
+                popExitTransition = { navExitTransition() }
+            ) {
+                SettingsEmbeddingModelsScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "create_character",
+                enterTransition = { navEnterTransition() },
+                exitTransition = { navExitTransition() },
+                popEnterTransition = { navEnterTransition() },
+                popExitTransition = { navExitTransition() }
+            ) {
+                CreateCharacterScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "chat/{threadId}",
+                arguments = listOf(navArgument("threadId") { type = NavType.StringType }),
+                enterTransition = { navEnterTransition() },
+                exitTransition = { navExitTransition() },
+                popEnterTransition = { navEnterTransition() },
+                popExitTransition = { navExitTransition() }
+            ) { backStackEntry ->
+                val threadId = backStackEntry.arguments?.getString("threadId") ?: ""
+                ChatScreen(
+                    threadId = threadId,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }

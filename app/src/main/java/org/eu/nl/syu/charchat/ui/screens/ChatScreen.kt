@@ -75,19 +75,20 @@ import org.eu.nl.syu.charchat.ui.screens.ModelsViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    characterId: String,
+    threadId: String,
     onNavigateBack: () -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
     modelsViewModel: ModelsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val statsForNerdsEnabled by modelsViewModel.statsForNerdsEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val autoLoadChatModel by modelsViewModel.autoLoadChatModel.collectAsStateWithLifecycle(initialValue = false)
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
 
-    LaunchedEffect(characterId) {
-        viewModel.loadCharacter(characterId)
+    LaunchedEffect(threadId) {
+        viewModel.loadConversation(threadId)
     }
 
     // Scroll to bottom when new messages arrive
@@ -126,7 +127,7 @@ fun ChatScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text(uiState.character?.name ?: characterId, style = MaterialTheme.typography.titleMedium)
+                            Text(uiState.character?.name ?: threadId, style = MaterialTheme.typography.titleMedium)
                             TokenIndicator(uiState.tokenCount, uiState.maxTokens)
                         }
                     },
@@ -139,7 +140,7 @@ fun ChatScreen(
                 )
             },
             bottomBar = {
-                if (uiState.modelError == null) {
+                if (uiState.modelError == null && !uiState.isLoadingModel) {
                     ChatInput(
                         value = inputText,
                         onValueChange = { inputText = it },
@@ -153,7 +154,20 @@ fun ChatScreen(
                 }
             }
         ) { paddingValues ->
-            if (uiState.modelError != null) {
+            if (uiState.isLoadingModel && autoLoadChatModel) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        LinearProgressIndicator()
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Loading assistant model...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else if (uiState.modelError != null) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
