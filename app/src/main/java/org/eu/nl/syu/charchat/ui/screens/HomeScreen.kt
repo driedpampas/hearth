@@ -33,11 +33,10 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Widgets
-import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.SearchBar
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.SearchBar
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingActionButtonMenu
 import androidx.compose.material3.FloatingActionButtonMenuItem
@@ -99,10 +98,12 @@ fun HomeScreen(
     var showModelSettings by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(uiState.notification) {
-        uiState.notification?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.clearNotification()
+    LaunchedEffect(uiState.notification, showModelPicker) {
+        if (!showModelPicker) {
+            uiState.notification?.let {
+                snackbarHostState.showSnackbar(it)
+                viewModel.clearNotification()
+            }
         }
     }
 
@@ -154,6 +155,23 @@ fun HomeScreen(
         }
     }
 
+    if (showModelPicker) {
+        ModelPickerScreen(
+            uiState = uiState,
+            onDismiss = {
+                showModelPicker = false
+                viewModel.clearNotification()
+            },
+            onSelectModel = { file -> viewModel.selectModel(file) },
+            onOpenSettings = { showModelSettings = true },
+            showModelSettings = showModelSettings,
+            onDismissModelSettings = { showModelSettings = false },
+            onSaveBackend = { viewModel.setPreferredBackend(it) },
+            onSaveMaxTokens = { viewModel.setDefaultMaxTokens(it) }
+        )
+        return
+    }
+
     if (showCharacterPicker) {
         CharacterPickerScreen(
             characters = assistantCharacters,
@@ -163,20 +181,6 @@ fun HomeScreen(
                 viewModel.markCharacterOpened(character.id)
                 onNavigateToChat(character.id)
             }
-        )
-        return
-    }
-
-    if (showModelPicker) {
-        ModelPickerScreen(
-            uiState = uiState,
-            onDismiss = { showModelPicker = false },
-            onSelectModel = { file -> viewModel.selectModel(file) },
-            onOpenSettings = { showModelSettings = true },
-            showModelSettings = showModelSettings,
-            onDismissModelSettings = { showModelSettings = false },
-            onSaveBackend = { viewModel.setPreferredBackend(it) },
-            onSaveMaxTokens = { viewModel.setDefaultMaxTokens(it) }
         )
         return
     }
@@ -241,11 +245,11 @@ fun HomeScreen(
                         leadingIcon = {
                             if (!searchActive) {
                                 IconButton(onClick = { showModelPicker = true }) {
-                                    Icon(
-                                        imageVector = if (uiState.selectedModel != null) Icons.Filled.Widgets else Icons.Outlined.Widgets,
-                                        contentDescription = "Model Selection",
-                                        tint = if (uiState.selectedModel != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                        Icon(
+                                            imageVector = Icons.Filled.Widgets,
+                                            contentDescription = "Model Selection",
+                                            tint = if (uiState.isModelLoaded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                 }
                             }
                         },
@@ -273,10 +277,6 @@ fun HomeScreen(
 
             if (!searchActive) {
                 Spacer(modifier = Modifier.height(4.dp))
-            }
-
-            if (uiState.isModelLoading) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp))
             }
 
             if (visibleCharacters.isEmpty()) {
@@ -328,94 +328,6 @@ fun HomeScreen(
                 }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ModelPickerScreen(
-    uiState: HomeUiState,
-    onDismiss: () -> Unit,
-    onSelectModel: (java.io.File) -> Unit,
-    onOpenSettings: () -> Unit,
-    showModelSettings: Boolean,
-    onDismissModelSettings: () -> Unit,
-    onSaveBackend: (String) -> Unit,
-    onSaveMaxTokens: (Int) -> Unit
-) {
-    Scaffold(
-        topBar = {
-            androidx.compose.material3.TopAppBar(
-                title = { Text("Select Model") },
-                navigationIcon = {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Tune, contentDescription = "Model Settings")
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            when {
-                uiState.downloadedModels.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No models downloaded")
-                    }
-                }
-                else -> {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(1),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        gridItems(uiState.downloadedModels) { file ->
-                            ElevatedCard(
-                                onClick = { onSelectModel(file) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MaterialTheme.shapes.extraLarge
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(file.name, fontWeight = if (uiState.selectedModel == file.name) FontWeight.Bold else FontWeight.Normal)
-                                        Text(
-                                            if (file.name.contains("embedding", ignoreCase = true)) "Embedding model" else "Chat model",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    if (uiState.selectedModel == file.name) {
-                                        Icon(Icons.Default.Widgets, contentDescription = null)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (uiState.isModelLoading) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter))
-            }
-        }
-    }
-
-    if (showModelSettings) {
-        ModelSettingsDialog(
-            uiState = uiState,
-            onDismiss = onDismissModelSettings,
-            onSaveBackend = onSaveBackend,
-            onSaveMaxTokens = onSaveMaxTokens
-        )
     }
 }
 

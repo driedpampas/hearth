@@ -7,7 +7,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.eu.nl.syu.charchat.data.AllowedModel
 import org.eu.nl.syu.charchat.data.ModelManager
 import org.eu.nl.syu.charchat.data.ModelRepository
@@ -25,6 +27,7 @@ data class HomeUiState(
     val downloadedModels: List<File> = emptyList(),
     val availableModels: List<AllowedModel> = emptyList(),
     val selectedModel: String? = null,
+    val isModelLoaded: Boolean = false,
     val isModelLoading: Boolean = false,
     val isLoading: Boolean = false,
     val notification: String? = null,
@@ -126,7 +129,7 @@ class HomeViewModel @Inject constructor(
                 return@launch
             }
 
-            _uiState.update { it.copy(isModelLoading = true, selectedModel = file.name) }
+            _uiState.update { it.copy(isModelLoading = true) }
 
             val backend = when (_uiState.value.preferredBackend) {
                 "GPU" -> Backend.GPU()
@@ -136,21 +139,21 @@ class HomeViewModel @Inject constructor(
             }
 
             try {
-                engineWrapper.initialize(
-                    modelPath = file.absolutePath,
-                    preferredBackend = backend,
-                    maxTokens = _uiState.value.defaultMaxTokens,
-                    onFallback = { message ->
-                        _uiState.update { it.copy(notification = message) }
-                    }
-                )
+                withContext(Dispatchers.IO) {
+                    engineWrapper.initialize(
+                        modelPath = file.absolutePath,
+                        preferredBackend = backend,
+                        maxTokens = _uiState.value.defaultMaxTokens,
+                        onFallback = { message ->
+                            _uiState.update { it.copy(notification = message) }
+                        }
+                    )
+                }
+                _uiState.update { it.copy(isModelLoading = false, selectedModel = file.name, isModelLoaded = true, notification = null) }
             } catch (e: Exception) {
                 val msg = when {
                     isInputTensorMissing(e) -> {
                         modelRepository.quarantineModel(file)
-                        if (_uiState.value.selectedModel == file.name) {
-                            _uiState.update { it.copy(selectedModel = null) }
-                        }
                         refreshModels()
                         "This model is corrupted/incompatible and has been removed. Please redownload a compatible LiteRT LM chat model."
                     }
@@ -164,13 +167,12 @@ class HomeViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isModelLoading = false,
+                        isModelLoaded = false,
                         notification = msg
                     )
                 }
                 return@launch
             }
-
-            _uiState.update { it.copy(isModelLoading = false) }
         }
     }
 

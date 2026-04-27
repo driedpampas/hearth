@@ -4,6 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -77,26 +82,50 @@ fun CharChatApp() {
     val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = "home") {
-        composable("home") {
+        composable(
+            route = "home",
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(220)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(220)) }
+        ) {
             HomeScreen(
                 onNavigateToChat = { id -> navController.navigate("chat/$id") },
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToCreateCharacter = { navController.navigate("create_character") }
             )
         }
-        composable("settings") {
+        composable(
+            route = "settings",
+            enterTransition = { fadeIn(animationSpec = tween(500)) },
+            exitTransition = { fadeOut(animationSpec = tween(220)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(220)) }
+        ) {
             SettingsMainScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToGeneral = { navController.navigate("settings/general") },
                 onNavigateToModels = { navController.navigate("settings/models") }
             )
         }
-        composable("settings/general") {
+        composable(
+            route = "settings/general",
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(220)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(220)) }
+        ) {
             SettingsGeneralScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-        composable("settings/models") {
+        composable(
+            route = "settings/models",
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(220)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(220)) }
+        ) {
             SettingsModelsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToLiteRt = { navController.navigate("settings/models/litert") },
@@ -104,29 +133,57 @@ fun CharChatApp() {
                 onNavigateToHuggingFace = { navController.navigate("settings/models/huggingface") }
             )
         }
-        composable("settings/models/huggingface") {
+        composable(
+            route = "settings/models/huggingface",
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(220)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(220)) }
+        ) {
             SettingsHuggingFaceAccountScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-        composable("settings/models/litert") {
+        composable(
+            route = "settings/models/litert",
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(220)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(220)) }
+        ) {
             SettingsLiteRtModelsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-        composable("settings/models/embedding") {
+        composable(
+            route = "settings/models/embedding",
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(220)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(220)) }
+        ) {
             SettingsEmbeddingModelsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-        composable("create_character") {
+        composable(
+            route = "create_character",
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(220)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(220)) }
+        ) {
             CreateCharacterScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
         composable(
             route = "chat/{characterId}",
-            arguments = listOf(navArgument("characterId") { type = NavType.StringType })
+            arguments = listOf(navArgument("characterId") { type = NavType.StringType }),
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(220)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(220)) }
         ) { backStackEntry ->
             val characterId = backStackEntry.arguments?.getString("characterId") ?: ""
             ChatScreen(

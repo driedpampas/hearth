@@ -39,7 +39,7 @@ object AppModule {
             "charchat_db"
         )
             .setDriver(driver)
-            .addMigrations(MIGRATION_2_3)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
@@ -210,6 +210,20 @@ object AppModule {
 private val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(connection: SQLiteConnection) {
         connection.prepare("ALTER TABLE characters ADD COLUMN lastUsedAt INTEGER NOT NULL DEFAULT 0").use { statement ->
+            statement.step()
+        }
+    }
+}
+
+private val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.prepare("ALTER TABLE chat_messages ADD COLUMN modelReference TEXT").use { statement ->
+            statement.step()
+        }
+        connection.prepare("ALTER TABLE chat_messages ADD COLUMN generationTimeMs INTEGER").use { statement ->
+            statement.step()
+        }
+        connection.prepare("ALTER TABLE chat_messages ADD COLUMN tokensPerSecond REAL").use { statement ->
             statement.step()
         }
     }

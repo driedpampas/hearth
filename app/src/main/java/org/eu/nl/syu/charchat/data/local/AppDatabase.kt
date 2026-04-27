@@ -65,7 +65,10 @@ data class ChatMessageEntity(
     val role: String,
     val content: String,
     val timestamp: Long,
-    val isHiddenFromAi: Boolean
+    val isHiddenFromAi: Boolean,
+    val modelReference: String? = null,
+    val generationTimeMs: Long? = null,
+    val tokensPerSecond: Float? = null
 )
 
 @Dao
@@ -108,7 +111,7 @@ interface ChatMessageDao {
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 3, 
+    version = 4, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -154,7 +157,10 @@ fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(
     role = MessageRole.valueOf(role),
     content = content,
     timestamp = timestamp,
-    isHiddenFromAi = isHiddenFromAi
+    isHiddenFromAi = isHiddenFromAi,
+    modelReference = modelReference,
+    generationTimeMs = generationTimeMs,
+    tokensPerSecond = tokensPerSecond
 )
 
 fun ChatMessage.toEntity(characterId: String): ChatMessageEntity = ChatMessageEntity(
@@ -163,5 +169,8 @@ fun ChatMessage.toEntity(characterId: String): ChatMessageEntity = ChatMessageEn
     role = role.name,
     content = content,
     timestamp = timestamp,
-    isHiddenFromAi = isHiddenFromAi
+    isHiddenFromAi = isHiddenFromAi,
+    modelReference = modelReference,
+    generationTimeMs = generationTimeMs,
+    tokensPerSecond = tokensPerSecond
 )

@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -69,15 +70,18 @@ import org.eu.nl.syu.charchat.data.ChatMessage
 import org.eu.nl.syu.charchat.data.MessageRole
 import org.eu.nl.syu.charchat.ui.components.MarkdownText
 import org.eu.nl.syu.charchat.ui.viewmodels.ChatViewModel
+import org.eu.nl.syu.charchat.ui.screens.ModelsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     characterId: String,
     onNavigateBack: () -> Unit,
-    viewModel: ChatViewModel = hiltViewModel()
+    viewModel: ChatViewModel = hiltViewModel(),
+    modelsViewModel: ModelsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val statsForNerdsEnabled by modelsViewModel.statsForNerdsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
@@ -101,7 +105,7 @@ fun ChatScreen(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().blur(8.dp),
-                colorFilter = ColorFilter.tint(Color.Black.copy(alpha = 0.4f))
+                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
             )
         } else {
             // Default gradient background for immersion
@@ -155,11 +159,11 @@ fun ChatScreen(
                         .fillMaxSize()
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
-                    ) {
+                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Assistant unavailable")
+                        Text("Assistant unavailable", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.headlineSmall)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(uiState.modelError ?: "Model unavailable")
+                        Text(uiState.modelError ?: "Model unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             } else {
@@ -172,16 +176,17 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(uiState.messages) { message ->
-                        ChatBubble(message)
+                        ChatBubble(message = message, statsForNerdsEnabled = statsForNerdsEnabled)
                     }
 
                     if (uiState.currentGeneratingText.isNotEmpty()) {
                         item {
                             ChatBubble(
-                                ChatMessage(
+                                message = ChatMessage(
                                     role = MessageRole.MODEL,
                                     content = uiState.currentGeneratingText
-                                )
+                                ),
+                                statsForNerdsEnabled = statsForNerdsEnabled
                             )
                         }
                     }
@@ -196,7 +201,6 @@ fun ChatScreen(
         }
     }
 }
-
 
 @Composable
 fun TokenIndicator(current: Int, max: Int) {
@@ -259,7 +263,7 @@ fun ChatInput(
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage) {
+fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean) {
     val isUser = message.role == MessageRole.USER
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -279,6 +283,18 @@ fun ChatBubble(message: ChatMessage) {
                 text = message.content,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 textColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        }
+        
+        // Stats for Nerds: show below model messages when enabled
+        if (!isUser && statsForNerdsEnabled && message.modelReference != null && message.tokensPerSecond != null && message.generationTimeMs != null) {
+            Text(
+                text = "${message.modelReference} • ${String.format("%.1f", message.tokensPerSecond)} t/s • ${message.generationTimeMs} ms",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 16.dp, top = 2.dp, bottom = 2.dp)
             )
         }
     }

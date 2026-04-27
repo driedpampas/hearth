@@ -161,65 +161,77 @@ fun SettingsMainScreen(
 
 // --- General Settings Screen ---
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettingsGeneralScreen(
-    onNavigateBack: () -> Unit,
-    viewModel: ModelsViewModel = hiltViewModel()
-) {
-    val experimentalNpuEnabled by viewModel.experimentalNpuEnabled.collectAsStateWithLifecycle(initialValue = false)
-    var showNpuWarning by remember { mutableStateOf(false) }
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ fun SettingsGeneralScreen(
+     onNavigateBack: () -> Unit,
+     viewModel: ModelsViewModel = hiltViewModel()
+ ) {
+     val experimentalNpuEnabled by viewModel.experimentalNpuEnabled.collectAsStateWithLifecycle(initialValue = false)
+     val statsForNerdsEnabled by viewModel.statsForNerdsEnabled.collectAsStateWithLifecycle(initialValue = false)
+     var showNpuWarning by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("General Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            ListItem(
-                headlineContent = { Text("Theme") },
-                supportingContent = { Text("System Default") },
-                trailingContent = { Switch(checked = true, onCheckedChange = {}) }
-            )
-            ListItem(
-                headlineContent = { Text("Haptics") },
-                supportingContent = { Text("Vibrate on message") },
-                trailingContent = { Switch(checked = true, onCheckedChange = {}) }
-            )
-            
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            
-            Text(
-                "Advanced",
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(16.dp),
-                color = MaterialTheme.colorScheme.primary
-            )
-            
-            ListItem(
-                headlineContent = { Text("Enable Experimental NPU Support") },
-                supportingContent = { Text("Allows forced NPU execution for compatible models. May cause instability or OOM crashes.") },
-                trailingContent = { 
-                    Switch(
-                        checked = experimentalNpuEnabled, 
-                        onCheckedChange = { 
-                            if (it) showNpuWarning = true 
-                            else viewModel.setExperimentalNpuEnabled(false)
-                        }
-                    ) 
-                }
-            )
+     Scaffold(
+         topBar = {
+             TopAppBar(
+                 title = { Text("General Settings") },
+                 navigationIcon = {
+                     IconButton(onClick = onNavigateBack) {
+                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                     }
+                 }
+             )
+         }
+     ) { paddingValues ->
+         Column(
+             modifier = Modifier
+                 .fillMaxSize()
+                 .padding(paddingValues)
+         ) {
+             ListItem(
+                 headlineContent = { Text("Theme") },
+                 supportingContent = { Text("System Default") },
+                 trailingContent = { Switch(checked = true, onCheckedChange = {}) }
+             )
+             ListItem(
+                 headlineContent = { Text("Haptics") },
+                 supportingContent = { Text("Vibrate on message") },
+                 trailingContent = { Switch(checked = true, onCheckedChange = {}) }
+             )
+             
+             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+             
+             Text(
+                 "Advanced",
+                 style = MaterialTheme.typography.labelLarge,
+                 modifier = Modifier.padding(16.dp),
+                 color = MaterialTheme.colorScheme.primary
+             )
+             
+             ListItem(
+                 headlineContent = { Text("Stats for Nerds") },
+                 supportingContent = { Text("Show generation speed and timing per message") },
+                 trailingContent = { 
+                     Switch(
+                         checked = statsForNerdsEnabled, 
+                         onCheckedChange = { viewModel.setStatsForNerdsEnabled(it) }
+                     ) 
+                 }
+             )
+             
+             ListItem(
+                 headlineContent = { Text("Enable Experimental NPU Support") },
+                 supportingContent = { Text("Allows forced NPU execution for compatible models. May cause instability or OOM crashes.") },
+                 trailingContent = { 
+                     Switch(
+                         checked = experimentalNpuEnabled, 
+                         onCheckedChange = { 
+                             if (it) showNpuWarning = true 
+                             else viewModel.setExperimentalNpuEnabled(false)
+                         }
+                     ) 
+                 }
+             )
 
             if (showNpuWarning) {
                 AlertDialog(
@@ -992,9 +1004,17 @@ class ModelsViewModel @Inject constructor(
 
     val experimentalNpuEnabled: Flow<Boolean> = modelRepository.experimentalNpuEnabled
 
+    val statsForNerdsEnabled: Flow<Boolean> = modelRepository.statsForNerdsEnabled
+
     fun setExperimentalNpuEnabled(enabled: Boolean) {
         viewModelScope.launch {
             modelRepository.setExperimentalNpuEnabled(enabled)
+        }
+    }
+
+    fun setStatsForNerdsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            modelRepository.setStatsForNerdsEnabled(enabled)
         }
     }
 

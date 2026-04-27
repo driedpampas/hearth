@@ -142,9 +142,15 @@ class ChatViewModel @Inject constructor(
 
     fun sendMessage(content: String) {
         val character = _uiState.value.character ?: return
-        val userMessage = ChatMessage(role = MessageRole.USER, content = content)
+        val userMessage = ChatMessage(
+            role = MessageRole.USER,
+            content = content,
+            modelReference = character.modelReference
+        )
         
         viewModelScope.launch {
+            val startTime = System.currentTimeMillis()
+            
             // Save user message
             chatMessageDao.insertMessage(userMessage.toEntity(character.id))
             _uiState.update { it.copy(
@@ -170,14 +176,25 @@ class ChatViewModel @Inject constructor(
                     _uiState.update { it.copy(currentGeneratingText = fullResponse) }
                 }
                 .onCompletion {
-                    val modelMessage = ChatMessage(role = MessageRole.MODEL, content = fullResponse)
+                    val endTime = System.currentTimeMillis()
+                    val generationTimeMs = endTime - startTime
+                    val responseTokenCount = fullResponse.length / 4
+                    val tps = if (generationTimeMs > 0) responseTokenCount / (generationTimeMs / 1000f) else null
+                    
+                    val modelMessage = ChatMessage(
+                        role = MessageRole.MODEL,
+                        content = fullResponse,
+                        modelReference = character.modelReference,
+                        generationTimeMs = generationTimeMs,
+                        tokensPerSecond = tps
+                    )
                     chatMessageDao.insertMessage(modelMessage.toEntity(character.id))
                     _uiState.update { 
                         it.copy(
                             messages = it.messages + modelMessage,
                             isGenerating = false,
                             currentGeneratingText = "",
-                            tokenCount = it.tokenCount + (fullResponse.length / 4) // Simple heuristic
+                            tokenCount = it.tokenCount + responseTokenCount
                         )
                     }
                     

@@ -55,6 +55,7 @@ class ModelRepository @Inject constructor(
     private val SELECTED_EMBEDDING_MODEL = stringPreferencesKey("selected_embedding_model")
     private val COMMUNITY_AUTHORS = stringSetPreferencesKey("community_authors")
     private val EXPERIMENTAL_NPU_ENABLED = androidx.datastore.preferences.core.booleanPreferencesKey("experimental_npu_enabled")
+    private val STATS_FOR_NERDS_ENABLED = androidx.datastore.preferences.core.booleanPreferencesKey("stats_for_nerds_enabled")
     private val MODEL_BACKEND_CACHE = stringPreferencesKey("model_backend_cache")
     private val PREFERRED_BACKEND = stringPreferencesKey("preferred_backend")
     private val DEFAULT_MAX_TOKENS = androidx.datastore.preferences.core.intPreferencesKey("default_max_tokens")
@@ -92,9 +93,19 @@ class ModelRepository @Inject constructor(
         preferences[EXPERIMENTAL_NPU_ENABLED] ?: false
     }
 
+    val statsForNerdsEnabled: Flow<Boolean> = context.modelDataStore.data.map { preferences ->
+        preferences[STATS_FOR_NERDS_ENABLED] ?: false
+    }
+
     suspend fun setExperimentalNpuEnabled(enabled: Boolean) {
         context.modelDataStore.edit { preferences ->
             preferences[EXPERIMENTAL_NPU_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setStatsForNerdsEnabled(enabled: Boolean) {
+        context.modelDataStore.edit { preferences ->
+            preferences[STATS_FOR_NERDS_ENABLED] = enabled
         }
     }
 

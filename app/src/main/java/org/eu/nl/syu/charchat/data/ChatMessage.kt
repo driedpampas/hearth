@@ -10,7 +10,10 @@ data class ChatMessage(
     val role: MessageRole,
     val content: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val isHiddenFromAi: Boolean = false
+    val isHiddenFromAi: Boolean = false,
+    val modelReference: String? = null,
+    val generationTimeMs: Long? = null,
+    val tokensPerSecond: Float? = null
 )
 
 enum class MessageRole {
