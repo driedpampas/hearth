@@ -17,6 +17,7 @@ import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.ChatMessage
 import org.eu.nl.syu.charchat.data.MessageRole
 import org.eu.nl.syu.charchat.data.ModelManager
+import org.eu.nl.syu.charchat.data.ModelRepository
 import org.eu.nl.syu.charchat.data.local.CharacterDao
 import org.eu.nl.syu.charchat.data.local.ChatMessageDao
 import org.eu.nl.syu.charchat.data.local.toDomain
@@ -42,7 +43,8 @@ class ChatViewModel @Inject constructor(
     private val chatMessageDao: ChatMessageDao,
     private val engineWrapper: LiteRtEngineWrapper,
     private val embeddingEngine: EmbeddingEngine,
-    private val modelManager: ModelManager
+    private val modelManager: ModelManager,
+    private val modelRepository: ModelRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -72,22 +74,33 @@ class ChatViewModel @Inject constructor(
                 characterDao.updateLastUsedAt(character.id, openedAt)
                 val messages = chatMessageDao.getMessagesForCharacter(characterId).map { it.toDomain() }
                 _uiState.update { it.copy(character = character.copy(lastUsedAt = openedAt), messages = messages, modelError = null) }
-                
+
                 // Initialize engine if needed
                 if (modelPath != null) {
+                    val modelFile = File(modelPath)
                     try {
                         engineWrapper.initialize(modelPath)
                     } catch (e: Exception) {
-                        val message = if (isUnsupportedChatModel(character.modelReference)) {
-                            "This model cannot be used for chat. Select a LiteRT LM chat model instead."
-                        } else {
-                            "Failed to initialize the model: ${e.message}"
+                        val msg = when {
+                            isInputTensorMissing(e) -> {
+                                // Quarantine the broken model and clear reference
+                                modelRepository.quarantineModel(modelFile)
+                                // Also clear the character's modelReference so it doesn't keep pointing to nothing
+                                // (in a real app you'd update the character record too)
+                                "This model is corrupted/incompatible and has been removed. Please select a compatible LiteRT LM chat model."
+                            }
+                            isUnsupportedChatModel(character.modelReference) -> {
+                                "This model cannot be used for chat. Select a LiteRT LM model instead."
+                            }
+                            else -> {
+                                "Failed to initialize the model: ${e.message}"
+                            }
                         }
                         _uiState.update {
                             it.copy(
                                 character = character.copy(lastUsedAt = openedAt),
                                 messages = messages,
-                                modelError = message
+                                modelError = msg
                             )
                         }
                         return@launch
@@ -101,6 +114,13 @@ class ChatViewModel @Inject constructor(
     private fun isUnsupportedChatModel(modelReference: String): Boolean {
         val lower = modelReference.lowercase()
         return lower.endsWith(".tflite") && !lower.contains("chat") && !lower.contains("lm")
+    }
+
+    private fun isInputTensorMissing(e: Exception): Boolean {
+        val msg = e.message ?: return false
+        return msg.contains("Input tensor not found", ignoreCase = true) ||
+                msg.contains("NOT_FOUND", ignoreCase = true) ||
+                msg.contains("tensor not found", ignoreCase = true)
     }
 
     private fun resolveModelPath(modelReference: String): String? {

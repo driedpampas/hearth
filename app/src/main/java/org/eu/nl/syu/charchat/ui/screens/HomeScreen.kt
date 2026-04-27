@@ -16,9 +16,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
@@ -87,7 +90,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val scrollState = rememberLazyGridState()
+    val scrollState = rememberLazyListState()
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -103,7 +106,7 @@ fun HomeScreen(
         }
     }
 
-    val filteredCharacters = remember(searchQuery, uiState.characters) {
+    val visibleCharacters = remember(searchQuery, uiState.characters) {
         if (searchQuery.isEmpty()) uiState.characters
         else uiState.characters.filter { 
             it.name.contains(searchQuery, ignoreCase = true) || 
@@ -111,10 +114,35 @@ fun HomeScreen(
         }
     }
 
+    val recentCharacters = remember(visibleCharacters) {
+        visibleCharacters
+            .filter { it.lastUsedAt > 0L }
+            .sortedByDescending { it.lastUsedAt }
+            .take(4)
+    }
+
+    val recentIds = remember(recentCharacters) {
+        recentCharacters.map { it.id }.toSet()
+    }
+
+    val chronologicalCharacters = remember(visibleCharacters, recentIds) {
+        visibleCharacters
+            .filterNot { it.id in recentIds }
+            .sortedWith(
+                compareBy<Character> { if (it.lastUsedAt <= 0L) Long.MAX_VALUE else it.lastUsedAt }
+                    .thenBy { it.name.lowercase() }
+            )
+    }
+
     val assistantCharacters = remember(uiState.characters) {
         uiState.characters
             .filter { it.id == DefaultCharacters.ASSISTANT_CHARACTER_ID }
             .sortedWith(compareByDescending<Character> { it.lastUsedAt }.thenBy { it.name.lowercase() })
+    }
+
+    val openCharacter: (Character) -> Unit = { character ->
+        viewModel.markCharacterOpened(character.id)
+        onNavigateToChat(character.id)
     }
 
     BackHandler(fabMenuExpanded || showModelPicker || showCharacterPicker || showModelSettings) {
@@ -251,27 +279,52 @@ fun HomeScreen(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp))
             }
 
-            if (uiState.characters.isEmpty() && searchQuery.isEmpty()) {
+            if (visibleCharacters.isEmpty()) {
                 Text(
-                    text = "Start a new adventure",
+                    text = if (searchQuery.isEmpty()) "Start a new adventure" else "No characters match your search",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+            LazyColumn(
                 state = scrollState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(filteredCharacters) { character ->
-                    CharacterCard(
-                        character = character,
-                        onClick = { onNavigateToChat(character.id) }
-                    )
+                if (recentCharacters.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Recently used",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+
+                    items(recentCharacters, key = { it.id }) { character ->
+                        CharacterCard(
+                            character = character,
+                            onClick = { openCharacter(character) }
+                        )
+                    }
+                }
+
+                if (chronologicalCharacters.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = if (recentCharacters.isEmpty()) "Chats" else "All chats",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(top = if (recentCharacters.isNotEmpty()) 4.dp else 0.dp, bottom = 4.dp)
+                        )
+                    }
+
+                    items(chronologicalCharacters, key = { it.id }) { character ->
+                        CharacterCard(
+                            character = character,
+                            onClick = { openCharacter(character) }
+                        )
+                    }
                 }
             }
         }
@@ -321,7 +374,7 @@ private fun ModelPickerScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(uiState.downloadedModels) { file ->
+                        gridItems(uiState.downloadedModels) { file ->
                             ElevatedCard(
                                 onClick = { onSelectModel(file) },
                                 modifier = Modifier.fillMaxWidth(),
@@ -399,7 +452,7 @@ private fun CharacterPickerScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize().padding(paddingValues)
             ) {
-                items(characters) { character ->
+                gridItems(characters) { character ->
                     CharacterCard(
                         character = character,
                         onClick = { onCharacterSelected(character) }

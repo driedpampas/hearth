@@ -16,6 +16,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.io.File
+import java.io.IOException
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -55,6 +58,7 @@ class ModelRepository @Inject constructor(
     private val MODEL_BACKEND_CACHE = stringPreferencesKey("model_backend_cache")
     private val PREFERRED_BACKEND = stringPreferencesKey("preferred_backend")
     private val DEFAULT_MAX_TOKENS = androidx.datastore.preferences.core.intPreferencesKey("default_max_tokens")
+    private val BLACKLISTED_MODEL_HASHES = stringSetPreferencesKey("blacklisted_model_hashes")
 
     val selectedEmbeddingModel: Flow<String?> = context.modelDataStore.data.map { preferences ->
         preferences[SELECTED_EMBEDDING_MODEL]
@@ -137,6 +141,45 @@ class ModelRepository @Inject constructor(
     suspend fun setDefaultMaxTokens(maxTokens: Int) {
         context.modelDataStore.edit { preferences ->
             preferences[DEFAULT_MAX_TOKENS] = maxTokens
+        }
+    }
+
+    suspend fun isModelBlacklisted(hash: String): Boolean {
+        val set: Set<String> = context.modelDataStore.data.first()[BLACKLISTED_MODEL_HASHES] ?: emptySet()
+        return set.contains(hash)
+    }
+
+    suspend fun blacklistModel(hash: String) {
+        context.modelDataStore.edit { preferences ->
+            val current = preferences[BLACKLISTED_MODEL_HASHES] ?: emptySet<String>()
+            preferences[BLACKLISTED_MODEL_HASHES] = current.toMutableSet().apply { add(hash) }
+        }
+    }
+
+    suspend fun quarantineModel(file: File) {
+        val hash = hashOf(file)
+        if (hash.isNotEmpty()) {
+            blacklistModel(hash)
+        }
+        if (file.exists()) {
+            file.delete()
+        }
+    }
+
+    fun hashOf(file: File): String {
+        if (!file.exists()) return ""
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(8192)
+            file.inputStream().use { fis ->
+                var bytesRead: Int
+                while (fis.read(buffer).also { bytesRead = it } != -1) {
+                    digest.update(buffer, 0, bytesRead)
+                }
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        } catch (e: IOException) {
+            ""
         }
     }
 

@@ -19,7 +19,6 @@ import com.google.ai.edge.litertlm.Backend
 import kotlinx.coroutines.flow.first
 import java.io.File
 import javax.inject.Inject
-import javax.inject.Singleton
 
 data class HomeUiState(
     val characters: List<Character> = emptyList(),
@@ -93,13 +92,21 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val availableModels = modelRepository.getAvailableModels()
             val models = modelManager.getLocalModels()
-                .filter { it.name.endsWith(".litertlm") }
+                .filter { it.name.endsWith(".litertlm") && !isBlacklisted(it) }
                 .sortedWith(
                     compareBy<File> { isEmbeddingModel(it, availableModels) }
                         .thenBy { it.name.lowercase() }
                 )
             _uiState.update { it.copy(downloadedModels = models, availableModels = availableModels) }
         }
+    }
+
+    private suspend fun isBlacklisted(file: File): Boolean {
+        val hash = modelRepository.hashOf(file)
+        if (hash.isNotEmpty()) {
+            return modelRepository.isModelBlacklisted(hash)
+        }
+        return false
     }
 
     private fun isEmbeddingModel(file: File, availableModels: List<AllowedModel>): Boolean {
@@ -120,11 +127,11 @@ class HomeViewModel @Inject constructor(
             }
 
             _uiState.update { it.copy(isModelLoading = true, selectedModel = file.name) }
-            
+
             val backend = when (_uiState.value.preferredBackend) {
                 "GPU" -> Backend.GPU()
                 "CPU" -> Backend.CPU()
-                "NPU" -> Backend.NPU(modelManager.getModelsDir().absolutePath) // nativeLibraryDir is better but this works for demo
+                "NPU" -> Backend.NPU(modelManager.getModelsDir().absolutePath)
                 else -> null
             }
 
@@ -138,10 +145,26 @@ class HomeViewModel @Inject constructor(
                     }
                 )
             } catch (e: Exception) {
+                val msg = when {
+                    isInputTensorMissing(e) -> {
+                        modelRepository.quarantineModel(file)
+                        if (_uiState.value.selectedModel == file.name) {
+                            _uiState.update { it.copy(selectedModel = null) }
+                        }
+                        refreshModels()
+                        "This model is corrupted/incompatible and has been removed. Please redownload a compatible LiteRT LM chat model."
+                    }
+                    isUnsupportedChatModel(file.name) -> {
+                        "This model cannot be used for chat. Select a LiteRT LM model instead."
+                    }
+                    else -> {
+                        "Failed to initialize model: ${e.message}"
+                    }
+                }
                 _uiState.update {
                     it.copy(
                         isModelLoading = false,
-                        notification = "This model cannot be used for chat. Select a LiteRT LM model instead."
+                        notification = msg
                     )
                 }
                 return@launch
@@ -151,9 +174,32 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun isInputTensorMissing(e: Exception): Boolean {
+        val msg = e.message ?: return false
+        return msg.contains("Input tensor not found", ignoreCase = true) ||
+                msg.contains("NOT_FOUND", ignoreCase = true) ||
+                msg.contains("tensor not found", ignoreCase = true)
+    }
+
+    private fun isUnsupportedChatModel(fileName: String): Boolean {
+        val lower = fileName.lowercase()
+        return lower.endsWith(".tflite") && !lower.contains("chat") && !lower.contains("lm")
+    }
+
     fun markCharacterOpened(characterId: String) {
         viewModelScope.launch {
-            characterDao.updateLastUsedAt(characterId, System.currentTimeMillis())
+            val openedAt = System.currentTimeMillis()
+            characterDao.updateLastUsedAt(characterId, openedAt)
+            _uiState.update { state ->
+                state.copy(
+                    characters = state.characters.map { character ->
+                        if (character.id == characterId) character.copy(lastUsedAt = openedAt) else character
+                    }.sortedWith(
+                        compareByDescending<Character> { it.lastUsedAt }
+                            .thenBy { it.name.lowercase() }
+                    )
+                )
+            }
             loadCharacters()
         }
     }
