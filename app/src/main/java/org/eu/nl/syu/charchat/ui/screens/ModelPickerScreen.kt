@@ -19,7 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -58,11 +57,6 @@ fun ModelPickerScreen(
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Widgets, contentDescription = "Load Options")
                     }
                 }
             )
@@ -179,7 +173,9 @@ fun ModelPickerScreen(
                                         }
                                     }
                                     if (uiState.selectedModel == file.name && uiState.isModelLoaded) {
-                                        Icon(Icons.Default.Widgets, contentDescription = null)
+                                        IconButton(onClick = onOpenSettings) {
+                                            Icon(Icons.Default.Storage, contentDescription = "Model Options")
+                                        }
                                     }
                                 }
                             }

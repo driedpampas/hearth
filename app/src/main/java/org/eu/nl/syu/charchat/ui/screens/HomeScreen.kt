@@ -27,9 +27,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.outlined.Widgets
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -84,6 +84,7 @@ fun HomeScreen(
     onNavigateToChat: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToCreateCharacter: () -> Unit,
+    onNavigateToModelSettings: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -148,9 +149,9 @@ fun HomeScreen(
                 viewModel.clearNotification()
             },
             onSelectModel = { file -> viewModel.selectModel(file) },
-            onOpenSettings = { },
-            showModelSettings = false,
-            onDismissModelSettings = { },
+            onOpenSettings = { showModelSettings = true },
+            showModelSettings = showModelSettings,
+            onDismissModelSettings = { showModelSettings = false },
             onSaveBackend = { viewModel.setPreferredBackend(it) },
             onSaveMaxTokens = { viewModel.setDefaultMaxTokens(it) }
         )
@@ -277,8 +278,8 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (filteredThreads.isNotEmpty()) {
+                ) {
+                    if (filteredThreads.isNotEmpty()) {
                     item {
                         Text(
                             text = "Chats",

@@ -55,10 +55,25 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
+        observeEngineState()
         loadCharacters()
         loadThreads()
         loadCachedModels()
         observeSettings()
+    }
+
+    private fun observeEngineState() {
+        viewModelScope.launch {
+            engineWrapper.loadedModelPath.collect { loadedModelPath ->
+                _uiState.update { state ->
+                    state.copy(
+                        selectedModel = loadedModelPath?.let { File(it).name },
+                        isModelLoaded = loadedModelPath != null,
+                        isModelLoading = false
+                    )
+                }
+            }
+        }
     }
 
     private fun observeSettings() {
@@ -116,8 +131,6 @@ class HomeViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     characters = characters,
-                    selectedModel = selectedChatModel,
-                    isModelLoaded = selectedChatModel != null,
                     isLoading = false
                 )
             }
@@ -247,6 +260,7 @@ class HomeViewModel @Inject constructor(
                 it.copy(
                     isModelLoading = false,
                     isModelLoaded = false,
+                    selectedModel = null,
                     notification = msg
                 )
             }
@@ -286,5 +300,18 @@ class HomeViewModel @Inject constructor(
 
     fun clearNotification() {
         _uiState.update { it.copy(notification = null) }
+    }
+
+    fun unloadModel() {
+        viewModelScope.launch {
+            engineWrapper.close()
+            _uiState.update {
+                it.copy(
+                    selectedModel = null,
+                    isModelLoaded = false,
+                    isModelLoading = false
+                )
+            }
+        }
     }
 }

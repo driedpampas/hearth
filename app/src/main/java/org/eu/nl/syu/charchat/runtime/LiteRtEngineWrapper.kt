@@ -14,6 +14,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.ModelRepository
 import java.io.File
@@ -29,6 +32,9 @@ class LiteRtEngineWrapper @Inject constructor(
 ) {
     private var engine: Engine? = null
     private var conversation: Conversation? = null
+    private val _loadedModelPath = MutableStateFlow<String?>(null)
+
+    val loadedModelPath: StateFlow<String?> = _loadedModelPath.asStateFlow()
 
     fun isInitialized(): Boolean = engine != null
 
@@ -98,6 +104,7 @@ class LiteRtEngineWrapper @Inject constructor(
             nextEngine.initialize()
             engine?.close()
             engine = nextEngine
+            _loadedModelPath.value = modelPath
         } catch (e: Exception) {
             nextEngine.close()
             throw e
@@ -158,5 +165,6 @@ class LiteRtEngineWrapper @Inject constructor(
         engine?.close()
         conversation = null
         engine = null
+        _loadedModelPath.value = null
     }
 }
