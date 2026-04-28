@@ -104,50 +104,26 @@ fun CharChatApp() {
             .background(MaterialTheme.colorScheme.background)
     ) {
         NavHost(navController = navController, startDestination = "home") {
-            composable(
-                route = "home",
-                enterTransition = { navEnterTransition() },
-                exitTransition = { navExitTransition() },
-                popEnterTransition = { navEnterTransition() },
-                popExitTransition = { navExitTransition() }
-            ) {
+            composable(route = "home") {
                 HomeScreen(
                     onNavigateToChat = { id -> navController.navigate("chat/$id") },
                     onNavigateToSettings = { navController.navigate("settings") },
                     onNavigateToCreateCharacter = { navController.navigate("create_character") }
                 )
             }
-            composable(
-                route = "settings",
-                enterTransition = { navEnterTransition() },
-                exitTransition = { navExitTransition() },
-                popEnterTransition = { navEnterTransition() },
-                popExitTransition = { navExitTransition() }
-            ) {
+            composable(route = "settings") {
                 SettingsMainScreen(
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToGeneral = { navController.navigate("settings/general") },
                     onNavigateToModels = { navController.navigate("settings/models") }
                 )
             }
-            composable(
-                route = "settings/general",
-                enterTransition = { navEnterTransition() },
-                exitTransition = { navExitTransition() },
-                popEnterTransition = { navEnterTransition() },
-                popExitTransition = { navExitTransition() }
-            ) {
+            composable(route = "settings/general") {
                 SettingsGeneralScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
-            composable(
-                route = "settings/models",
-                enterTransition = { navEnterTransition() },
-                exitTransition = { navExitTransition() },
-                popEnterTransition = { navEnterTransition() },
-                popExitTransition = { navExitTransition() }
-            ) {
+            composable(route = "settings/models") {
                 SettingsModelsScreen(
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToLiteRt = { navController.navigate("settings/models/litert") },
@@ -155,58 +131,27 @@ fun CharChatApp() {
                     onNavigateToHuggingFace = { navController.navigate("settings/models/huggingface") }
                 )
             }
-            composable(
-                route = "settings/models/huggingface",
-                enterTransition = { navEnterTransition() },
-                exitTransition = { navExitTransition() },
-                popEnterTransition = { navEnterTransition() },
-                popExitTransition = { navExitTransition() }
-            ) {
+            composable(route = "settings/models/huggingface") {
                 SettingsHuggingFaceAccountScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
-            composable(
-                route = "settings/models/litert",
-                enterTransition = { navEnterTransition() },
-                exitTransition = { navExitTransition() },
-                popEnterTransition = { navEnterTransition() },
-                popExitTransition = { navExitTransition() }
-            ) {
+            composable(route = "settings/models/litert") {
                 SettingsLiteRtModelsScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
-            composable(
-                route = "settings/models/embedding",
-                enterTransition = { navEnterTransition() },
-                exitTransition = { navExitTransition() },
-                popEnterTransition = { navEnterTransition() },
-                popExitTransition = { navExitTransition() }
-            ) {
+            composable(route = "settings/models/embedding") {
                 SettingsEmbeddingModelsScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
-            composable(
-                route = "create_character",
-                enterTransition = { navEnterTransition() },
-                exitTransition = { navExitTransition() },
-                popEnterTransition = { navEnterTransition() },
-                popExitTransition = { navExitTransition() }
-            ) {
+            composable(route = "create_character") {
                 CreateCharacterScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
-            composable(
-                route = "chat/{threadId}",
-                arguments = listOf(navArgument("threadId") { type = NavType.StringType }),
-                enterTransition = { navEnterTransition() },
-                exitTransition = { navExitTransition() },
-                popEnterTransition = { navEnterTransition() },
-                popExitTransition = { navExitTransition() }
-            ) { backStackEntry ->
+            composable(route = "chat/{threadId}") { backStackEntry ->
                 val threadId = backStackEntry.arguments?.getString("threadId") ?: ""
                 ChatScreen(
                     threadId = threadId,

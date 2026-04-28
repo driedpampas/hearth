@@ -41,7 +41,8 @@ data class AllowedModel(
     val author: String? = null,
     val url: String? = null,
     val socToModelFiles: Map<String, SocModelFile>? = null,
-    val taskTypes: List<String> = emptyList()
+    val taskTypes: List<String> = emptyList(),
+    val gated: Boolean = false
 )
 
 @Singleton
@@ -54,6 +55,8 @@ class ModelRepository @Inject constructor(
     private val socFilenameRegex = Regex("""(?:^|[._-])(sm\d{4}|mt\d{4})(?:[._-]|$)""", RegexOption.IGNORE_CASE)
     private val SELECTED_EMBEDDING_MODEL = stringPreferencesKey("selected_embedding_model")
     private val COMMUNITY_AUTHORS = stringSetPreferencesKey("community_authors")
+    private val CACHED_COMMUNITY_MODELS = stringPreferencesKey("cached_community_models")
+    private val CACHED_DOWNLOADED_MODELS = stringPreferencesKey("cached_downloaded_models")
     private val EXPERIMENTAL_NPU_ENABLED = androidx.datastore.preferences.core.booleanPreferencesKey("experimental_npu_enabled")
     private val STATS_FOR_NERDS_ENABLED = androidx.datastore.preferences.core.booleanPreferencesKey("stats_for_nerds_enabled")
     private val MODEL_BACKEND_CACHE = stringPreferencesKey("model_backend_cache")
@@ -88,6 +91,136 @@ class ModelRepository @Inject constructor(
         context.modelDataStore.edit { preferences ->
             preferences[SELECTED_EMBEDDING_MODEL] = name
         }
+    }
+
+    private suspend fun readModels(key: Preferences.Key<String>): List<AllowedModel> {
+        val json = context.modelDataStore.data.first()[key] ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<AllowedModel>>() {}.type
+            gson.fromJson<List<AllowedModel>>(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            Log.e("ModelRepository", "Failed to parse cached models for $key", e)
+            emptyList()
+        }
+    }
+
+    private suspend fun writeModels(key: Preferences.Key<String>, models: List<AllowedModel>) {
+        context.modelDataStore.edit { preferences ->
+            preferences[key] = gson.toJson(models)
+        }
+    }
+
+    fun serializeModel(model: AllowedModel): String = gson.toJson(model)
+
+    fun deserializeModel(json: String): AllowedModel? = try {
+        gson.fromJson(json, AllowedModel::class.java)
+    } catch (e: Exception) {
+        Log.e("ModelRepository", "Failed to deserialize model metadata", e)
+        null
+    }
+
+    private fun mergeModels(models: List<AllowedModel>): List<AllowedModel> {
+        return (models + getEmbeddingGemmaModel())
+            .distinctBy { it.modelId }
+            .sortedWith(
+                compareBy<AllowedModel> { it.taskTypes.contains("embedding") }
+                    .thenBy { it.name.lowercase() }
+            )
+    }
+
+    suspend fun cacheCommunityModels(models: List<AllowedModel>) {
+        writeModels(CACHED_COMMUNITY_MODELS, models)
+    }
+
+    suspend fun cacheDownloadedModel(model: AllowedModel) {
+        val current = readModels(CACHED_DOWNLOADED_MODELS).toMutableList()
+        current.removeAll { it.modelId == model.modelId }
+        current.add(model)
+        writeModels(CACHED_DOWNLOADED_MODELS, current)
+    }
+
+    suspend fun getAvailableModels(): List<AllowedModel> {
+        Log.d("ModelRepository", "Loading cached model metadata")
+        val cachedCommunityModels = readModels(CACHED_COMMUNITY_MODELS)
+        val downloadedModels = readModels(CACHED_DOWNLOADED_MODELS)
+        val merged = mergeModels(downloadedModels + cachedCommunityModels)
+        Log.d("ModelRepository", "Loaded ${merged.size} cached models")
+        return merged
+    }
+
+    suspend fun refreshAvailableModelsFromRemote(): List<AllowedModel> {
+        Log.d("ModelRepository", "Refreshing available models from Hugging Face")
+        val models = mutableListOf<AllowedModel>()
+
+        try {
+            val token = authRepository.getAccessToken()
+            if (token == null) {
+                Log.w("ModelRepository", "No Hugging Face token available; using cached models only")
+                return getAvailableModels()
+            }
+
+            val authors = (context.modelDataStore.data.map { preferences ->
+                preferences[COMMUNITY_AUTHORS] ?: setOf("litert-community")
+            }.first()).ifEmpty { setOf("litert-community") }
+            Log.d("ModelRepository", "Community authors: $authors")
+
+            authors.forEach { author ->
+                Log.d("ModelRepository", "Fetching models from author: $author")
+                val hfModels = hfApiService.fetchCommunityModels(author)
+                Log.d("ModelRepository", "Fetched ${hfModels.size} Hugging Face models for author $author")
+                hfModels.forEach { hfModel ->
+                    if (hfModel.libraryName == "litert-lm") {
+                        val siblings = hfModel.siblings.orEmpty()
+                        val socToModelFiles = siblings.mapNotNull { sibling ->
+                            extractSocTag(sibling.rfilename)?.let { soc ->
+                                soc to SocModelFile(
+                                    modelFile = sibling.rfilename,
+                                    url = null,
+                                    commitHash = "main",
+                                    sizeInBytes = null
+                                )
+                            }
+                        }.toMap()
+
+                        val modelFile = siblings
+                            .firstOrNull { it.rfilename.endsWith(".litertlm") && extractSocTag(it.rfilename) == null }
+                            ?.rfilename
+                            ?: siblings.firstOrNull { it.rfilename.endsWith(".tflite") && extractSocTag(it.rfilename) == null }?.rfilename
+                            ?: siblings.firstOrNull { it.rfilename.endsWith(".litertlm") }?.rfilename
+                            ?: siblings.firstOrNull { it.rfilename.endsWith(".tflite") }?.rfilename
+
+                        if (modelFile != null) {
+                            models.add(
+                                AllowedModel(
+                                    name = hfModel.id.substringAfter("/"),
+                                    modelId = hfModel.id,
+                                    author = author,
+                                    modelFile = modelFile,
+                                    commitHash = "main",
+                                    description = "Community model from $author.",
+                                    sizeInBytes = 0,
+                                    socToModelFiles = socToModelFiles.ifEmpty { null },
+                                    taskTypes = if (hfModel.pipelineTag != null) listOf(hfModel.pipelineTag) else emptyList(),
+                                    gated = hfModel.gated
+                                )
+                            )
+                        } else {
+                            Log.w("ModelRepository", "Skipping ${hfModel.id} because no downloadable file was found")
+                        }
+                    } else {
+                        Log.d("ModelRepository", "Skipping ${hfModel.id} because library_name=${hfModel.libraryName}")
+                    }
+                }
+            }
+
+            cacheCommunityModels(models)
+        } catch (e: Exception) {
+            Log.e("ModelRepository", "Error fetching dynamic models", e)
+        }
+
+        val finalModels = mergeModels(readModels(CACHED_DOWNLOADED_MODELS) + models)
+        Log.d("ModelRepository", "Available models refreshed: ${finalModels.size}")
+        return finalModels
     }
 
     val experimentalNpuEnabled: Flow<Boolean> = context.modelDataStore.data.map { preferences ->
@@ -208,72 +341,6 @@ class ModelRepository @Inject constructor(
     fun getSoc(): String {
         return Build.SOC_MODEL
             .lowercase()
-    }
-
-    suspend fun getAvailableModels(): List<AllowedModel> {
-        val models = mutableListOf<AllowedModel>()
-
-        // Fetch from Hugging Face if token is available
-        try {
-            val token = authRepository.getAccessToken()
-            if (token != null) {
-                val authorsFlow = context.modelDataStore.data.map { preferences ->
-                    preferences[COMMUNITY_AUTHORS] ?: setOf("litert-community")
-                }
-                val authors = authorsFlow.first().ifEmpty { setOf("litert-community") }
-                
-                authors.forEach { author ->
-                    Log.d("ModelRepository", "Fetching models from author: $author")
-                    val hfModels = hfApiService.fetchCommunityModels(author)
-                    hfModels.forEach { hfModel ->
-                        // Only include models with library_name "litert-lm" (primary filter)
-                        if (hfModel.libraryName == "litert-lm") {
-                            val siblings = hfModel.siblings.orEmpty()
-                            val socToModelFiles = siblings.mapNotNull { sibling ->
-                                extractSocTag(sibling.rfilename)?.let { soc ->
-                                    soc to SocModelFile(
-                                        modelFile = sibling.rfilename,
-                                        url = null,
-                                        commitHash = "main",
-                                        sizeInBytes = null
-                                    )
-                                }
-                            }.toMap()
-
-                            // Prefer a generic file as the default, then fall back to any available file.
-                            val modelFile = siblings
-                                .firstOrNull { it.rfilename.endsWith(".litertlm") && extractSocTag(it.rfilename) == null }
-                                ?.rfilename
-                                ?: siblings.firstOrNull { it.rfilename.endsWith(".tflite") && extractSocTag(it.rfilename) == null }?.rfilename
-                                ?: siblings.firstOrNull { it.rfilename.endsWith(".litertlm") }?.rfilename
-                                ?: siblings.firstOrNull { it.rfilename.endsWith(".tflite") }?.rfilename
-
-                            if (modelFile != null) {
-                                models.add(AllowedModel(
-                                    name = hfModel.id.substringAfter("/"),
-                                    modelId = hfModel.id,
-                                    author = author,
-                                    modelFile = modelFile,
-                                    commitHash = "main",
-                                    description = "Community model from $author.",
-                                    sizeInBytes = 0,
-                                    socToModelFiles = socToModelFiles.ifEmpty { null },
-                                    taskTypes = if (hfModel.pipelineTag != null) listOf(hfModel.pipelineTag) else emptyList()
-                                ))
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("ModelRepository", "Error fetching dynamic models", e)
-        }
-
-        // Keep normal chat models ahead of embedding models.
-        return models.sortedWith(
-            compareBy<AllowedModel> { it.taskTypes.contains("embedding") }
-                .thenBy { it.name.lowercase() }
-        ) + getEmbeddingGemmaModel()
     }
 
     private fun getEmbeddingGemmaModel(): AllowedModel {

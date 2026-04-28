@@ -26,7 +26,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -36,6 +38,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -74,6 +78,10 @@ data class CreateCharacterState(
     val lore: String = "",
     val reminderMessage: String = "",
     val modelPath: String = "",
+    val temp: Float = 0.8f,
+    val topP: Float = 0.95f,
+    val topK: Int = 40,
+    val enableThinking: Boolean = false,
     val availableModels: List<File> = emptyList(),
     val initialMessages: List<String> = listOf("Greetings! I am ready for our story."),
     val isAdvancedExpanded: Boolean = false,
@@ -102,6 +110,10 @@ class CreateCharacterViewModel @Inject constructor(
     fun updateModel(model: String) = _uiState.update { it.copy(modelPath = model) }
     fun toggleAdvanced() = _uiState.update { it.copy(isAdvancedExpanded = !it.isAdvancedExpanded) }
     fun updateUrl(url: String) = _uiState.update { it.copy(urlToScrape = url) }
+    fun updateTemp(temp: Float) = _uiState.update { it.copy(temp = temp) }
+    fun updateTopP(topP: Float) = _uiState.update { it.copy(topP = topP) }
+    fun updateTopK(topK: Int) = _uiState.update { it.copy(topK = topK) }
+    fun updateEnableThinking(enableThinking: Boolean) = _uiState.update { it.copy(enableThinking = enableThinking) }
 
     fun refreshModels() {
         val models = modelManager.getLocalModels()
@@ -174,9 +186,10 @@ class CreateCharacterViewModel @Inject constructor(
                 systemPromptLore = state.lore,
                 reminderMessage = state.reminderMessage,
                 modelReference = state.modelPath,
-                temp = 0.7f,
-                topP = 0.9f,
-                topK = 40,
+                temp = state.temp,
+                topP = state.topP,
+                topK = state.topK,
+                enableThinking = state.enableThinking,
                 sceneBackgroundUrl = null,
                 isPredefined = false
             )
@@ -195,6 +208,7 @@ fun CreateCharacterScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showModelPicker by rememberSaveable { mutableStateOf(false) }
+    var showModelSettings by rememberSaveable { mutableStateOf(false) }
 
     if (showModelPicker) {
         CreateCharacterModelPickerScreen(
@@ -209,6 +223,29 @@ fun CreateCharacterScreen(
         return
     }
 
+    if (showModelSettings) {
+        AlertDialog(
+            onDismissRequest = { showModelSettings = false },
+            title = { Text("Model Settings") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Sampling")
+                    Text("Temperature: ${uiState.temp}")
+                    Slider(value = uiState.temp, onValueChange = viewModel::updateTemp, valueRange = 0.0f..2.0f)
+                    Text("Top P: ${uiState.topP}")
+                    Slider(value = uiState.topP, onValueChange = viewModel::updateTopP, valueRange = 0.0f..1.0f)
+                    Text("Top K: ${uiState.topK}")
+                    Slider(value = uiState.topK.toFloat(), onValueChange = { viewModel.updateTopK(it.toInt()) }, valueRange = 1f..100f, steps = 98)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = uiState.enableThinking, onClick = { viewModel.updateEnableThinking(!uiState.enableThinking) })
+                        Text("Enable thinking")
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showModelSettings = false }) { Text("Done") } }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -219,6 +256,9 @@ fun CreateCharacterScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showModelSettings = true }) {
+                        Icon(Icons.Filled.Tune, contentDescription = "Model settings")
+                    }
                     IconButton(onClick = { viewModel.saveCharacter(onNavigateBack) }) {
                         Icon(Icons.Filled.Save, contentDescription = "Save")
                     }

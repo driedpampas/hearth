@@ -16,6 +16,7 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eu.nl.syu.charchat.data.AuthRepository
+import org.eu.nl.syu.charchat.data.ModelRepository
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -30,7 +31,8 @@ private var channelCreated = false
 class DownloadWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val modelRepository: ModelRepository
 ) : CoroutineWorker(context, params) {
 
     init {
@@ -49,6 +51,7 @@ class DownloadWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val urlStr = inputData.getString("url") ?: return Result.failure()
         val fileName = inputData.getString("fileName") ?: return Result.failure()
+        val modelMetadataJson = inputData.getString("modelMetadataJson")
 
         return withContext(Dispatchers.IO) {
             try {
@@ -165,6 +168,15 @@ class DownloadWorker @AssistedInject constructor(
                 
                 if (tmpFile.renameTo(outputFile)) {
                     Log.i(TAG, "Successfully downloaded and saved: $fileName")
+                    modelMetadataJson?.let { json ->
+                        val model = modelRepository.deserializeModel(json)
+                        if (model != null) {
+                            modelRepository.cacheDownloadedModel(model)
+                            Log.d(TAG, "Cached metadata for $fileName")
+                        } else {
+                            Log.w(TAG, "Downloaded model metadata could not be cached for $fileName")
+                        }
+                    }
                     return@withContext Result.success(
                         Data.Builder()
                             .putInt("progress", 100)

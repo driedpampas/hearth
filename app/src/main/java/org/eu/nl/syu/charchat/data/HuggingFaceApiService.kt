@@ -19,6 +19,15 @@ class HuggingFaceApiService @Inject constructor(
     private val gson = Gson()
     private val TAG = "HuggingFaceApiService"
 
+    private fun readResponseBody(connection: HttpURLConnection): String? {
+        return try {
+            val stream = connection.errorStream ?: connection.inputStream
+            stream?.bufferedReader()?.use { it.readText() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun <T> authorizedRequest(block: suspend (token: String) -> Pair<T?, Int>): T? {
         val authRepository = authRepositoryProvider.get()
         var token = authRepository.getAccessToken() ?: return null
@@ -56,6 +65,7 @@ class HuggingFaceApiService @Inject constructor(
                 val userInfo = gson.fromJson(reader, UserInfo::class.java)
                 return@withContext userInfo to responseCode
             }
+            Log.w(TAG, "whoami failed with HTTP $responseCode${readResponseBody(connection)?.let { ": $it" } ?: ""}")
             return@withContext null to responseCode
         } catch (e: Exception) {
             Log.e(TAG, "userinfo error during request", e)
@@ -88,6 +98,9 @@ class HuggingFaceApiService @Inject constructor(
                     403 -> AccessResult.Forbidden
                     else -> AccessResult.Error("HTTP $responseCode")
                 }
+                if (responseCode != 200) {
+                    Log.w(TAG, "Model access check for $fullId failed with HTTP $responseCode${readResponseBody(connection)?.let { ": $it" } ?: ""}")
+                }
                 return@withContext result to responseCode
             } catch (e: Exception) {
                 Log.e(TAG, "Error while checking model access for $fullId", e)
@@ -114,6 +127,7 @@ class HuggingFaceApiService @Inject constructor(
                     val models: Array<HFModel> = gson.fromJson(reader, Array<HFModel>::class.java)
                     return@withContext models.toList() to responseCode
                 }
+                Log.w(TAG, "Community model fetch for $author failed with HTTP $responseCode${readResponseBody(connection)?.let { ": $it" } ?: ""}")
                 return@withContext null to responseCode
             } catch (e: Exception) {
                 Log.e(TAG, "Error during model indexing from $author", e)
@@ -182,8 +196,7 @@ class HuggingFaceApiService @Inject constructor(
                 Log.d(TAG, "Token refresh successful")
                 return@withContext response
             } else {
-                val errorStream = connection.errorStream?.bufferedReader()?.readText()
-                Log.e(TAG, "Token refresh failed with HTTP $responseCode: $errorStream")
+                Log.e(TAG, "Token refresh failed with HTTP $responseCode${readResponseBody(connection)?.let { ": $it" } ?: ""}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error during token refresh", e)

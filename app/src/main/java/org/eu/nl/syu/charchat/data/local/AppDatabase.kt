@@ -53,6 +53,7 @@ data class CharacterEntity(
     val temp: Float,
     val topP: Float,
     val topK: Int,
+    val enableThinking: Boolean,
     val sceneBackgroundUrl: String?,
     val isPredefined: Boolean,
     val lastUsedAt: Long
@@ -100,6 +101,11 @@ interface CharacterDao {
     @Query("UPDATE characters SET modelReference = :modelReference WHERE id = :id")
     suspend fun updateModelReference(id: String, modelReference: String)
 
+    @Query(
+        "UPDATE characters SET temp = :temp, topP = :topP, topK = :topK, enableThinking = :enableThinking WHERE id = :id"
+    )
+    suspend fun updateSamplingSettings(id: String, temp: Float, topP: Float, topK: Int, enableThinking: Boolean)
+
     @Delete
     suspend fun deleteCharacter(character: CharacterEntity)
 }
@@ -145,7 +151,7 @@ interface ChatMessageDao {
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 5, 
+    version = 6, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -166,6 +172,7 @@ fun CharacterEntity.toDomain(): Character = Character(
     temp = temp,
     topP = topP,
     topK = topK,
+    enableThinking = enableThinking,
     sceneBackgroundUrl = sceneBackgroundUrl,
     isPredefined = isPredefined,
     lastUsedAt = lastUsedAt
@@ -182,6 +189,7 @@ fun Character.toEntity(): CharacterEntity = CharacterEntity(
     temp = temp,
     topP = topP,
     topK = topK,
+    enableThinking = enableThinking,
     sceneBackgroundUrl = sceneBackgroundUrl,
     isPredefined = isPredefined,
     lastUsedAt = lastUsedAt

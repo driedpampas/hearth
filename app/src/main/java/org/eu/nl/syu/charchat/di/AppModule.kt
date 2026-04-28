@@ -40,7 +40,7 @@ object AppModule {
             "charchat_db"
         )
             .setDriver(driver)
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
@@ -123,8 +123,8 @@ object AppModule {
             """
                 INSERT INTO characters (
                     id, name, tagline, avatarUrl, systemPromptLore, reminderMessage,
-                    modelReference, temp, topP, topK, sceneBackgroundUrl, isPredefined, lastUsedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    modelReference, temp, topP, topK, enableThinking, sceneBackgroundUrl, isPredefined, lastUsedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
             arrayOf<Any?>(
                 character.id,
@@ -137,6 +137,7 @@ object AppModule {
                 character.temp,
                 character.topP,
                 character.topK,
+                character.enableThinking,
                 character.sceneBackgroundUrl,
                 if (character.isPredefined) 1 else 0,
                 character.lastUsedAt
@@ -152,8 +153,8 @@ object AppModule {
             """
                 INSERT INTO characters (
                     id, name, tagline, avatarUrl, systemPromptLore, reminderMessage,
-                    modelReference, temp, topP, topK, sceneBackgroundUrl, isPredefined, lastUsedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    modelReference, temp, topP, topK, enableThinking, sceneBackgroundUrl, isPredefined, lastUsedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
         ).use { statement ->
             statement.bindText(1, character.id)
@@ -166,9 +167,10 @@ object AppModule {
             statement.bindDouble(8, character.temp.toDouble())
             statement.bindDouble(9, character.topP.toDouble())
             statement.bindLong(10, character.topK.toLong())
-            if (character.sceneBackgroundUrl == null) statement.bindNull(11) else statement.bindText(11, character.sceneBackgroundUrl)
-            statement.bindBoolean(12, character.isPredefined)
-            statement.bindLong(13, character.lastUsedAt)
+            statement.bindBoolean(11, character.enableThinking)
+            if (character.sceneBackgroundUrl == null) statement.bindNull(12) else statement.bindText(12, character.sceneBackgroundUrl)
+            statement.bindBoolean(13, character.isPredefined)
+            statement.bindLong(14, character.lastUsedAt)
             statement.step()
         }
     }
@@ -237,5 +239,11 @@ private val MIGRATION_4_5 = object : Migration(4, 5) {
         connection.prepare("DROP TABLE chat_messages").use { it.step() }
         connection.prepare("ALTER TABLE chat_messages_new RENAME TO chat_messages").use { it.step() }
         connection.prepare("CREATE INDEX IF NOT EXISTS index_chat_messages_threadId ON chat_messages(threadId)").use { it.step() }
+    }
+}
+
+private val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.prepare("ALTER TABLE characters ADD COLUMN enableThinking INTEGER NOT NULL DEFAULT 0").use { it.step() }
     }
 }

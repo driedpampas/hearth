@@ -2,4 +2,4 @@
 
 ## in progress
 
-To assemble the app, first run `build_sqlite_vec.sh` to build the native libraries needed for embeddings.
+To assemble the app, first run `build_sqlite_vec.sh` to build the native libraries needed for storing embeddings.

@@ -32,17 +32,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -66,11 +71,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import org.eu.nl.syu.charchat.data.AllowedModel
 import org.eu.nl.syu.charchat.data.ChatMessage
 import org.eu.nl.syu.charchat.data.MessageRole
 import org.eu.nl.syu.charchat.ui.components.MarkdownText
 import org.eu.nl.syu.charchat.ui.viewmodels.ChatViewModel
 import org.eu.nl.syu.charchat.ui.screens.ModelsViewModel
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,11 +88,20 @@ fun ChatScreen(
     modelsViewModel: ModelsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val modelsUiState by modelsViewModel.uiState.collectAsStateWithLifecycle()
     val statsForNerdsEnabled by modelsViewModel.statsForNerdsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val autoLoadChatModel by modelsViewModel.autoLoadChatModel.collectAsStateWithLifecycle(initialValue = false)
+    val modelNamesByFile = remember(modelsUiState.availableModels) {
+        buildModelNameIndex(modelsUiState.availableModels)
+    }
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
+    var showCharacterSettings by remember { mutableStateOf(false) }
+    var pendingTemp by remember { mutableStateOf(0f) }
+    var pendingTopP by remember { mutableStateOf(0f) }
+    var pendingTopK by remember { mutableStateOf(0) }
+    var pendingThinking by remember { mutableStateOf(false) }
 
     LaunchedEffect(threadId) {
         viewModel.loadConversation(threadId)
@@ -134,6 +150,11 @@ fun ChatScreen(
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { showCharacterSettings = true }) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Character settings")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -190,7 +211,11 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(uiState.messages) { message ->
-                        ChatBubble(message = message, statsForNerdsEnabled = statsForNerdsEnabled)
+                        ChatBubble(
+                            message = message,
+                            statsForNerdsEnabled = statsForNerdsEnabled,
+                            modelDisplayName = resolveModelDisplayName(message.modelReference, modelNamesByFile)
+                        )
                     }
 
                     if (uiState.currentGeneratingText.isNotEmpty()) {
@@ -200,7 +225,8 @@ fun ChatScreen(
                                     role = MessageRole.MODEL,
                                     content = uiState.currentGeneratingText
                                 ),
-                                statsForNerdsEnabled = statsForNerdsEnabled
+                                statsForNerdsEnabled = statsForNerdsEnabled,
+                                modelDisplayName = null
                             )
                         }
                     }
@@ -213,6 +239,46 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    if (showCharacterSettings && uiState.character != null) {
+        val character = uiState.character!!
+        LaunchedEffect(character.id, showCharacterSettings) {
+            pendingTemp = character.temp
+            pendingTopP = character.topP
+            pendingTopK = character.topK
+            pendingThinking = character.enableThinking
+        }
+        AlertDialog(
+            onDismissRequest = { showCharacterSettings = false },
+            title = { Text("Model Options") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Temperature: $pendingTemp")
+                    Slider(value = pendingTemp, onValueChange = { pendingTemp = it }, valueRange = 0.0f..2.0f)
+                    Text("Top P: $pendingTopP")
+                    Slider(value = pendingTopP, onValueChange = { pendingTopP = it }, valueRange = 0.0f..1.0f)
+                    Text("Top K: $pendingTopK")
+                    Slider(value = pendingTopK.toFloat(), onValueChange = { pendingTopK = it.toInt() }, valueRange = 1f..100f, steps = 98)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = pendingThinking, onClick = { pendingThinking = !pendingThinking })
+                        Text("Enable thinking")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showCharacterSettings = false
+                    viewModel.updateCharacterModelSettings(
+                        temp = pendingTemp,
+                        topP = pendingTopP,
+                        topK = pendingTopK,
+                        enableThinking = pendingThinking,
+                        onDone = {}
+                    )
+                }) { Text("Done") }
+            }
+        )
     }
 }
 
@@ -277,7 +343,7 @@ fun ChatInput(
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean) {
+fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean, modelDisplayName: String?) {
     val isUser = message.role == MessageRole.USER
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -303,7 +369,7 @@ fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean) {
         // Stats for Nerds: show below model messages when enabled
         if (!isUser && statsForNerdsEnabled && message.modelReference != null && message.tokensPerSecond != null && message.generationTimeMs != null) {
             Text(
-                text = "${message.modelReference} • ${String.format("%.1f", message.tokensPerSecond)} t/s • ${message.generationTimeMs} ms",
+                text = "${modelDisplayName ?: File(message.modelReference).nameWithoutExtension} • ${String.format("%.1f", message.tokensPerSecond)} t/s • ${message.generationTimeMs} ms",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -312,6 +378,24 @@ fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean) {
             )
         }
     }
+}
+
+private fun buildModelNameIndex(availableModels: List<AllowedModel>): Map<String, String> {
+    return buildMap {
+        availableModels.forEach { model ->
+            put(model.modelFile, model.name)
+            model.socToModelFiles?.values?.forEach { socModel ->
+                socModel.modelFile?.let { put(it, model.name) }
+            }
+        }
+    }
+}
+
+private fun resolveModelDisplayName(modelReference: String?, modelNamesByFile: Map<String, String>): String? {
+    if (modelReference.isNullOrBlank()) return null
+
+    val fileName = File(modelReference).name
+    return modelNamesByFile[fileName] ?: fileName.substringBeforeLast('.')
 }
 
 @Composable

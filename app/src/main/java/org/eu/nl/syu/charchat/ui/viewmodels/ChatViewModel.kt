@@ -219,7 +219,12 @@ class ChatViewModel @Inject constructor(
                 ""
             }
 
-            val reminder = character.reminderMessage + contextInjection
+            val thinkingHint = if (character.enableThinking) {
+                "\n\nThink through the answer carefully before responding."
+            } else {
+                ""
+            }
+            val reminder = character.reminderMessage + thinkingHint + contextInjection
             var fullResponse = ""
 
             engineWrapper.sendMessage(content, reminder)
@@ -257,6 +262,85 @@ class ChatViewModel @Inject constructor(
                     _uiState.update { it.copy(isGenerating = false, currentGeneratingText = "Error: ${e.message}") }
                 }
                 .collect()
+        }
+    }
+
+    fun updateCharacterModelSettings(
+        temp: Float,
+        topP: Float,
+        topK: Int,
+        enableThinking: Boolean,
+        onDone: (() -> Unit)? = null
+    ) {
+        val character = _uiState.value.character ?: return
+
+        viewModelScope.launch {
+            characterDao.updateSamplingSettings(
+                id = character.id,
+                temp = temp,
+                topP = topP,
+                topK = topK,
+                enableThinking = enableThinking
+            )
+
+            _uiState.update {
+                it.copy(
+                    character = character.copy(
+                        temp = temp,
+                        topP = topP,
+                        topK = topK,
+                        enableThinking = enableThinking
+                    ),
+                    isLoadingModel = true,
+                    modelError = null
+                )
+            }
+
+            try {
+                val modelPath = resolveModelPath(character.modelReference)
+                if (modelPath.isNullOrBlank()) {
+                    throw IllegalStateException("Model file not found: ${character.modelReference}")
+                }
+
+                engineWrapper.close()
+                engineWrapper.initialize(modelPath)
+                engineWrapper.createConversation(character.copy(
+                    temp = temp,
+                    topP = topP,
+                    topK = topK,
+                    enableThinking = enableThinking
+                )).collect()
+
+                _uiState.update { it.copy(isLoadingModel = false) }
+                onDone?.invoke()
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingModel = false,
+                        modelError = e.message ?: "Failed to reload model"
+                    )
+                }
+            }
+        }
+    }
+
+    fun reloadCharacterModel(characterId: String) {
+        viewModelScope.launch {
+            val threadEntity = chatThreadDao.getThreadById(activeThreadId ?: return@launch) ?: return@launch
+            val character = characterDao.getCharacterById(characterId)?.toDomain() ?: return@launch
+            _uiState.update { it.copy(isLoadingModel = true, modelError = null) }
+            try {
+                val modelPath = resolveModelPath(character.modelReference)
+                if (modelPath == null) {
+                    _uiState.update { it.copy(isLoadingModel = false, modelError = "Model file not found") }
+                    return@launch
+                }
+                engineWrapper.close()
+                engineWrapper.initialize(modelPath)
+                _uiState.update { it.copy(isLoadingModel = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoadingModel = false, modelError = e.message) }
+            }
         }
     }
 

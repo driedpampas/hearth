@@ -2,6 +2,7 @@ package org.eu.nl.syu.charchat.data
 
 import android.content.Context
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -32,20 +33,24 @@ class ModelManager @Inject constructor(
         return dir
     }
 
-    suspend fun downloadModel(url: String, fileName: String) {
+    suspend fun downloadModel(url: String, fileName: String, modelMetadataJson: String? = null) {
         val workManager = WorkManager.getInstance(context)
-        
-        val data = Data.Builder()
+        val dataBuilder = Data.Builder()
             .putString("url", url)
             .putString("fileName", fileName)
-            .build()
+
+        if (modelMetadataJson != null) {
+            dataBuilder.putString("modelMetadataJson", modelMetadataJson)
+        }
+
+        val data = dataBuilder.build()
             
         val request = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setInputData(data)
             .addTag("model_download")
             .build()
             
-        workManager.enqueue(request)
+        workManager.enqueueUniqueWork("model_download_$fileName", ExistingWorkPolicy.REPLACE, request)
         
         // We observe the work info directly if needed, but for now we just start it.
         // The foreground service notification will handle the UI for the global app.

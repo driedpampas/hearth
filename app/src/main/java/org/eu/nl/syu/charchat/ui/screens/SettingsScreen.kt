@@ -60,6 +60,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -161,11 +162,11 @@ fun SettingsMainScreen(
 
 // --- General Settings Screen ---
 
- @OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
  @Composable
  fun SettingsGeneralScreen(
      onNavigateBack: () -> Unit,
-     viewModel: ModelsViewModel = hiltViewModel()
+     viewModel: SettingsGeneralViewModel = hiltViewModel()
  ) {
      val experimentalNpuEnabled by viewModel.experimentalNpuEnabled.collectAsStateWithLifecycle(initialValue = false)
      val statsForNerdsEnabled by viewModel.statsForNerdsEnabled.collectAsStateWithLifecycle(initialValue = false)
@@ -269,6 +270,36 @@ fun SettingsMainScreen(
     }
 }
 
+@HiltViewModel
+class SettingsGeneralViewModel @Inject constructor(
+    private val modelRepository: ModelRepository
+) : ViewModel() {
+
+    val experimentalNpuEnabled: Flow<Boolean> = modelRepository.experimentalNpuEnabled
+
+    val statsForNerdsEnabled: Flow<Boolean> = modelRepository.statsForNerdsEnabled
+
+    val autoLoadChatModel: Flow<Boolean> = modelRepository.autoLoadChatModel
+
+    fun setExperimentalNpuEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            modelRepository.setExperimentalNpuEnabled(enabled)
+        }
+    }
+
+    fun setStatsForNerdsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            modelRepository.setStatsForNerdsEnabled(enabled)
+        }
+    }
+
+    fun setAutoLoadChatModel(enabled: Boolean) {
+        viewModelScope.launch {
+            modelRepository.setAutoLoadChatModel(enabled)
+        }
+    }
+}
+
 // --- Models Settings Screen ---
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -282,6 +313,7 @@ fun SettingsModelsScreen(
     val viewModel: ModelsViewModel = hiltViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -299,6 +331,10 @@ fun SettingsModelsScreen(
         uiState.availableModels.filter { model ->
             model.taskTypes.contains("embedding") && viewModel.isDownloaded(model)
         }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadModels()
     }
 
     var showAddDialog by remember { mutableStateOf(false) }
@@ -450,11 +486,18 @@ fun SettingsModelsScreen(
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                         } else {
                             Button(onClick = {
-                                val authRequest = viewModel.getAuthorizationRequest()
-                                val authService = AuthorizationService(context)
-                                val authIntent = authService.getAuthorizationRequestIntent(authRequest)
-                                launcher.launch(authIntent)
-                                authService.dispose()
+                                scope.launch {
+                                    val authIntent = withContext(Dispatchers.IO) {
+                                        val authRequest = viewModel.getAuthorizationRequest()
+                                        val authService = AuthorizationService(context.applicationContext)
+                                        try {
+                                            authService.getAuthorizationRequestIntent(authRequest)
+                                        } finally {
+                                            authService.dispose()
+                                        }
+                                    }
+                                    launcher.launch(authIntent)
+                                }
                             }) {
                                 Text("Login")
                             }
@@ -577,7 +620,7 @@ fun SettingsLiteRtModelsScreen(
     ) { paddingValues ->
         PullToRefreshBox(
             isRefreshing = false,
-            onRefresh = { viewModel.syncDownloadedModels() },
+            onRefresh = { viewModel.refreshModels() },
             state = pullToRefreshState,
             modifier = Modifier
                 .fillMaxSize()
@@ -586,7 +629,7 @@ fun SettingsLiteRtModelsScreen(
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 item {
                     Text(
-                        "Pull to refresh after accepting terms",
+                        "Pull to sync remote models",
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         color = MaterialTheme.colorScheme.outline
@@ -629,6 +672,7 @@ fun SettingsLiteRtModelsScreen(
                         val fileName = viewModel.getDownloadFileName(model)
                         val progress = uiState.downloadProgress[fileName]
                         val error = uiState.downloadErrors[fileName]
+                        val gated = model.gated || isTermsRequiredError(error)
 
                         ModelListItem(
                             model = model,
@@ -636,7 +680,7 @@ fun SettingsLiteRtModelsScreen(
                             progress = progress,
                             error = error,
                             onDownload = {
-                                if (isTermsRequiredError(error)) {
+                                if (gated) {
                                     termsModel = model
                                     return@ModelListItem
                                 }
@@ -653,6 +697,7 @@ fun SettingsLiteRtModelsScreen(
                             },
                             onDelete = {},
                             onAcceptTerms = { termsModel = model },
+                            showTermsAction = gated,
                             viewModel = viewModel
                         )
                     }
@@ -698,6 +743,7 @@ fun ModelListItem(
     onDownload: () -> Unit,
     onDelete: () -> Unit,
     onAcceptTerms: (() -> Unit)? = null,
+    showTermsAction: Boolean = false,
     viewModel: ModelsViewModel
 ) {
     val stats = progress
@@ -758,9 +804,9 @@ fun ModelListItem(
                 } else if (progress != null && progress.progress < 100) {
                     Text("${progress.progress}%", style = MaterialTheme.typography.bodySmall)
                 } else {
-                    if (isTermsRequiredError(error)) {
+                    if (showTermsAction || isTermsRequiredError(error)) {
                         Button(onClick = onAcceptTerms ?: onDownload) {
-                            Text("Terms")
+                            Text(if (showTermsAction && error == null) "Open terms" else "Terms")
                         }
                     } else {
                         IconButton(onClick = onDownload) {
@@ -1013,6 +1059,7 @@ class ModelsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ModelsUiState())
     val uiState: StateFlow<ModelsUiState> = _uiState.asStateFlow()
+    private var modelsLoaded = false
 
     val experimentalNpuEnabled: Flow<Boolean> = modelRepository.experimentalNpuEnabled
 
@@ -1043,14 +1090,42 @@ class ModelsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     init {
-        viewModelScope.launch {
-            _uiState.update { it.copy(availableModels = modelRepository.getAvailableModels()) }
-            syncDownloadedModels()
-        }
+        syncDownloadedModels()
         observeWorkManager()
         observeSelectedEmbeddingModel()
         observeAuthToken()
         observeCommunityAuthors()
+    }
+
+    fun loadModels() {
+        if (modelsLoaded) return
+        modelsLoaded = true
+        loadCachedModels()
+    }
+
+    fun refreshModels() {
+        if (!modelsLoaded) {
+            modelsLoaded = true
+        }
+        syncRemoteModels()
+    }
+
+    private fun loadCachedModels() {
+        viewModelScope.launch {
+            val availableModels = withContext(Dispatchers.IO) {
+                modelRepository.getAvailableModels()
+            }
+            _uiState.update { it.copy(availableModels = availableModels) }
+        }
+    }
+
+    private fun syncRemoteModels() {
+        viewModelScope.launch {
+            val availableModels = withContext(Dispatchers.IO) {
+                modelRepository.refreshAvailableModelsFromRemote()
+            }
+            _uiState.update { it.copy(availableModels = availableModels) }
+        }
     }
 
     private fun observeCommunityAuthors() {
@@ -1058,7 +1133,9 @@ class ModelsViewModel @Inject constructor(
             modelRepository.communityAuthors.collect { authors ->
                 _uiState.update { it.copy(communityAuthors = authors) }
                 // Refresh models when authors change
-                _uiState.update { it.copy(availableModels = modelRepository.getAvailableModels()) }
+                if (modelsLoaded) {
+                    _uiState.update { it.copy(availableModels = modelRepository.getAvailableModels()) }
+                }
             }
         }
     }
@@ -1131,8 +1208,34 @@ class ModelsViewModel @Inject constructor(
             workManager.getWorkInfosByTagFlow("model_download").collect { workInfos ->
                 val progressMap = mutableMapOf<String, DownloadStats>()
                 val errorMap = mutableMapOf<String, String>()
+                val activeFileNames = mutableSetOf<String>()
+
+                fun resolveFileName(info: androidx.work.WorkInfo): String? {
+                    return info.progress.getString("fileName") ?: info.outputData.getString("fileName")
+                }
+
+                fun isActive(info: androidx.work.WorkInfo): Boolean {
+                    return !info.state.isFinished
+                }
+
+                fun downloadErrorMessage(info: androidx.work.WorkInfo): String {
+                    val errorCode = info.outputData.getInt("error_code", 0)
+                    return when (errorCode) {
+                        403 -> "Permissions/Terms required"
+                        401 -> "Login required"
+                        else -> "Download failed"
+                    }
+                }
+
                 for (info in workInfos) {
-                    val fileName = info.progress.getString("fileName") ?: info.outputData.getString("fileName")
+                    val fileName = resolveFileName(info)
+                    if (fileName != null && isActive(info)) {
+                        activeFileNames += fileName
+                    }
+                }
+
+                for (info in workInfos) {
+                    val fileName = resolveFileName(info)
                     
                     if (!info.state.isFinished) {
                         val progress = info.progress.getInt("progress", 0)
@@ -1153,13 +1256,8 @@ class ModelsViewModel @Inject constructor(
                     } else if (info.state == androidx.work.WorkInfo.State.SUCCEEDED) {
                         refreshDownloadedModels()
                     } else if (info.state == androidx.work.WorkInfo.State.FAILED) {
-                        val errorCode = info.outputData.getInt("error_code", 0)
-                        if (fileName != null) {
-                            errorMap[fileName] = when (errorCode) {
-                                403 -> "Permissions/Terms required"
-                                401 -> "Login required"
-                                else -> "Download failed"
-                            }
+                        if (fileName != null && fileName !in activeFileNames) {
+                            errorMap[fileName] = downloadErrorMessage(info)
                         }
                     }
                 }
@@ -1184,21 +1282,29 @@ class ModelsViewModel @Inject constructor(
         val response = AuthorizationResponse.fromIntent(dataIntent)
         val exception = AuthorizationException.fromIntent(dataIntent)
 
+        if (exception != null) {
+            android.util.Log.e("ModelsViewModel", "OAuth authorization failed: ${exception.error} / ${exception.errorDescription}", exception)
+        }
+
         if (response != null) {
-            val authService = AuthorizationService(context)
-            authService.performTokenRequest(response.createTokenExchangeRequest()) { tokenResponse, tokenEx ->
-                if (tokenResponse != null) {
-                    viewModelScope.launch {
-                        authRepository.saveToken(
-                            AuthToken(
-                                accessToken = tokenResponse.accessToken!!,
-                                refreshToken = tokenResponse.refreshToken!!,
-                                expiresAtMs = tokenResponse.accessTokenExpirationTime!!
+            viewModelScope.launch {
+                val authService = AuthorizationService(context.applicationContext)
+                authService.performTokenRequest(response.createTokenExchangeRequest()) { tokenResponse, tokenEx ->
+                    if (tokenResponse != null) {
+                        viewModelScope.launch {
+                            authRepository.saveToken(
+                                AuthToken(
+                                    accessToken = tokenResponse.accessToken!!,
+                                    refreshToken = tokenResponse.refreshToken!!,
+                                    expiresAtMs = tokenResponse.accessTokenExpirationTime!!
+                                )
                             )
-                        )
+                        }
+                    } else if (tokenEx != null) {
+                        android.util.Log.e("ModelsViewModel", "OAuth token exchange failed: ${tokenEx.error} / ${tokenEx.errorDescription}", tokenEx)
                     }
+                    authService.dispose()
                 }
-                authService.dispose()
             }
         }
     }
@@ -1244,7 +1350,9 @@ class ModelsViewModel @Inject constructor(
             _uiState.update { 
                 val newErrors = it.downloadErrors.toMutableMap()
                 newErrors.remove(fileName)
-                it.copy(downloadErrors = newErrors) 
+                val newProgress = it.downloadProgress.toMutableMap()
+                newProgress.remove(fileName)
+                it.copy(downloadErrors = newErrors, downloadProgress = newProgress) 
             }
 
             // Check access if it's a gated community model
@@ -1277,7 +1385,7 @@ class ModelsViewModel @Inject constructor(
             }
 
             val url = modelRepository.getDownloadUrl(model)
-            modelManager.downloadModel(url, fileName)
+            modelManager.downloadModel(url, fileName, modelRepository.serializeModel(model))
         }
     }
 

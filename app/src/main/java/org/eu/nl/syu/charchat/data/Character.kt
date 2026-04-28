@@ -17,6 +17,7 @@ data class Character(
     val temp: Float = 0.8f,
     val topP: Float = 0.95f,
     val topK: Int = 40,
+    val enableThinking: Boolean = false,
     val sceneBackgroundUrl: String? = null,
     val isPredefined: Boolean = false,
     val lastUsedAt: Long = 0L

@@ -57,7 +57,7 @@ class HomeViewModel @Inject constructor(
     init {
         loadCharacters()
         loadThreads()
-        refreshModels()
+        loadCachedModels()
         observeSettings()
     }
 
@@ -87,12 +87,14 @@ class HomeViewModel @Inject constructor(
     fun setPreferredBackend(backend: String) {
         viewModelScope.launch {
             modelRepository.setPreferredBackend(backend)
+            reloadSelectedModelIfNeeded()
         }
     }
 
     fun setDefaultMaxTokens(tokens: Int) {
         viewModelScope.launch {
             modelRepository.setDefaultMaxTokens(tokens)
+            reloadSelectedModelIfNeeded()
         }
     }
 
@@ -142,6 +144,19 @@ class HomeViewModel @Inject constructor(
 
     fun refreshModels() {
         viewModelScope.launch {
+            val availableModels = modelRepository.refreshAvailableModelsFromRemote()
+            val models = modelManager.getLocalModels()
+                .filter { it.name.endsWith(".litertlm") && !isBlacklisted(it) }
+                .sortedWith(
+                    compareBy<File> { isEmbeddingModel(it, availableModels) }
+                        .thenBy { it.name.lowercase() }
+                )
+            _uiState.update { it.copy(downloadedModels = models, availableModels = availableModels) }
+        }
+    }
+
+    private fun loadCachedModels() {
+        viewModelScope.launch {
             val availableModels = modelRepository.getAvailableModels()
             val models = modelManager.getLocalModels()
                 .filter { it.name.endsWith(".litertlm") && !isBlacklisted(it) }
@@ -178,51 +193,64 @@ class HomeViewModel @Inject constructor(
                 return@launch
             }
 
-            _uiState.update { it.copy(isModelLoading = true) }
+            loadModel(file = file)
+        }
+    }
 
-            val backend = when (_uiState.value.preferredBackend) {
-                "GPU" -> Backend.GPU()
-                "CPU" -> Backend.CPU()
-                "NPU" -> Backend.NPU(modelManager.getModelsDir().absolutePath)
-                else -> null
-            }
+    private suspend fun reloadSelectedModelIfNeeded() {
+        val selectedModelName = _uiState.value.selectedModel ?: return
+        val currentFile = modelManager.getLocalModels().firstOrNull { it.name == selectedModelName }
+            ?: return
+        if (_uiState.value.isModelLoaded) {
+            loadModel(file = currentFile)
+        }
+    }
 
-            try {
-                withContext(Dispatchers.IO) {
-                    engineWrapper.initialize(
-                        modelPath = file.absolutePath,
-                        preferredBackend = backend,
-                        maxTokens = _uiState.value.defaultMaxTokens,
-                        onFallback = { message ->
-                            _uiState.update { it.copy(notification = message) }
-                        }
-                    )
-                }
-                characterDao.updateModelReference(org.eu.nl.syu.charchat.data.DefaultCharacters.ASSISTANT_CHARACTER_ID, file.absolutePath)
-                _uiState.update { it.copy(isModelLoading = false, selectedModel = file.name, isModelLoaded = true, notification = null) }
-            } catch (e: Exception) {
-                val msg = when {
-                    isInputTensorMissing(e) -> {
-                        modelRepository.quarantineModel(file)
-                        refreshModels()
-                        "This model is corrupted/incompatible and has been removed. Please redownload a compatible LiteRT LM chat model."
+    private suspend fun loadModel(file: File) {
+        _uiState.update { it.copy(isModelLoading = true) }
+
+        val backend = when (_uiState.value.preferredBackend) {
+            "GPU" -> Backend.GPU()
+            "CPU" -> Backend.CPU()
+            "NPU" -> Backend.NPU(modelManager.getModelsDir().absolutePath)
+            else -> null
+        }
+
+        try {
+            withContext(Dispatchers.IO) {
+                engineWrapper.initialize(
+                    modelPath = file.absolutePath,
+                    preferredBackend = backend,
+                    maxTokens = _uiState.value.defaultMaxTokens,
+                    onFallback = { message ->
+                        _uiState.update { it.copy(notification = message) }
                     }
-                    isUnsupportedChatModel(file.name) -> {
-                        "This model cannot be used for chat. Select a LiteRT LM model instead."
-                    }
-                    else -> {
-                        "Failed to initialize model: ${e.message}"
-                    }
-                }
-                _uiState.update {
-                    it.copy(
-                        isModelLoading = false,
-                        isModelLoaded = false,
-                        notification = msg
-                    )
-                }
-                return@launch
+                )
             }
+            characterDao.updateModelReference(org.eu.nl.syu.charchat.data.DefaultCharacters.ASSISTANT_CHARACTER_ID, file.absolutePath)
+            _uiState.update { it.copy(isModelLoading = false, selectedModel = file.name, isModelLoaded = true, notification = null) }
+        } catch (e: Exception) {
+            val msg = when {
+                isInputTensorMissing(e) -> {
+                    modelRepository.quarantineModel(file)
+                    refreshModels()
+                    "This model is corrupted/incompatible and has been removed. Please redownload a compatible LiteRT LM chat model."
+                }
+                isUnsupportedChatModel(file.name) -> {
+                    "This model cannot be used for chat. Select a LiteRT LM model instead."
+                }
+                else -> {
+                    "Failed to initialize model: ${e.message}"
+                }
+            }
+            _uiState.update {
+                it.copy(
+                    isModelLoading = false,
+                    isModelLoaded = false,
+                    notification = msg
+                )
+            }
+            return
         }
     }
 
