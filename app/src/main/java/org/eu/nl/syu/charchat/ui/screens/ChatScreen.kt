@@ -66,6 +66,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -303,6 +311,7 @@ fun ChatInput(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean, modelDisplayName: String?) {
     val isUser = message.role == MessageRole.USER
@@ -317,8 +326,21 @@ fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean, modelDisplay
             bottomEnd = if (isUser) 4.dp else 20.dp
         )
         
+        val clipboardManager = LocalClipboardManager.current
+        val context = LocalContext.current
+        val hapticFeedback = LocalHapticFeedback.current
+
         GlassySurface(
-            modifier = Modifier.padding(vertical = 4.dp),
+            modifier = Modifier
+                .padding(vertical = 4.dp)
+                .combinedClickable(
+                    onClick = { /* No-op or single tap action if needed */ },
+                    onLongClick = {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        clipboardManager.setText(AnnotatedString(message.content))
+                        Toast.makeText(context, "Message copied", Toast.LENGTH_SHORT).show()
+                    }
+                ),
             shape = bubbleShape,
             color = if (isUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
         ) {

@@ -122,11 +122,12 @@ class ModelSettingsViewModel @Inject constructor(
         val modelPath = engineWrapper.getLoadedModelPath() ?: return
         _uiState.update { it.copy(isLoading = true, error = null) }
         try {
+            val maxTokens = modelRepository.defaultMaxTokens.first()
             withContext(Dispatchers.IO) {
                 engineWrapper.close()
-                engineWrapper.initialize(modelPath)
+                engineWrapper.initialize(modelPath, maxTokens = maxTokens)
             }
-            _uiState.update { it.copy(isLoading = false) }
+            _uiState.update { it.copy(isLoading = false, defaultMaxTokens = maxTokens) }
         } catch (e: Exception) {
             _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to reload model") }
         }

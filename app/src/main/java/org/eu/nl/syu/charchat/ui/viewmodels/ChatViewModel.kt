@@ -123,9 +123,11 @@ class ChatViewModel @Inject constructor(
 
                 val modelFile = File(modelPath)
                 try {
+                    val maxTokens = modelRepository.defaultMaxTokens.first()
                     withContext(Dispatchers.IO) {
-                        engineWrapper.initialize(modelPath)
+                        engineWrapper.initialize(modelPath, maxTokens = maxTokens)
                     }
+                    _uiState.update { it.copy(maxTokens = maxTokens) }
                 } catch (e: Exception) {
                     val msg = when {
                         isInputTensorMissing(e) -> {
@@ -154,6 +156,7 @@ class ChatViewModel @Inject constructor(
             val openedAt = System.currentTimeMillis()
             characterDao.updateLastUsedAt(character.id, openedAt)
             val messages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
+            val maxTokens = modelRepository.defaultMaxTokens.first()
             
             _uiState.update {
                 it.copy(
@@ -162,7 +165,8 @@ class ChatViewModel @Inject constructor(
                     modelError = null,
                     isLoadingModel = false,
                     tokenCount = messages.sumOf { message -> (message.content.length / 4).coerceAtLeast(0) },
-                    threadTitle = thread.title
+                    threadTitle = thread.title,
+                    maxTokens = maxTokens
                 )
             }
 
@@ -327,10 +331,12 @@ class ChatViewModel @Inject constructor(
                     throw IllegalStateException("Model file not found: ${character.modelReference}")
                 }
 
+                val maxTokens = modelRepository.defaultMaxTokens.first()
                 withContext(Dispatchers.IO) {
                     engineWrapper.close()
-                    engineWrapper.initialize(modelPath)
+                    engineWrapper.initialize(modelPath, maxTokens = maxTokens)
                 }
+                _uiState.update { it.copy(maxTokens = maxTokens) }
                 engineWrapper.createConversation(character.copy(
                     temp = temp,
                     topP = topP,
@@ -362,11 +368,12 @@ class ChatViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoadingModel = false, modelError = "Model file not found") }
                     return@launch
                 }
+                val maxTokens = modelRepository.defaultMaxTokens.first()
                 withContext(Dispatchers.IO) {
                     engineWrapper.close()
-                    engineWrapper.initialize(modelPath)
+                    engineWrapper.initialize(modelPath, maxTokens = maxTokens)
                 }
-                _uiState.update { it.copy(isLoadingModel = false) }
+                _uiState.update { it.copy(isLoadingModel = false, maxTokens = maxTokens) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoadingModel = false, modelError = e.message) }
             }
@@ -374,7 +381,13 @@ class ChatViewModel @Inject constructor(
     }
 
     private suspend fun checkAndSummarize(threadId: String, character: Character) {
-        if (_uiState.value.tokenCount > 3500) {
+        val maxTokens = _uiState.value.maxTokens
+        val currentTokens = _uiState.value.tokenCount
+        
+        // Summarize when context is ~85% full
+        val threshold = (maxTokens * 0.85f).toInt()
+        
+        if (currentTokens > threshold) {
             val prompt = "Please summarize the story so far in 2-3 paragraphs for continuity."
             var summary = ""
             engineWrapper.sendMessage(prompt).collect { partial ->
@@ -397,7 +410,10 @@ class ChatViewModel @Inject constructor(
                 chatThreadDao.updateLastMessageAt(threadId, System.currentTimeMillis())
 
                 val updatedMessages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
-                _uiState.update { it.copy(messages = updatedMessages, tokenCount = 1500) }
+                
+                // Estimate remaining tokens (summary + last 6 messages)
+                val remainingTokens = (summary.length / 4) + (updatedMessages.takeLast(6).sumOf { it.content.length / 4 })
+                _uiState.update { it.copy(messages = updatedMessages, tokenCount = remainingTokens) }
             }
         }
     }
