@@ -14,6 +14,13 @@ if (localPropertiesFile.exists()) {
 }
 val hfClientId = localProperties.getProperty("hf.client.id") ?: ""
 
+val gitCommitCount = providers.exec {
+    workingDir = rootDir
+    commandLine("git", "rev-list", "--count", "HEAD")
+}.standardOutput.asText.map { output ->
+    output.trim().toIntOrNull() ?: 0
+}
+
 
 android {
     namespace = "org.eu.nl.syu.charchat"
@@ -27,8 +34,8 @@ android {
         applicationId = "org.eu.nl.syu.charchat"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = gitCommitCount.get()
+        versionName = "${gitCommitCount.get()}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appAuthRedirectScheme"] = "org.eu.nl.syu.charchat"

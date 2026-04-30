@@ -221,13 +221,16 @@ fun HomeScreen(
                         placeholder = { Text("Search characters") },
                         leadingIcon = {
                             if (!searchActive) {
-                                IconButton(onClick = { 
-                                    android.util.Log.d("HomeScreen", "Navigating to model picker")
-                                    onNavigateToModelPicker() 
+                                IconButton(onClick = {
+                                    if (uiState.isModelLoaded) {
+                                        onNavigateToModelSettings()
+                                    } else {
+                                        onNavigateToModelPicker()
+                                    }
                                 }) {
                                     Icon(
                                         imageVector = if (uiState.isModelLoaded) Icons.Filled.Widgets else Icons.Outlined.Widgets,
-                                        contentDescription = "Model Selection",
+                                        contentDescription = if (uiState.isModelLoaded) "Model Settings" else "Download Models",
                                         tint = if (uiState.isModelLoaded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }

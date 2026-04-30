@@ -39,7 +39,8 @@ data class HomeUiState(
     val preferredBackend: String = "Automatic",
     val defaultMaxTokens: Int = 4096,
     val experimentalNpuEnabled: Boolean = false,
-    val autoLoadChatModel: Boolean = false
+    val autoLoadChatModel: Boolean = false,
+    val failedModels: Set<String> = emptySet()
 )
 
 @HiltViewModel
@@ -60,6 +61,7 @@ class HomeViewModel @Inject constructor(
         loadThreads()
         loadCachedModels()
         observeSettings()
+        observeFailedModels()
     }
 
     private fun observeEngineState() {
@@ -96,6 +98,26 @@ class HomeViewModel @Inject constructor(
             modelRepository.autoLoadChatModel.collect { enabled ->
                 _uiState.update { it.copy(autoLoadChatModel = enabled) }
             }
+        }
+    }
+
+    private fun observeFailedModels() {
+        viewModelScope.launch(Dispatchers.IO) {
+            modelRepository.failedModels.collect { failed ->
+                _uiState.update { it.copy(failedModels = failed) }
+            }
+        }
+    }
+
+    fun retryModel(file: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            modelRepository.removeFailedModel(file.name)
+            val hash = modelRepository.hashOf(file)
+            if (hash.isNotEmpty()) {
+                modelRepository.removeFromBlacklist(hash)
+            }
+            // Attempt to reload the model
+            selectModel(file)
         }
     }
 
@@ -153,28 +175,34 @@ class HomeViewModel @Inject constructor(
     }
 
     fun refreshModels() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val availableModels = modelRepository.refreshAvailableModelsFromRemote()
-            val models = modelManager.getLocalModels()
-                .filter { it.name.endsWith(".litertlm") && !isBlacklisted(it) }
-                .sortedWith(
-                    compareBy<File> { isEmbeddingModel(it, availableModels) }
-                        .thenBy { it.name.lowercase() }
-                )
-            _uiState.update { it.copy(downloadedModels = models, availableModels = availableModels) }
+            updateModelsList(availableModels)
         }
+    }
+
+    fun reloadLocalModels() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val availableModels = modelRepository.getAvailableModels()
+            updateModelsList(availableModels)
+        }
+    }
+
+    private suspend fun updateModelsList(availableModels: List<AllowedModel>) {
+        val localFiles = modelManager.getLocalModels()
+            .filter { (it.name.endsWith(".litertlm") || it.name.endsWith(".tflite")) }
+        val models = localFiles
+            .filterNot { isEmbeddingModel(it, availableModels) }
+            .sortedWith(
+                compareBy<File> { it.name.lowercase() }
+            )
+        _uiState.update { it.copy(downloadedModels = models, availableModels = availableModels) }
     }
 
     private fun loadCachedModels() {
         viewModelScope.launch(Dispatchers.IO) {
             val availableModels = modelRepository.getAvailableModels()
-            val models = modelManager.getLocalModels()
-                .filter { it.name.endsWith(".litertlm") && !isBlacklisted(it) }
-                .sortedWith(
-                    compareBy<File> { isEmbeddingModel(it, availableModels) }
-                        .thenBy { it.name.lowercase() }
-                )
-            _uiState.update { it.copy(downloadedModels = models, availableModels = availableModels) }
+            updateModelsList(availableModels)
         }
     }
 
@@ -238,19 +266,31 @@ class HomeViewModel @Inject constructor(
                 )
             }
             characterDao.updateModelReference(org.eu.nl.syu.charchat.data.DefaultCharacters.ASSISTANT_CHARACTER_ID, file.absolutePath)
+            modelRepository.removeFailedModel(file.name)
+            val hash = modelRepository.hashOf(file)
+            if (hash.isNotEmpty()) {
+                modelRepository.removeFromBlacklist(hash)
+                // Update cached model with hash
+                val modelId = _uiState.value.availableModels
+                    .find { it.localFileName == file.name || it.modelFile == file.name }
+                    ?.modelId
+                if (modelId != null) {
+                    modelRepository.updateCachedModelHash(modelId, hash)
+                }
+            }
             _uiState.update { it.copy(isModelLoading = false, selectedModel = file.name, isModelLoaded = true, notification = null) }
         } catch (e: Exception) {
             val msg = when {
                 isInputTensorMissing(e) -> {
-                    modelRepository.quarantineModel(file)
-                    refreshModels()
-                    "This model is corrupted/incompatible and has been removed. Please redownload a compatible LiteRT LM chat model."
+                    modelRepository.addFailedModel(file.name)
+                    "This model failed to load.\n\nTip: Try changing the hardware mode or reducing the context length."
                 }
                 isUnsupportedChatModel(file.name) -> {
                     "This model cannot be used for chat. Select a LiteRT LM model instead."
                 }
                 else -> {
-                    "Failed to initialize model: ${e.message}"
+                    modelRepository.addFailedModel(file.name)
+                    "Failed to initialize model: ${e.message}\n\nTip: Try changing the hardware mode or reducing the context length."
                 }
             }
             _uiState.update {

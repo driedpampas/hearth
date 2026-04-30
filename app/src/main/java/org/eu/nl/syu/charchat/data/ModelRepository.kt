@@ -42,7 +42,9 @@ data class AllowedModel(
     val url: String? = null,
     val socToModelFiles: Map<String, SocModelFile>? = null,
     val taskTypes: List<String> = emptyList(),
-    val gated: Boolean = false
+    val gated: Boolean = false,
+    val localFileName: String? = null,
+    val fileHash: String? = null
 )
 
 @Singleton
@@ -64,6 +66,7 @@ class ModelRepository @Inject constructor(
     private val DEFAULT_MAX_TOKENS = androidx.datastore.preferences.core.intPreferencesKey("default_max_tokens")
     private val AUTO_LOAD_CHAT_MODEL = androidx.datastore.preferences.core.booleanPreferencesKey("auto_load_chat_model")
     private val BLACKLISTED_MODEL_HASHES = stringSetPreferencesKey("blacklisted_model_hashes")
+    private val FAILED_MODELS = stringSetPreferencesKey("failed_models")
 
     val selectedEmbeddingModel: Flow<String?> = context.modelDataStore.data.map { preferences ->
         preferences[SELECTED_EMBEDDING_MODEL]
@@ -71,6 +74,55 @@ class ModelRepository @Inject constructor(
 
     val communityAuthors: Flow<Set<String>> = context.modelDataStore.data.map { preferences ->
         preferences[COMMUNITY_AUTHORS] ?: emptySet()
+    }
+
+    val blacklistedModelHashes: Flow<Set<String>> = context.modelDataStore.data.map { preferences ->
+        preferences[BLACKLISTED_MODEL_HASHES] ?: emptySet()
+    }
+
+    val failedModels: Flow<Set<String>> = context.modelDataStore.data.map { preferences ->
+        preferences[FAILED_MODELS] ?: emptySet()
+    }
+
+    suspend fun isModelBlacklisted(hash: String): Boolean {
+        val set: Set<String> = context.modelDataStore.data.first()[BLACKLISTED_MODEL_HASHES] ?: emptySet()
+        return set.contains(hash)
+    }
+
+    suspend fun blacklistModel(hash: String) {
+        context.modelDataStore.edit { preferences ->
+            val current = preferences[BLACKLISTED_MODEL_HASHES] ?: emptySet<String>()
+            preferences[BLACKLISTED_MODEL_HASHES] = current.toMutableSet().apply { add(hash) }
+        }
+    }
+
+    suspend fun addFailedModel(fileName: String) {
+        context.modelDataStore.edit { preferences ->
+            val current = preferences[FAILED_MODELS] ?: emptySet<String>()
+            preferences[FAILED_MODELS] = current.toMutableSet().apply { add(fileName) }
+        }
+    }
+
+    suspend fun removeFailedModel(fileName: String) {
+        context.modelDataStore.edit { preferences ->
+            val current = preferences[FAILED_MODELS] ?: emptySet<String>()
+            preferences[FAILED_MODELS] = current.toMutableSet().apply { remove(fileName) }
+        }
+    }
+
+    suspend fun removeFromBlacklist(hash: String) {
+        context.modelDataStore.edit { preferences ->
+            val current = preferences[BLACKLISTED_MODEL_HASHES] ?: emptySet<String>()
+            preferences[BLACKLISTED_MODEL_HASHES] = current.toMutableSet().apply { remove(hash) }
+        }
+    }
+
+    suspend fun quarantineModel(file: File) {
+        val hash = hashOf(file)
+        if (hash.isNotEmpty()) {
+            blacklistModel(hash)
+        }
+        addFailedModel(file.name)
     }
 
     suspend fun addCommunityAuthor(author: String) {
@@ -137,6 +189,15 @@ class ModelRepository @Inject constructor(
         current.removeAll { it.modelId == model.modelId }
         current.add(model)
         writeModels(CACHED_DOWNLOADED_MODELS, current)
+    }
+
+    suspend fun updateCachedModelHash(modelId: String, hash: String) {
+        val current = readModels(CACHED_DOWNLOADED_MODELS).toMutableList()
+        val index = current.indexOfFirst { it.modelId == modelId }
+        if (index >= 0) {
+            current[index] = current[index].copy(fileHash = hash)
+            writeModels(CACHED_DOWNLOADED_MODELS, current)
+        }
     }
 
     suspend fun getAvailableModels(): List<AllowedModel> {
@@ -299,31 +360,9 @@ class ModelRepository @Inject constructor(
         }
     }
 
-    suspend fun isModelBlacklisted(hash: String): Boolean {
-        val set: Set<String> = context.modelDataStore.data.first()[BLACKLISTED_MODEL_HASHES] ?: emptySet()
-        return set.contains(hash)
-    }
-
-    suspend fun blacklistModel(hash: String) {
-        context.modelDataStore.edit { preferences ->
-            val current = preferences[BLACKLISTED_MODEL_HASHES] ?: emptySet<String>()
-            preferences[BLACKLISTED_MODEL_HASHES] = current.toMutableSet().apply { add(hash) }
-        }
-    }
-
-    suspend fun quarantineModel(file: File) {
-        val hash = hashOf(file)
-        if (hash.isNotEmpty()) {
-            blacklistModel(hash)
-        }
-        if (file.exists()) {
-            file.delete()
-        }
-    }
-
-    fun hashOf(file: File): String {
-        if (!file.exists()) return ""
-        return try {
+    suspend fun hashOf(file: File): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (!file.exists()) return@withContext ""
+        try {
             val digest = MessageDigest.getInstance("SHA-256")
             val buffer = ByteArray(8192)
             file.inputStream().use { fis ->

@@ -181,10 +181,12 @@ class DownloadWorker @AssistedInject constructor(
                 if (tmpFile.renameTo(outputFile)) {
                     Log.i(TAG, "Successfully downloaded and saved: $fileName")
                     modelMetadataJson?.let { json ->
-                        val model = modelRepository.deserializeModel(json)
+                        val model = modelRepository.deserializeModel(json)?.copy(localFileName = fileName)
                         if (model != null) {
-                            modelRepository.cacheDownloadedModel(model)
-                            Log.d(TAG, "Cached metadata for $fileName")
+                            val hash = modelRepository.hashOf(outputFile)
+                            val modelWithHash = if (hash.isNotEmpty()) model.copy(fileHash = hash) else model
+                            modelRepository.cacheDownloadedModel(modelWithHash)
+                            Log.d(TAG, "Cached metadata for $fileName with hash: $hash")
                         } else {
                             Log.w(TAG, "Downloaded model metadata could not be cached for $fileName")
                         }
