@@ -57,16 +57,21 @@ class ChatViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
     private var activeThreadId: String? = null
+    private var isThreadSaved: Boolean = false
 
     fun loadConversation(conversationId: String) {
         viewModelScope.launch {
             val threadEntity = chatThreadDao.getThreadById(conversationId)
+            isThreadSaved = threadEntity != null
             val character = when {
                 threadEntity != null -> characterDao.getCharacterById(threadEntity.characterId)?.toDomain()
                 else -> characterDao.getCharacterById(conversationId)?.toDomain()
             } ?: return@launch
 
-            val thread = threadEntity?.toDomain() ?: createNewThread(character)
+            val thread = threadEntity?.toDomain() ?: ChatThread(
+                characterId = character.id,
+                title = character.name
+            )
             val threadId = thread.id
             activeThreadId = threadId
 
@@ -165,16 +170,7 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private suspend fun createNewThread(character: Character): ChatThread {
-        val count = chatThreadDao.getThreadCountForCharacter(character.id)
-        val thread = ChatThread(
-            characterId = character.id,
-            title = character.name,
-            sequenceId = count + 1
-        )
-        chatThreadDao.insertThread(thread.toEntity())
-        return thread
-    }
+    // Removed immediate createNewThread insertion to avoid empty threads in history.
 
     private fun isUnsupportedChatModel(modelReference: String): Boolean {
         val lower = modelReference.lowercase()
@@ -216,6 +212,21 @@ class ChatViewModel @Inject constructor(
 
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
+
+            // Ensure thread exists in DB before inserting message
+            if (!isThreadSaved) {
+                val count = chatThreadDao.getThreadCountForCharacter(character.id)
+                val newThread = ChatThread(
+                    id = threadId,
+                    characterId = character.id,
+                    title = character.name,
+                    sequenceId = count + 1,
+                    createdAt = startTime,
+                    lastMessageAt = startTime
+                )
+                chatThreadDao.insertThread(newThread.toEntity())
+                isThreadSaved = true
+            }
 
             chatMessageDao.insertMessage(userMessage.toEntity(character.id, threadId))
             _uiState.update {

@@ -29,6 +29,6 @@ object DefaultCharacters {
         topK = 40,
         sceneBackgroundUrl = null,
         isPredefined = true,
-        lastUsedAt = now
+        lastUsedAt = 0L
     )
 }

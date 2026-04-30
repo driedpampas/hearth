@@ -8,6 +8,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +58,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -302,14 +305,17 @@ fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean, modelDisplay
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
+        val bubbleShape = RoundedCornerShape(
+            topStart = 20.dp,
+            topEnd = 20.dp,
+            bottomStart = if (isUser) 20.dp else 4.dp,
+            bottomEnd = if (isUser) 4.dp else 20.dp
+        )
+        
         Surface(
-            color = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
-            shape = RoundedCornerShape(
-                topStart = 20.dp,
-                topEnd = 20.dp,
-                bottomStart = if (isUser) 20.dp else 4.dp,
-                bottomEnd = if (isUser) 4.dp else 20.dp
-            ),
+            modifier = Modifier.padding(vertical = 4.dp),
+            shape = bubbleShape,
+            color = if (isUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
             tonalElevation = if (isUser) 0.dp else 2.dp
         ) {
             MarkdownText(
