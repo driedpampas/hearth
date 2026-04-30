@@ -88,6 +88,8 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToCreateCharacter: () -> Unit,
     onNavigateToModelSettings: () -> Unit,
+    onNavigateToModelPicker: () -> Unit,
+    onNavigateToCharacterPicker: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -95,16 +97,12 @@ fun HomeScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
-    var showModelPicker by rememberSaveable { mutableStateOf(false) }
-    var showCharacterPicker by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(uiState.notification, showModelPicker) {
-        if (!showModelPicker) {
-            uiState.notification?.let {
-                snackbarHostState.showSnackbar(it)
-                viewModel.clearNotification()
-            }
+    LaunchedEffect(uiState.notification) {
+        uiState.notification?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearNotification()
         }
     }
 
@@ -144,39 +142,11 @@ fun HomeScreen(
         onNavigateToChat(thread.id)
     }
 
-    BackHandler(fabMenuExpanded || showModelPicker || showCharacterPicker) {
-        when {
-            showModelPicker -> showModelPicker = false
-            showCharacterPicker -> showCharacterPicker = false
-            else -> fabMenuExpanded = false
-        }
+    BackHandler(fabMenuExpanded) {
+        fabMenuExpanded = false
     }
 
-    if (showModelPicker) {
-        ModelPickerScreen(
-            uiState = uiState,
-            onDismiss = {
-                showModelPicker = false
-                viewModel.clearNotification()
-            },
-            onSelectModel = { file -> viewModel.selectModel(file) },
-            onOpenSettings = { onNavigateToModelSettings() }
-        )
-        return
-    }
 
-    if (showCharacterPicker) {
-        CharacterPickerScreen(
-            characters = assistantCharacters,
-            onDismiss = { showCharacterPicker = false },
-            onCharacterSelected = { character ->
-                showCharacterPicker = false
-                viewModel.markCharacterOpened(character.id)
-                onNavigateToChat(character.id)
-            }
-        )
-        return
-    }
 
     Box(
         modifier = Modifier
@@ -220,7 +190,7 @@ fun HomeScreen(
                     FloatingActionButtonMenuItem(
                         onClick = {
                             fabMenuExpanded = false
-                            showCharacterPicker = true
+                            onNavigateToCharacterPicker()
                         },
                         icon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) },
                         text = { Text("New Chat") }
@@ -251,7 +221,10 @@ fun HomeScreen(
                         placeholder = { Text("Search characters") },
                         leadingIcon = {
                             if (!searchActive) {
-                                IconButton(onClick = { showModelPicker = true }) {
+                                IconButton(onClick = { 
+                                    android.util.Log.d("HomeScreen", "Navigating to model picker")
+                                    onNavigateToModelPicker() 
+                                }) {
                                     Icon(
                                         imageVector = if (uiState.isModelLoaded) Icons.Filled.Widgets else Icons.Outlined.Widgets,
                                         contentDescription = "Model Selection",
@@ -411,11 +384,18 @@ private fun ThreadCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CharacterPickerScreen(
-    characters: List<Character>,
+fun CharacterPickerScreen(
     onDismiss: () -> Unit,
-    onCharacterSelected: (Character) -> Unit
+    onCharacterSelected: (String) -> Unit,
+    viewModel: HomeViewModel = hiltViewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
+    val characters = remember(uiState.characters) {
+        uiState.characters
+            .filter { it.id == DefaultCharacters.ASSISTANT_CHARACTER_ID }
+            .sortedWith(compareByDescending<Character> { it.lastUsedAt }.thenBy { it.name.lowercase() })
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -460,7 +440,7 @@ private fun CharacterPickerScreen(
                     gridItems(characters) { character ->
                         CharacterCard(
                             character = character,
-                            onClick = { onCharacterSelected(character) }
+                            onClick = { onCharacterSelected(character.id) }
                         )
                     }
                 }

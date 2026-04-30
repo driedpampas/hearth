@@ -113,6 +113,12 @@ import org.eu.nl.syu.charchat.data.HuggingFaceApiService
 import org.eu.nl.syu.charchat.data.HuggingFaceApiService.AccessResult
 import org.eu.nl.syu.charchat.data.ModelManager
 import org.eu.nl.syu.charchat.data.ModelRepository
+import org.eu.nl.syu.charchat.common.ModelSizeUtils
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Report
+import androidx.compose.material.icons.filled.ReportGmailerrorred
+import androidx.compose.material.icons.filled.Warning
 import java.util.Locale
 import javax.inject.Inject
 
@@ -616,6 +622,7 @@ fun SettingsLiteRtModelsScreen(
     val pullToRefreshState = rememberPullToRefreshState()
     var pendingModel by remember { mutableStateOf<AllowedModel?>(null) }
     var termsModel by remember { mutableStateOf<AllowedModel?>(null) }
+    var oomWarningModel by remember { mutableStateOf<AllowedModel?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -625,6 +632,21 @@ fun SettingsLiteRtModelsScreen(
         }
         pendingModel = null
     }
+
+    val startDownload: (AllowedModel) -> Unit = { model ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                pendingModel = model
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                viewModel.downloadModel(model)
+            }
+        } else {
+            viewModel.downloadModel(model)
+        }
+    }
+
+
 
     val (downloaded, available) = remember(uiState.availableModels, uiState.downloadedModelFiles) {
         uiState.availableModels.partition { viewModel.isDownloaded(it) }
@@ -708,15 +730,15 @@ fun SettingsLiteRtModelsScreen(
                                     termsModel = model
                                     return@ModelListItem
                                 }
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                                        pendingModel = model
-                                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    } else {
-                                        viewModel.downloadModel(model)
-                                    }
+                                
+                                val modelSize = ModelSizeUtils.parseModelSize(model.name)
+                                val compatibility = ModelSizeUtils.checkCompatibility(context, modelSize)
+                                
+                                if (compatibility == ModelSizeUtils.Compatibility.TOO_BIG || 
+                                    compatibility == ModelSizeUtils.Compatibility.UNKNOWN) {
+                                    oomWarningModel = model
                                 } else {
-                                    viewModel.downloadModel(model)
+                                    startDownload(model)
                                 }
                             },
                             onDelete = {},
@@ -746,6 +768,23 @@ fun SettingsLiteRtModelsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { termsModel = null }) { Text("Refuse") }
+            }
+        )
+    }
+
+    if (oomWarningModel != null) {
+        AlertDialog(
+            onDismissRequest = { oomWarningModel = null },
+            title = { Text("Model may be too large") },
+            text = { Text("This model's size could not be determined or it is estimated to require more RAM than your device safely provides. It may cause the app to crash or run extremely slowly. Do you still want to download it?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    oomWarningModel?.let { startDownload(it) }
+                    oomWarningModel = null
+                }) { Text("Download anyway") }
+            },
+            dismissButton = {
+                TextButton(onClick = { oomWarningModel = null }) { Text("Cancel") }
             }
         )
     }
@@ -800,7 +839,73 @@ fun ModelListItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    Text(model.description, style = MaterialTheme.typography.bodySmall)
+                    val author = model.author ?: "Unknown Author"
+                    val modelSize = ModelSizeUtils.parseModelSize(model.name)
+                    val context = LocalContext.current
+                    val compatibility = ModelSizeUtils.checkCompatibility(context, modelSize)
+
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.alpha(0.8f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = author,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 2.dp)
+                        ) {
+                            val sizeText = modelSize?.let { ModelSizeUtils.formatParameterCount(it) } ?: "?"
+                            Text(
+                                text = "$sizeText Parameters",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            val (color, text, icon) = when (compatibility) {
+                                ModelSizeUtils.Compatibility.FITS -> Triple(Color(0xFF4CAF50), "Fits", Icons.Default.CheckCircle)
+                                ModelSizeUtils.Compatibility.CLOSE -> Triple(Color(0xFFFF9800), "Cutting it close", Icons.Default.Warning)
+                                ModelSizeUtils.Compatibility.TOO_BIG -> Triple(Color(0xFFF44336), "Too big", Icons.Default.Report)
+                                ModelSizeUtils.Compatibility.UNKNOWN -> Triple(Color.Gray, "Model may not fit", Icons.Default.Warning)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = color
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = text,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = color
+                                )
+                            }
+                        }
+                        
+//                        Text(
+//                            text = model.description,
+//                            style = MaterialTheme.typography.labelSmall,
+//                            color = MaterialTheme.colorScheme.outline,
+//                            maxLines = 1,
+//                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+//                            modifier = Modifier.padding(top = 2.dp)
+//                        )
+                    }
                 }
             }
         },

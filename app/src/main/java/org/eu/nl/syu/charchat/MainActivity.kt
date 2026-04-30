@@ -35,6 +35,9 @@ import org.eu.nl.syu.charchat.ui.screens.CreateCharacterScreen
 import org.eu.nl.syu.charchat.ui.screens.HomeScreen
 import org.eu.nl.syu.charchat.ui.screens.ModelSettingsScreen
 import org.eu.nl.syu.charchat.ui.screens.DebugThemeScreen
+import org.eu.nl.syu.charchat.ui.screens.CharacterPickerScreen
+import org.eu.nl.syu.charchat.ui.screens.ModelPickerScreen
+
 import org.eu.nl.syu.charchat.ui.screens.SettingsEmbeddingModelsScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsGeneralScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsHuggingFaceAccountScreen
@@ -100,6 +103,24 @@ class MainActivity : ComponentActivity() {
 fun CharChatApp() {
     val navController = rememberNavController()
 
+    androidx.compose.runtime.DisposableEffect(navController) {
+        val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, destination, arguments ->
+            android.util.Log.d("CharChatNav", "Navigated to: ${destination.route} with args: $arguments")
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose {
+            navController.removeOnDestinationChangedListener(listener)
+        }
+    }
+
+    val safeNavigateBack: () -> Unit = {
+        // Only allow popping if the current screen is fully active.
+        // This instantly neutralizes rapid multi-taps.
+        if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+            navController.popBackStack()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -111,12 +132,18 @@ fun CharChatApp() {
                     onNavigateToChat = { id -> navController.navigate("chat/$id") },
                     onNavigateToSettings = { navController.navigate("settings") },
                     onNavigateToCreateCharacter = { navController.navigate("create_character") },
-                    onNavigateToModelSettings = { navController.navigate("model_settings") }
+                    onNavigateToModelSettings = { navController.navigate("model_settings") },
+                    onNavigateToModelPicker = { navController.navigate("model_picker") },
+                    onNavigateToCharacterPicker = { navController.navigate("character_picker") }
                 )
             }
             composable(route = "settings") {
                 SettingsMainScreen(
-                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateBack = { 
+                        if (navController.currentDestination?.route != "home") {
+                            safeNavigateBack()
+                        }
+                    },
                     onNavigateToGeneral = { navController.navigate("settings/general") },
                     onNavigateToModels = { navController.navigate("settings/models") },
                     onNavigateToDebugTheme = { navController.navigate("settings/debug_theme") }
@@ -124,17 +151,17 @@ fun CharChatApp() {
             }
             composable(route = "settings/debug_theme") {
                 DebugThemeScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { safeNavigateBack() }
                 )
             }
             composable(route = "settings/general") {
                 SettingsGeneralScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { safeNavigateBack() }
                 )
             }
             composable(route = "settings/models") {
                 SettingsModelsScreen(
-                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateBack = { safeNavigateBack() },
                     onNavigateToLiteRt = { navController.navigate("settings/models/litert") },
                     onNavigateToEmbeddingModels = { navController.navigate("settings/models/embedding") },
                     onNavigateToHuggingFace = { navController.navigate("settings/models/huggingface") }
@@ -142,29 +169,33 @@ fun CharChatApp() {
             }
             composable(route = "settings/models/huggingface") {
                 SettingsHuggingFaceAccountScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { safeNavigateBack() }
                 )
             }
             composable(route = "settings/models/litert") {
                 SettingsLiteRtModelsScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { safeNavigateBack() }
                 )
             }
             composable(route = "settings/models/embedding") {
                 SettingsEmbeddingModelsScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { safeNavigateBack() }
                 )
             }
             composable(route = "create_character") {
                 CreateCharacterScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { safeNavigateBack() }
                 )
             }
             composable(route = "chat/{threadId}") { backStackEntry ->
                 val threadId = backStackEntry.arguments?.getString("threadId") ?: ""
                 ChatScreen(
                     threadId = threadId,
-                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateBack = { 
+                        if (navController.currentDestination?.route != "home") {
+                            safeNavigateBack()
+                        }
+                    },
                     onNavigateToModelSettings = { characterId ->
                         navController.navigate("model_settings/$characterId")
                     }
@@ -174,13 +205,28 @@ fun CharChatApp() {
                 val characterId = backStackEntry.arguments?.getString("characterId")
                 ModelSettingsScreen(
                     characterId = characterId,
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { safeNavigateBack() }
                 )
             }
             composable(route = "model_settings") {
                 ModelSettingsScreen(
                     characterId = null,
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { safeNavigateBack() }
+                )
+            }
+            composable(route = "model_picker") {
+                ModelPickerScreen(
+                    onDismiss = { safeNavigateBack() },
+                    onOpenSettings = { navController.navigate("settings/models/litert") }
+                )
+            }
+            composable(route = "character_picker") {
+                CharacterPickerScreen(
+                    onDismiss = { safeNavigateBack() },
+                    onCharacterSelected = { characterId ->
+                        safeNavigateBack()
+                        navController.navigate("chat/$characterId")
+                    }
                 )
             }
         }
