@@ -9,6 +9,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -19,7 +20,7 @@ import androidx.compose.ui.unit.dp
 fun GlassySurface(
     modifier: Modifier = Modifier,
     shape: Shape = MaterialTheme.shapes.extraLarge,
-    color: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), // Base color for the glass effect
+    color: Color = MaterialTheme.colorScheme.primaryContainer,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     blurRadius: Dp = 4.dp, // Controls how far the color bleeds outward
     onClick: (() -> Unit)? = null,
@@ -37,14 +38,13 @@ fun GlassySurface(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .blur(blurRadius)
+                .blur(blurRadius, edgeTreatment = BlurredEdgeTreatment.Unbounded)
                 .background(color = color, shape = shape)
         )
 
         // 3. The Content Layer: The actual card surface. 
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
                 .clip(shape), // Clip is applied ONLY to the content layer
             //color = color.copy(alpha = 0.4f), // Semi-transparent so it feels glassy
             color = Color.Transparent,

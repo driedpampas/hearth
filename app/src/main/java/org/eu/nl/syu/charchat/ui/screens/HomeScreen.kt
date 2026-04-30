@@ -181,15 +181,15 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-//            .background(
-//                Brush.verticalGradient(
-//                    listOf(
-//                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.05f),
-//                        MaterialTheme.colorScheme.surfaceContainerLow,
-//                        MaterialTheme.colorScheme.surfaceContainerLow
-//                    )
-//                )
-//            )
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.05f),
+                        MaterialTheme.colorScheme.surfaceContainerLow,
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                    )
+                )
+            )
     ) {
         Scaffold(
             containerColor = Color.Transparent,
@@ -494,11 +494,10 @@ fun CharacterCard(
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Surface(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .clip(MaterialTheme.shapes.large),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+                GlassySurface(
+                    modifier = Modifier.size(100.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    shape = MaterialTheme.shapes.large
                 ) {
                 if (character.avatarUrl != null) {
                     AsyncImage(

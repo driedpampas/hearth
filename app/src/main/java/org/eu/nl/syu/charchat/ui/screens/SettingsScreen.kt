@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -112,6 +113,7 @@ import org.eu.nl.syu.charchat.data.HuggingFaceApiService
 import org.eu.nl.syu.charchat.data.HuggingFaceApiService.AccessResult
 import org.eu.nl.syu.charchat.data.ModelManager
 import org.eu.nl.syu.charchat.data.ModelRepository
+import java.util.Locale
 import javax.inject.Inject
 
 // --- Main Settings Screen ---
@@ -121,7 +123,8 @@ import javax.inject.Inject
 fun SettingsMainScreen(
     onNavigateBack: () -> Unit,
     onNavigateToGeneral: () -> Unit,
-    onNavigateToModels: () -> Unit
+    onNavigateToModels: () -> Unit,
+    onNavigateToDebugTheme: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -154,6 +157,27 @@ fun SettingsMainScreen(
                     leadingContent = { Icon(Icons.Default.ModelTraining, contentDescription = null) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
                     modifier = Modifier.clickable { onNavigateToModels() }
+                )
+            }
+
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+
+            item {
+                Text(
+                    "Debug",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Theme Debug") },
+                    supportingContent = { Text("Visualize color scheme and variants") },
+                    leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+                    modifier = Modifier.clickable { onNavigateToDebugTheme() }
                 )
             }
         }
@@ -762,10 +786,10 @@ fun ModelListItem(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     
-                    val downloadedMb = String.format("%.1f", stats.downloadedBytes / (1024f * 1024f))
-                    val totalMb = String.format("%.1f", stats.totalBytes / (1024f * 1024f))
+                    val downloadedMb = String.format(Locale.US, "%.1f", stats.downloadedBytes / (1024f * 1024f))
+                    val totalMb = String.format(Locale.US, "%.1f", stats.totalBytes / (1024f * 1024f))
                     val speedKb = stats.speed / 1024
-                    val speedStr = if (speedKb > 1024) "${String.format("%.1f", speedKb / 1024f)} MB/s" else "$speedKb KB/s"
+                    val speedStr = if (speedKb > 1024) "${String.format(Locale.US, "%.1f", speedKb / 1024f)} MB/s" else "$speedKb KB/s"
                     val etaStr = if (stats.eta > 0) {
                         if (stats.eta > 60) "${stats.eta / 60}m ${stats.eta % 60}s" else "${stats.eta}s"
                     } else ""
@@ -791,6 +815,12 @@ fun ModelListItem(
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (stats != null && stats.progress < 100) {
+                    IconButton(onClick = { viewModel.cancelDownload(model) }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Cancel Download", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+
                 if (isDownloaded) {
                     IconButton(onClick = onDelete) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
@@ -802,7 +832,7 @@ fun ModelListItem(
                         modifier = Modifier.padding(start = 8.dp)
                     )
                 } else if (progress != null && progress.progress < 100) {
-                    Text("${progress.progress}%", style = MaterialTheme.typography.bodySmall)
+                    //Text("${progress.progress}%", style = MaterialTheme.typography.bodySmall)
                 } else {
                     if (showTermsAction || isTermsRequiredError(error)) {
                         Button(onClick = onAcceptTerms ?: onDownload) {
@@ -1027,7 +1057,7 @@ fun SettingsHuggingFaceAccountScreen(
 // --- ViewModel and Helper Classes ---
 
 data class DownloadStats(
-    val progress: Int,
+    val progress: Float,
     val downloadedBytes: Long = 0,
     val totalBytes: Long = 0,
     val speed: Long = 0,
@@ -1238,7 +1268,7 @@ class ModelsViewModel @Inject constructor(
                     val fileName = resolveFileName(info)
                     
                     if (!info.state.isFinished) {
-                        val progress = info.progress.getInt("progress", 0)
+                        val progress = info.progress.getFloat("progress", 0f)
                         val downloadedBytes = info.progress.getLong("downloadedBytes", 0)
                         val totalBytes = info.progress.getLong("totalBytes", 0)
                         val speed = info.progress.getLong("speed", 0)
@@ -1386,6 +1416,18 @@ class ModelsViewModel @Inject constructor(
 
             val url = modelRepository.getDownloadUrl(model)
             modelManager.downloadModel(url, fileName, modelRepository.serializeModel(model))
+        }
+    }
+
+    fun cancelDownload(model: AllowedModel) {
+        val fileName = modelRepository.getDownloadFileName(model)
+        modelManager.cancelDownload(fileName)
+        
+        // Clear progress from UI immediately
+        _uiState.update { 
+            val newProgress = it.downloadProgress.toMutableMap()
+            newProgress.remove(fileName)
+            it.copy(downloadProgress = newProgress)
         }
     }
 

@@ -56,6 +56,10 @@ class ModelManager @Inject constructor(
         // The foreground service notification will handle the UI for the global app.
     }
 
+    fun cancelDownload(fileName: String) {
+        WorkManager.getInstance(context).cancelUniqueWork("model_download_$fileName")
+    }
+
     fun getLocalModels(): List<File> {
         return getModelsDir().listFiles()?.toList() ?: emptyList()
     }

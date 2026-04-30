@@ -52,13 +52,16 @@ class DownloadWorker @AssistedInject constructor(
         val urlStr = inputData.getString("url") ?: return Result.failure()
         val fileName = inputData.getString("fileName") ?: return Result.failure()
         val modelMetadataJson = inputData.getString("modelMetadataJson")
+        val modelsDir = File(applicationContext.filesDir, "models")
+        val tmpFile = File(modelsDir, "$fileName.tmp")
+        val outputFile = File(modelsDir, fileName)
 
         return withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Starting download: $fileName from $urlStr")
                 setForeground(createForegroundInfo(0, fileName, 0, -1))
                 // Also set initial progress with fileName
-                setProgress(Data.Builder().putInt("progress", 0).putString("fileName", fileName).build())
+                setProgress(Data.Builder().putFloat("progress", 0f).putString("fileName", fileName).build())
 
                 val url = URL(urlStr)
                 val connection = url.openConnection() as HttpURLConnection
@@ -101,14 +104,10 @@ class DownloadWorker @AssistedInject constructor(
                 val totalBytes = connection.contentLengthLong
                 Log.d(TAG, "File size: ${totalBytes / (1024 * 1024)} MB")
                 
-                val modelsDir = File(applicationContext.filesDir, "models")
                 if (!modelsDir.exists()) {
                     Log.d(TAG, "Creating models directory: ${modelsDir.absolutePath}")
                     modelsDir.mkdirs()
                 }
-
-                val outputFile = File(modelsDir, fileName)
-                val tmpFile = File(modelsDir, "$fileName.tmp")
 
                 val inputStream = connection.inputStream
                 val outputStream = FileOutputStream(tmpFile)
@@ -121,13 +120,18 @@ class DownloadWorker @AssistedInject constructor(
 
                 Log.d(TAG, "Downloading $fileName to ${tmpFile.name}...")
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    if (isStopped) {
+                        Log.i(TAG, "Download cancelled: $fileName")
+                        break
+                    }
                     outputStream.write(buffer, 0, bytesRead)
                     downloadedBytes += bytesRead
 
                     val currentTime = System.currentTimeMillis()
                     val timeDiff = currentTime - lastProgressUpdate
-                    if (timeDiff >= 1000) { // Update every 1s
-                        val progress = if (totalBytes > 0) (downloadedBytes * 100 / totalBytes).toInt() else 0
+                    if (timeDiff >= 200) { // Update every 200ms for "live" feel
+                        val progress = if (totalBytes > 0) (downloadedBytes.toFloat() / totalBytes * 100f) else 0f
+                        val progressInt = progress.toInt()
                         
                         val bytesSinceLast = downloadedBytes - lastDownloadedBytes
                         val speed = (bytesSinceLast * 1000 / timeDiff) // bytes per second
@@ -138,10 +142,10 @@ class DownloadWorker @AssistedInject constructor(
                             -1L
                         }
 
-                        Log.v(TAG, "Download progress for $fileName: $progress% (${downloadedBytes / 1024} KB/s)")
+                        Log.v(TAG, "Download progress for $fileName: ${String.format("%.2f", progress)}% (${downloadedBytes / 1024} KB/s)")
                         
                         setProgress(Data.Builder()
-                            .putInt("progress", progress)
+                            .putFloat("progress", progress)
                             .putString("fileName", fileName)
                             .putLong("downloadedBytes", downloadedBytes)
                             .putLong("totalBytes", totalBytes)
@@ -149,7 +153,7 @@ class DownloadWorker @AssistedInject constructor(
                             .putLong("eta", eta)
                             .build())
                         
-                        setForeground(createForegroundInfo(progress, fileName, speed, eta))
+                        setForeground(createForegroundInfo(progressInt, fileName, speed, eta))
                         
                         lastProgressUpdate = currentTime
                         lastDownloadedBytes = downloadedBytes
@@ -159,6 +163,14 @@ class DownloadWorker @AssistedInject constructor(
                 outputStream.flush()
                 outputStream.close()
                 inputStream.close()
+
+                if (isStopped) {
+                    if (tmpFile.exists()) {
+                        tmpFile.delete()
+                        Log.d(TAG, "Cleaned up temporary file after cancellation: ${tmpFile.name}")
+                    }
+                    return@withContext Result.failure()
+                }
 
                 Log.d(TAG, "Download completed. Verifying and moving to final destination...")
                 if (outputFile.exists()) {
@@ -179,7 +191,7 @@ class DownloadWorker @AssistedInject constructor(
                     }
                     return@withContext Result.success(
                         Data.Builder()
-                            .putInt("progress", 100)
+                            .putFloat("progress", 100f)
                             .putString("fileName", fileName)
                             .build()
                     )
@@ -194,6 +206,10 @@ class DownloadWorker @AssistedInject constructor(
                 }
 
             } catch (e: Exception) {
+                if (tmpFile.exists()) {
+                    tmpFile.delete()
+                    Log.d(TAG, "Cleaned up temporary file after exception: ${tmpFile.name}")
+                }
                 Log.e(TAG, "Exception during download of $fileName", e)
                 return@withContext Result.failure(
                     Data.Builder()

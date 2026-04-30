@@ -34,6 +34,7 @@ import org.eu.nl.syu.charchat.ui.screens.ChatScreen
 import org.eu.nl.syu.charchat.ui.screens.CreateCharacterScreen
 import org.eu.nl.syu.charchat.ui.screens.HomeScreen
 import org.eu.nl.syu.charchat.ui.screens.ModelSettingsScreen
+import org.eu.nl.syu.charchat.ui.screens.DebugThemeScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsEmbeddingModelsScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsGeneralScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsHuggingFaceAccountScreen
@@ -117,7 +118,13 @@ fun CharChatApp() {
                 SettingsMainScreen(
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToGeneral = { navController.navigate("settings/general") },
-                    onNavigateToModels = { navController.navigate("settings/models") }
+                    onNavigateToModels = { navController.navigate("settings/models") },
+                    onNavigateToDebugTheme = { navController.navigate("settings/debug_theme") }
+                )
+            }
+            composable(route = "settings/debug_theme") {
+                DebugThemeScreen(
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
             composable(route = "settings/general") {
