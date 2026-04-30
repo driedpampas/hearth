@@ -36,6 +36,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.eu.nl.syu.charchat.data.AllowedModel
+import org.eu.nl.syu.charchat.ui.components.GlassySurface
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import org.eu.nl.syu.charchat.ui.viewmodels.HomeUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,8 +50,22 @@ fun ModelPickerScreen(
     onSelectModel: (java.io.File) -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    Scaffold(
-        topBar = {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.05f),
+                        MaterialTheme.colorScheme.surfaceContainerLow,
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                    )
+                )
+            )
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
             androidx.compose.material3.TopAppBar(
                 title = { Text("Select Model") },
                 navigationIcon = {
@@ -111,13 +129,12 @@ fun ModelPickerScreen(
                             val allowedModel = filenameToModel[file.name]
                             val sizeInMb = file.length() / (1024f * 1024f)
 
-                            ElevatedCard(
+                            GlassySurface(
                                 onClick = { onSelectModel(file) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .alpha(if (uiState.isModelLoading) 0.5f else 1f),
-                                enabled = !uiState.isModelLoading,
-                                shape = MaterialTheme.shapes.extraLarge
+                                enabled = !uiState.isModelLoading
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -184,5 +201,6 @@ fun ModelPickerScreen(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter))
             }
         }
+    }
     }
 }

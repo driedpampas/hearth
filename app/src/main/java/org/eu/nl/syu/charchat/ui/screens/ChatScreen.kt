@@ -77,6 +77,7 @@ import org.eu.nl.syu.charchat.data.MessageRole
 import org.eu.nl.syu.charchat.ui.components.MarkdownText
 import org.eu.nl.syu.charchat.ui.viewmodels.ChatViewModel
 import org.eu.nl.syu.charchat.ui.screens.ModelsViewModel
+import org.eu.nl.syu.charchat.ui.components.GlassySurface
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -127,7 +128,11 @@ fun ChatScreen(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant)
+                            listOf(
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.05f),
+                                MaterialTheme.colorScheme.surfaceContainerLow,
+                                MaterialTheme.colorScheme.surfaceContainerLow
+                            )
                         )
                     )
             )
@@ -259,10 +264,10 @@ fun ChatInput(
     onValueChange: (String) -> Unit,
     onSend: () -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        tonalElevation = 8.dp,
-        modifier = Modifier.windowInsetsPadding(WindowInsets.ime)
+    GlassySurface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+        modifier = Modifier.windowInsetsPadding(WindowInsets.ime),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Row(
             modifier = Modifier
@@ -312,11 +317,10 @@ fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean, modelDisplay
             bottomEnd = if (isUser) 4.dp else 20.dp
         )
         
-        Surface(
+        GlassySurface(
             modifier = Modifier.padding(vertical = 4.dp),
             shape = bubbleShape,
-            color = if (isUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
-            tonalElevation = if (isUser) 0.dp else 2.dp
+            color = if (isUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
         ) {
             MarkdownText(
                 text = message.content,

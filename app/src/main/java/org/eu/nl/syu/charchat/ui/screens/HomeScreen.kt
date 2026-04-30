@@ -4,7 +4,7 @@ import android.annotation.SuppressLint
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,15 +27,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Widgets
-import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Numbers
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingActionButtonMenu
@@ -43,15 +41,12 @@ import androidx.compose.material3.FloatingActionButtonMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.ToggleFloatingActionButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +59,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
@@ -77,7 +76,7 @@ import coil.compose.AsyncImage
 import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.ChatThread
 import org.eu.nl.syu.charchat.data.DefaultCharacters
-import org.eu.nl.syu.charchat.ui.viewmodels.HomeUiState
+import org.eu.nl.syu.charchat.ui.components.GlassySurface
 import org.eu.nl.syu.charchat.ui.viewmodels.HomeViewModel
 import androidx.compose.foundation.lazy.grid.items as gridItems
 
@@ -179,8 +178,22 @@ fun HomeScreen(
         return
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+//            .background(
+//                Brush.verticalGradient(
+//                    listOf(
+//                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.05f),
+//                        MaterialTheme.colorScheme.surfaceContainerLow,
+//                        MaterialTheme.colorScheme.surfaceContainerLow
+//                    )
+//                )
+//            )
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             Box {
                 FloatingActionButtonMenu(
@@ -342,6 +355,7 @@ fun HomeScreen(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -350,7 +364,7 @@ private fun ThreadCard(
     character: Character?,
     onClick: () -> Unit
 ) {
-    ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+    GlassySurface(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
             Text(text = thread.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Row(
@@ -402,37 +416,53 @@ private fun CharacterPickerScreen(
     onDismiss: () -> Unit,
     onCharacterSelected: (Character) -> Unit
 ) {
-    Scaffold(
-        topBar = {
-            androidx.compose.material3.TopAppBar(
-                title = { Text("New Chat") },
-                navigationIcon = {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        if (characters.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("No assistant character available")
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(1),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize().padding(paddingValues)
-            ) {
-                gridItems(characters) { character ->
-                    CharacterCard(
-                        character = character,
-                        onClick = { onCharacterSelected(character) }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.05f),
+                        MaterialTheme.colorScheme.surfaceContainerLow,
+                        MaterialTheme.colorScheme.surfaceContainerLow
                     )
+                )
+            )
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                androidx.compose.material3.TopAppBar(
+                    title = { Text("New Chat") },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                )
+            }
+        ) { paddingValues ->
+            if (characters.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No assistant character available")
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(1),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize().padding(paddingValues)
+                ) {
+                    gridItems(characters) { character ->
+                        CharacterCard(
+                            character = character,
+                            onClick = { onCharacterSelected(character) }
+                        )
+                    }
                 }
             }
         }
@@ -444,23 +474,32 @@ fun CharacterCard(
     character: Character,
     onClick: () -> Unit
 ) {
-    ElevatedCard(
+    GlassySurface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Surface(
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (character.sceneBackgroundUrl != null) {
+                AsyncImage(
+                    model = character.sceneBackgroundUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize().blur(8.dp).alpha(0.3f)
+                )
+            }
+            
+            Column(
                 modifier = Modifier
-                    .size(100.dp)
-                    .clip(MaterialTheme.shapes.large),
-                color = MaterialTheme.colorScheme.surfaceVariant
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Surface(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(MaterialTheme.shapes.large),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+                ) {
                 if (character.avatarUrl != null) {
                     AsyncImage(
                         model = character.avatarUrl,
@@ -503,6 +542,7 @@ fun CharacterCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 4.dp)
             )
+        }
         }
     }
 }
