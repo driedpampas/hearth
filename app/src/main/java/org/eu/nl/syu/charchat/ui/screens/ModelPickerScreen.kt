@@ -16,27 +16,33 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-
+import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import org.eu.nl.syu.charchat.data.AllowedModel
 import org.eu.nl.syu.charchat.ui.components.GlassySurface
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Brush
@@ -47,33 +53,66 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import org.eu.nl.syu.charchat.common.ModelSizeUtils
 import java.io.File
 
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.eu.nl.syu.charchat.ui.viewmodels.HomeViewModel
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModelPickerScreen(
     onDismiss: () -> Unit,
     onOpenSettings: () -> Unit,
+    onNavigateToModelSettings: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val onSelectModel: (java.io.File) -> Unit = { file -> viewModel.selectModel(file) }
 
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        viewModel.refreshModels()
+    val filenameToModel = remember(uiState.availableModels) {
+        buildMap {
+            uiState.availableModels.forEach { model ->
+                model.localFileName?.let { put(it, model) }
+                put(model.modelFile, model)
+                put(model.modelId.substringAfterLast("/"), model)
+                put(model.modelId.substringAfterLast("/") + ".litertlm", model)
+                put(model.modelId.substringAfterLast("/") + ".tflite", model)
+            }
+        }
     }
 
-    val filenameToModel = remember(uiState.availableModels) {
-        uiState.availableModels.associateBy { model: org.eu.nl.syu.charchat.data.AllowedModel -> 
-            model.modelId.substringAfterLast("/") + ".litertlm" 
-        }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.reloadLocalModels()
+    }
+
+    var showRetryDialog by remember { mutableStateOf(false) }
+    var retryFile by remember { mutableStateOf<File?>(null) }
+
+    if (showRetryDialog && retryFile != null) {
+        AlertDialog(
+            onDismissRequest = { showRetryDialog = false },
+            title = { Text("Retry Model") },
+            text = { Text("This model previously failed to load. Do you want to retry loading it?") },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.retryModel(retryFile!!)
+                    showRetryDialog = false
+                }) {
+                    Text("Retry")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showRetryDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     android.util.Log.d("ModelPickerScreen", "Composing ModelPickerScreen: downloadedModels=${uiState.downloadedModels.size}, selectedModel=${uiState.selectedModel}")
@@ -97,7 +136,13 @@ fun ModelPickerScreen(
             androidx.compose.material3.TopAppBar(
                 title = { Text("Select Model") },
                 navigationIcon = {
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = {
+                        if (uiState.notification != null) {
+                            viewModel.clearNotification()
+                        } else {
+                            onDismiss()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -109,11 +154,7 @@ fun ModelPickerScreen(
             when {
                 uiState.isModelLoading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth(0.6f))
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text("Loading model...")
-                        }
+                        LoadingTextAnimation()
                     }
                 }
                 uiState.notification != null -> {
@@ -157,24 +198,23 @@ fun ModelPickerScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        for (mFile in uiState.downloadedModels) {
-                            item {
-                                ModelItem(
-                                    mFile = mFile,
-                                    uiState = uiState,
-                                    filenameToModel = filenameToModel,
-                                    onSelectModel = onSelectModel,
-                                    onOpenSettings = onOpenSettings
-                                )
-                            }
+                        items(uiState.downloadedModels) { mFile ->
+                            val isFailed = uiState.failedModels.contains(mFile.name)
+                            ModelItem(
+                                mFile = mFile,
+                                uiState = uiState,
+                                filenameToModel = filenameToModel,
+                                onSelectModel = onSelectModel,
+                                onOpenModelSettings = onNavigateToModelSettings,
+                                isFailed = isFailed,
+                                onRetry = { retryFile = mFile; showRetryDialog = true }
+                            )
                         }
                     }
                 }
             }
 
-            if (uiState.isModelLoading) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter))
-            }
+            // PremiumLoadingText is used in the center, so no top bar indicator needed
         }
     }
     }
@@ -186,21 +226,23 @@ private fun ModelItem(
     uiState: HomeUiState,
     filenameToModel: Map<String, org.eu.nl.syu.charchat.data.AllowedModel>,
     onSelectModel: (java.io.File) -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenModelSettings: () -> Unit,
+    isFailed: Boolean = false,
+    onRetry: () -> Unit = {}
 ) {
     val currentModelName = mFile.name
     val allowedModel = filenameToModel[currentModelName]
     val diskSizeMb = mFile.length().toFloat() / (1024f * 1024f)
     val diskSizeText = if (diskSizeMb >= 1024f) 
-        String.format("%.2f GB on disk", diskSizeMb / 1024f) 
+        String.format(Locale.US, "%.2f GB on disk", diskSizeMb / 1024f)
     else 
-        String.format("%.1f MB on disk", diskSizeMb)
+        String.format(Locale.US, "%.1f MB on disk", diskSizeMb)
 
     GlassySurface(
-        onClick = { onSelectModel(mFile) },
+        onClick = { if (isFailed) onRetry() else onSelectModel(mFile) },
         modifier = Modifier
             .fillMaxWidth()
-            .alpha(if (uiState.isModelLoading) 0.5f else 1f),
+            .alpha(if (uiState.isModelLoading || isFailed) 0.5f else 1f),
         enabled = !uiState.isModelLoading
     ) {
         Row(
@@ -298,12 +340,72 @@ private fun ModelItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
+                if (isFailed) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Previously failed to load",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                }
             }
             if (uiState.selectedModel == currentModelName && uiState.isModelLoaded) {
-                IconButton(onClick = onOpenSettings) {
-                    Icon(Icons.Default.Storage, contentDescription = "Model Options")
+                IconButton(onClick = onOpenModelSettings) {
+                    Icon(Icons.Default.Settings, contentDescription = "Model Options")
                 }
             }
         }
     }
+}
+
+@Composable
+@Preview
+private fun LoadingTextAnimation() {
+    val infiniteTransition = rememberInfiniteTransition()
+    val translateAnim by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1500f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "LoadingTextAnimation"
+    )
+
+    val brush = Brush.linearGradient(
+        colors = listOf(
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+            MaterialTheme.colorScheme.primary,
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+        ),
+        start = androidx.compose.ui.geometry.Offset(translateAnim - 500f, translateAnim - 500f),
+        end = androidx.compose.ui.geometry.Offset(translateAnim, translateAnim)
+    )
+
+    Text(
+        text = "Loading model...",
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .graphicsLayer(alpha = 0.99f)
+            .drawWithCache {
+                onDrawWithContent {
+                    drawContent()
+                    drawRect(
+                        brush = brush,
+                        blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn
+                    )
+                }
+            }
+    )
 }
