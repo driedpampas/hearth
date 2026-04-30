@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -152,15 +153,19 @@ fun ModelPickerScreen(
 
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when {
-                uiState.isModelLoading -> {
+                        uiState.isModelLoading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        LoadingTextAnimation()
+                        org.eu.nl.syu.charchat.ui.components.PremiumLoadingText("Loading model...")
                     }
                 }
                 uiState.notification != null -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Model unavailable")
+                            Text(
+                                "Model unavailable",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = uiState.notification.orEmpty(),
@@ -169,6 +174,15 @@ fun ModelPickerScreen(
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(horizontal = 24.dp)
                             )
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Button(
+                                onClick = onNavigateToModelSettings,
+                                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+                            ) {
+                                Icon(Icons.Default.Tune, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Adjust Settings")
+                            }
                         }
                     }
                 }
@@ -359,7 +373,7 @@ private fun ModelItem(
                     }
                 }
             }
-            if (uiState.selectedModel == currentModelName && uiState.isModelLoaded) {
+            if (uiState.selectedModel == currentModelName || isFailed) {
                 IconButton(onClick = onOpenModelSettings) {
                     Icon(Icons.Default.Settings, contentDescription = "Model Options")
                 }
@@ -368,44 +382,4 @@ private fun ModelItem(
     }
 }
 
-@Composable
-@Preview
-private fun LoadingTextAnimation() {
-    val infiniteTransition = rememberInfiniteTransition()
-    val translateAnim by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1500f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "LoadingTextAnimation"
-    )
 
-    val brush = Brush.linearGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-            MaterialTheme.colorScheme.primary,
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-        ),
-        start = androidx.compose.ui.geometry.Offset(translateAnim - 500f, translateAnim - 500f),
-        end = androidx.compose.ui.geometry.Offset(translateAnim, translateAnim)
-    )
-
-    Text(
-        text = "Loading model...",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier
-            .graphicsLayer(alpha = 0.99f)
-            .drawWithCache {
-                onDrawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = brush,
-                        blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn
-                    )
-                }
-            }
-    )
-}

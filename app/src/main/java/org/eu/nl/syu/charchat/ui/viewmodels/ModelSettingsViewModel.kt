@@ -69,41 +69,52 @@ class ModelSettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateBackend(backend: String) {
+    fun updateSettings(
+        backend: String,
+        maxTokens: Int,
+        characterId: String?,
+        temp: Float,
+        topP: Float,
+        topK: Int,
+        enableThinking: Boolean
+    ) {
         viewModelScope.launch {
-            modelRepository.setPreferredBackend(backend)
-            reloadModel()
-        }
-    }
-
-    fun updateMaxTokens(tokens: Int) {
-        viewModelScope.launch {
-            modelRepository.setDefaultMaxTokens(tokens)
-            reloadModel()
-        }
-    }
-
-    fun updateCharacterSettings(temp: Float, topP: Float, topK: Int, enableThinking: Boolean) {
-        val character = _uiState.value.character ?: return
-        viewModelScope.launch {
-            characterDao.updateSamplingSettings(
-                id = character.id,
-                temp = temp,
-                topP = topP,
-                topK = topK,
-                enableThinking = enableThinking
-            )
-            _uiState.update {
-                it.copy(
-                    character = character.copy(
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            try {
+                // Save global settings
+                modelRepository.setPreferredBackend(backend)
+                modelRepository.setDefaultMaxTokens(maxTokens)
+                
+                // Save character settings if applicable
+                if (characterId != null) {
+                    characterDao.updateSamplingSettings(
+                        id = characterId,
                         temp = temp,
                         topP = topP,
                         topK = topK,
                         enableThinking = enableThinking
                     )
-                )
+                }
+                
+                // Update local state
+                _uiState.update { state ->
+                    state.copy(
+                        preferredBackend = backend,
+                        defaultMaxTokens = maxTokens,
+                        character = state.character?.copy(
+                            temp = temp,
+                            topP = topP,
+                            topK = topK,
+                            enableThinking = enableThinking
+                        )
+                    )
+                }
+                
+                // Reload engine with new settings
+                reloadModel()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to update settings") }
             }
-            reloadModel()
         }
     }
 
