@@ -39,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -48,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -74,6 +76,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -86,6 +89,8 @@ import org.eu.nl.syu.charchat.ui.components.MarkdownText
 import org.eu.nl.syu.charchat.ui.viewmodels.ChatViewModel
 import org.eu.nl.syu.charchat.ui.screens.ModelsViewModel
 import org.eu.nl.syu.charchat.ui.components.GlassySurface
+import org.eu.nl.syu.charchat.ui.components.ThinkingProcess
+import org.eu.nl.syu.charchat.ui.components.parseThinkingContent
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -204,10 +209,25 @@ fun ChatScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Assistant unavailable", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.headlineSmall)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                        Text(
+                            text = if (uiState.modelError == "Model not loaded.") "Model Ready" else "Assistant unavailable",
+                            color = if (uiState.modelError == "Model not loaded.") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.headlineSmall
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(uiState.modelError ?: "Model unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = uiState.modelError ?: "Model unavailable",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center
+                        )
+                        if (uiState.modelError == "Model not loaded.") {
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Button(onClick = { viewModel.loadModel() }) {
+                                Text("Load Model")
+                            }
+                        }
                     }
                 }
             } else {
@@ -315,6 +335,10 @@ fun ChatInput(
 @Composable
 fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean, modelDisplayName: String?) {
     val isUser = message.role == MessageRole.USER
+    val (thought, mainContent, isThoughtComplete) = remember(message.content) {
+        if (isUser) Triple(null, message.content, true) else parseThinkingContent(message.content)
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
@@ -344,11 +368,20 @@ fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean, modelDisplay
             shape = bubbleShape,
             color = if (isUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
         ) {
-            MarkdownText(
-                text = message.content,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                textColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-            )
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                if (thought != null) {
+                    ThinkingProcess(
+                        thought = thought,
+                        isComplete = isThoughtComplete
+                    )
+                }
+                if (mainContent.isNotEmpty()) {
+                    MarkdownText(
+                        text = mainContent,
+                        textColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
         }
         
         // Stats for Nerds: show below model messages when enabled
@@ -405,7 +438,7 @@ fun TypingIndicator() {
             Box(
                 modifier = Modifier
                     .size(6.dp)
-                    .offset(y = yOffset.dp)
+                    .offset { IntOffset(x = 0, y = yOffset.dp.roundToPx()) }
                     .background(MaterialTheme.colorScheme.primary, CircleShape)
             )
         }

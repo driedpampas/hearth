@@ -82,10 +82,10 @@ class ChatViewModel @Inject constructor(
                     it.copy(
                         character = character,
                         threadTitle = thread.title,
-                        modelError = if (character.modelReference.isBlank()) {
-                            "Select a model first."
-                        } else {
-                            "Model file not found: ${character.modelReference}.\nDid you download it?"
+                        modelError = when {
+                            character.modelReference.isBlank() -> "Select a model first."
+                            modelPath == null -> "Model file not found: ${character.modelReference}.\nDid you download it?"
+                            else -> "Model not loaded."
                         }
                     )
                 }
@@ -203,6 +203,25 @@ class ChatViewModel @Inject constructor(
             file.isFile && (file.name == modelReference || file.nameWithoutExtension == baseName)
         }
         return inferred?.absolutePath
+    }
+
+    fun loadModel() {
+        val character = _uiState.value.character ?: return
+        val modelPath = resolveModelPath(character.modelReference) ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingModel = true, modelError = null) }
+            try {
+                val maxTokens = modelRepository.defaultMaxTokens.first()
+                withContext(Dispatchers.IO) {
+                    engineWrapper.initialize(modelPath, maxTokens = maxTokens)
+                }
+                _uiState.update { it.copy(isLoadingModel = false, maxTokens = maxTokens) }
+                engineWrapper.createConversation(character).collect()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoadingModel = false, modelError = "Failed to load model: ${e.message}") }
+            }
+        }
     }
 
     fun sendMessage(content: String) {

@@ -338,7 +338,8 @@ fun SettingsModelsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToLiteRt: () -> Unit,
     onNavigateToEmbeddingModels: () -> Unit,
-    onNavigateToHuggingFace: () -> Unit
+    onNavigateToHuggingFace: () -> Unit,
+    onNavigateToModelSettings: () -> Unit
 ) {
     val viewModel: ModelsViewModel = hiltViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -423,6 +424,7 @@ fun SettingsModelsScreen(
                         error = null,
                         onDownload = {},
                         onDelete = { viewModel.deleteModel(model) },
+                        onOpenSettings = onNavigateToModelSettings,
                         viewModel = viewModel
                     )
                 }
@@ -614,6 +616,7 @@ fun SettingsModelsScreen(
 @Composable
 fun SettingsLiteRtModelsScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToModelSettings: () -> Unit,
     viewModel: ModelsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -699,6 +702,7 @@ fun SettingsLiteRtModelsScreen(
                             error = null,
                             onDownload = {},
                             onDelete = { viewModel.deleteModel(model) },
+                            onOpenSettings = onNavigateToModelSettings,
                             viewModel = viewModel
                         )
                     }
@@ -805,6 +809,7 @@ fun ModelListItem(
     error: String?,
     onDownload: () -> Unit,
     onDelete: () -> Unit,
+    onOpenSettings: (() -> Unit)? = null,
     onAcceptTerms: (() -> Unit)? = null,
     showTermsAction: Boolean = false,
     viewModel: ModelsViewModel
@@ -929,6 +934,11 @@ fun ModelListItem(
                 if (isDownloaded) {
                     IconButton(onClick = onDelete) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                    }
+                    if (onOpenSettings != null) {
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
                     }
                     Icon(
                         Icons.Default.CheckCircle,

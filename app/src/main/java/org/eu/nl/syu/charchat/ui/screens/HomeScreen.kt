@@ -133,6 +133,12 @@ fun HomeScreen(
             .take(4)
     }
 
+    val recentIds = remember(recentCharacters) { recentCharacters.map { it.id }.toSet() }
+
+    val newChatCharacters = remember(visibleCharacters, recentIds) {
+        visibleCharacters.filter { it.id !in recentIds }
+    }
+
     val openCharacter: (Character) -> Unit = { character ->
         viewModel.markCharacterOpened(character.id)
         onNavigateToChat(character.id)
@@ -222,11 +228,7 @@ fun HomeScreen(
                         leadingIcon = {
                             if (!searchActive) {
                                 IconButton(onClick = {
-                                    if (uiState.isModelLoaded) {
-                                        onNavigateToModelSettings()
-                                    } else {
-                                        onNavigateToModelPicker()
-                                    }
+                                    onNavigateToModelPicker()
                                 }) {
                                     Icon(
                                         imageVector = if (uiState.isModelLoaded) Icons.Filled.Widgets else Icons.Outlined.Widgets,
@@ -282,6 +284,7 @@ fun HomeScreen(
                         Text(
                             text = "Recent Characters",
                             style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
@@ -299,6 +302,7 @@ fun HomeScreen(
                         Text(
                             text = "Chats",
                             style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(top = if (recentCharacters.isNotEmpty()) 4.dp else 0.dp, bottom = 4.dp)
                         )
                     }
@@ -312,7 +316,7 @@ fun HomeScreen(
                     }
                 }
 
-                if (visibleCharacters.isNotEmpty()) {
+                if (newChatCharacters.isNotEmpty()) {
                     item {
                         Text(
                             text = if (filteredThreads.isEmpty()) "Characters" else "Start a new chat",
@@ -321,7 +325,7 @@ fun HomeScreen(
                         )
                     }
 
-                    items(visibleCharacters, key = { "visible-${it.id}" }) { character ->
+                    items(newChatCharacters, key = { "visible-${it.id}" }) { character ->
                         CharacterCard(
                             character = character,
                             onClick = { openCharacter(character) }

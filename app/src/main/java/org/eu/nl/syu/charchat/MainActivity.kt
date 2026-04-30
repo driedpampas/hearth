@@ -164,7 +164,8 @@ fun CharChatApp() {
                     onNavigateBack = { safeNavigateBack() },
                     onNavigateToLiteRt = { navController.navigate("settings/models/litert") },
                     onNavigateToEmbeddingModels = { navController.navigate("settings/models/embedding") },
-                    onNavigateToHuggingFace = { navController.navigate("settings/models/huggingface") }
+                    onNavigateToHuggingFace = { navController.navigate("settings/models/huggingface") },
+                    onNavigateToModelSettings = { navController.navigate("model_settings") }
                 )
             }
             composable(route = "settings/models/huggingface") {
@@ -174,7 +175,8 @@ fun CharChatApp() {
             }
             composable(route = "settings/models/litert") {
                 SettingsLiteRtModelsScreen(
-                    onNavigateBack = { safeNavigateBack() }
+                    onNavigateBack = { safeNavigateBack() },
+                    onNavigateToModelSettings = { navController.navigate("model_settings") }
                 )
             }
             composable(route = "settings/models/embedding") {

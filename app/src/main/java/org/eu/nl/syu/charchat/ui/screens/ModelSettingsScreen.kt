@@ -303,7 +303,7 @@ fun ModelSettingsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        org.eu.nl.syu.charchat.ui.components.PremiumLoadingText("Applying changes...")
+                        org.eu.nl.syu.charchat.ui.components.FadeTextAnimation(text = "Applying changes...")
                     }
                 }
             }

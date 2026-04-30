@@ -19,7 +19,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -146,20 +148,35 @@ fun ModelPickerScreen(
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
+                actions = {
+                    if (uiState.isModelLoaded) {
+                        IconButton(onClick = { viewModel.unloadModel() }) {
+                            Icon(
+                                imageVector = Icons.Default.PowerSettingsNew,
+                                contentDescription = "Unload Model",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent
+                )
             )
         }
     ) { paddingValues ->
 
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        Box(modifier = Modifier.fillMaxSize()) {
             when {
                         uiState.isModelLoading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        org.eu.nl.syu.charchat.ui.components.PremiumLoadingText("Loading model...")
+                    Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                        org.eu.nl.syu.charchat.ui.components.FadeTextAnimation(text = "Loading model...")
                     }
                 }
                 uiState.notification != null -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 "Model unavailable",
@@ -187,7 +204,7 @@ fun ModelPickerScreen(
                     }
                 }
                 uiState.downloadedModels.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 "No models downloaded",
@@ -208,7 +225,12 @@ fun ModelPickerScreen(
                 }
                 else -> {
                     LazyColumn(
-                        contentPadding = PaddingValues(16.dp),
+                        contentPadding = PaddingValues(
+                            top = paddingValues.calculateTopPadding() + 16.dp,
+                            bottom = paddingValues.calculateBottomPadding() + 16.dp,
+                            start = 16.dp,
+                            end = 16.dp
+                        ),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
@@ -228,7 +250,7 @@ fun ModelPickerScreen(
                 }
             }
 
-            // PremiumLoadingText is used in the center, so no top bar indicator needed
+            // FadeTextAnimation is used in the center, so no top bar indicator needed
         }
     }
     }
@@ -245,6 +267,7 @@ private fun ModelItem(
     onRetry: () -> Unit = {}
 ) {
     val currentModelName = mFile.name
+    val isSelected = uiState.selectedModel == currentModelName && uiState.isModelLoaded
     val allowedModel = filenameToModel[currentModelName]
     val diskSizeMb = mFile.length().toFloat() / (1024f * 1024f)
     val diskSizeText = if (diskSizeMb >= 1024f) 
@@ -257,7 +280,9 @@ private fun ModelItem(
         modifier = Modifier
             .fillMaxWidth()
             .alpha(if (uiState.isModelLoading || isFailed) 0.5f else 1f),
-        enabled = !uiState.isModelLoading
+        enabled = !uiState.isModelLoading,
+        color = if (isSelected) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+        blurRadius = if (isSelected) 12.dp else 4.dp
     ) {
         Row(
             modifier = Modifier
@@ -273,13 +298,33 @@ private fun ModelItem(
                 val context = LocalContext.current
                 val compatibility = modelSize?.let { ModelSizeUtils.checkCompatibility(context, it) }
 
-                Text(
-                    text = hfName,
-                    fontWeight = if (uiState.selectedModel == currentModelName && uiState.isModelLoaded) FontWeight.Bold else FontWeight.Normal,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = hfName,
+                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    
+                    if (isSelected) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        androidx.compose.material3.Surface(
+                            color = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary,
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            modifier = Modifier.height(18.dp)
+                        ) {
+                            Text(
+                                text = "ACTIVE",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
                 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -353,30 +398,29 @@ private fun ModelItem(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
 
-                if (isFailed) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Previously failed to load",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
+
+                    if (isFailed) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = Color.Gray
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Previously failed to load",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
                     }
                 }
             }
-            if (uiState.selectedModel == currentModelName || isFailed) {
-                IconButton(onClick = onOpenModelSettings) {
-                    Icon(Icons.Default.Settings, contentDescription = "Model Options")
-                }
+            IconButton(onClick = onOpenModelSettings) {
+                Icon(Icons.Default.Settings, contentDescription = "Model Options")
             }
         }
     }

@@ -119,7 +119,10 @@ class ModelSettingsViewModel @Inject constructor(
     }
 
     private suspend fun reloadModel() {
-        val modelPath = engineWrapper.getLoadedModelPath() ?: return
+        val modelPath = engineWrapper.getLoadedModelPath() ?: run {
+            _uiState.update { it.copy(isLoading = false) }
+            return
+        }
         _uiState.update { it.copy(isLoading = true, error = null) }
         try {
             val maxTokens = modelRepository.defaultMaxTokens.first()

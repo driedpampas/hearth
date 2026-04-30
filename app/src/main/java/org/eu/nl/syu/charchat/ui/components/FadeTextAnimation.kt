@@ -13,15 +13,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 
 @Composable
-fun PremiumLoadingText(
+fun FadeTextAnimation(
+    modifier: Modifier = Modifier,
     text: String = "Loading...",
-    modifier: Modifier = Modifier
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "PremiumLoadingText")
+    style: TextStyle = MaterialTheme.typography.titleLarge,
+    fontWeight: FontWeight? = FontWeight.Bold,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+    mixinColor: Color = MaterialTheme.colorScheme.primary,
+    ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "FadeTextAnimation")
     val translateAnim by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1500f,
@@ -29,14 +35,14 @@ fun PremiumLoadingText(
             animation = tween(durationMillis = 1000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "LoadingTextAnimation"
+        label = "DiagonalFadeTextAnimation"
     )
 
     val brush = Brush.linearGradient(
         colors = listOf(
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-            MaterialTheme.colorScheme.primary,
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+            color,
+            mixinColor,
+            color
         ),
         start = androidx.compose.ui.geometry.Offset(translateAnim - 500f, translateAnim - 500f),
         end = androidx.compose.ui.geometry.Offset(translateAnim, translateAnim)
@@ -44,8 +50,8 @@ fun PremiumLoadingText(
 
     Text(
         text = text,
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
+        style = style,
+        fontWeight = fontWeight,
         modifier = modifier
             .graphicsLayer(alpha = 0.99f)
             .drawWithCache {
