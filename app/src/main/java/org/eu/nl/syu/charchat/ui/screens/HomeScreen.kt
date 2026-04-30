@@ -287,24 +287,25 @@ fun HomeScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (recentCharacters.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = "Recent Characters",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
-                        }
-
-                        items(recentCharacters, key = { "recent-${it.id}" }) { character ->
-                            CharacterCard(
-                                character = character,
-                                onClick = { openCharacter(character) }
-                            )
-                        }
+                // Show Recent Characters only if there are existing threads to justify a shortcut section
+                if (filteredThreads.isNotEmpty() && recentCharacters.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Recent Characters",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
                     }
 
-                    if (filteredThreads.isNotEmpty()) {
+                    items(recentCharacters, key = { "recent-${it.id}" }) { character ->
+                        CharacterCard(
+                            character = character,
+                            onClick = { openCharacter(character) }
+                        )
+                    }
+                }
+
+                if (filteredThreads.isNotEmpty()) {
                     item {
                         Text(
                             text = "Chats",
@@ -325,9 +326,9 @@ fun HomeScreen(
                 if (visibleCharacters.isNotEmpty()) {
                     item {
                         Text(
-                            text = if (filteredThreads.isEmpty() && recentCharacters.isEmpty()) "Characters" else "Start a new chat",
+                            text = if (filteredThreads.isEmpty()) "Characters" else "Start a new chat",
                             style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = if (filteredThreads.isNotEmpty() || recentCharacters.isNotEmpty()) 4.dp else 0.dp, bottom = 4.dp)
+                            modifier = Modifier.padding(top = if (filteredThreads.isNotEmpty() || (filteredThreads.isNotEmpty() && recentCharacters.isNotEmpty())) 4.dp else 0.dp, bottom = 4.dp)
                         )
                     }
 
