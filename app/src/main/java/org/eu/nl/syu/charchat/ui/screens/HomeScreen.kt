@@ -38,6 +38,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingActionButtonMenu
 import androidx.compose.material3.FloatingActionButtonMenuItem
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +50,11 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.ToggleFloatingActionButton
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -98,6 +105,11 @@ fun HomeScreen(
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    var contextMenuThread by remember { mutableStateOf<ChatThread?>(null) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var renameTitle by remember { mutableStateOf("") }
 
     LaunchedEffect(uiState.notification) {
         uiState.notification?.let {
@@ -311,7 +323,16 @@ fun HomeScreen(
                         ThreadCard(
                             thread = thread,
                             character = uiState.characters.firstOrNull { it.id == thread.characterId },
-                            onClick = { openThread(thread) }
+                            onClick = { openThread(thread) },
+                            onRename = {
+                                contextMenuThread = thread
+                                renameTitle = thread.title
+                                showRenameDialog = true
+                            },
+                            onDelete = {
+                                contextMenuThread = thread
+                                showDeleteConfirm = true
+                            }
                         )
                     }
                 }
@@ -335,52 +356,183 @@ fun HomeScreen(
             }
         }
     }
+
+    if (showRenameDialog && contextMenuThread != null) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("Rename Chat") },
+            text = {
+                TextField(
+                    value = renameTitle,
+                    onValueChange = { renameTitle = it },
+                    placeholder = { Text("New title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.renameThread(contextMenuThread!!.id, renameTitle)
+                        showRenameDialog = false
+                    },
+                    enabled = renameTitle.isNotBlank()
+                ) {
+                    Text("Rename")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showDeleteConfirm && contextMenuThread != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Chat") },
+            text = { Text("Are you sure you want to delete this chat? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteThread(contextMenuThread!!.id)
+                        showDeleteConfirm = false
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
     }
 }
+
 
 @Composable
 private fun ThreadCard(
     thread: ChatThread,
     character: Character?,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit
 ) {
-    GlassySurface(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-            Text(text = thread.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.History,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = DateUtils.getRelativeTimeSpanString(thread.lastMessageAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                
-                if (thread.sequenceId > 0) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Box {
+        GlassySurface(
+            onClick = onClick,
+            onLongClick = {
+                menuExpanded = true
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                Text(text = thread.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.Numbers,
+                            imageVector = Icons.Default.History,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.width(2.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = thread.sequenceId.toString(),
+                            text = DateUtils.getRelativeTimeSpanString(
+                                thread.lastMessageAt,
+                                System.currentTimeMillis(),
+                                DateUtils.MINUTE_IN_MILLIS
+                            ).toString(),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Bold
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (thread.sequenceId > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Numbers,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = thread.sequenceId.toString(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+            containerColor = Color.Transparent,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border = null,
+            shape = androidx.compose.ui.graphics.RectangleShape,
+            modifier = Modifier.background(Color.Transparent).padding(16.dp)
+        ) {
+            Box(modifier = Modifier.padding(16.dp)) {
+                GlassySurface(
+                    shape = MaterialTheme.shapes.large,
+                    blurRadius = 12.dp,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f)
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp).width(160.dp)) {
+                        DropdownMenuItem(
+                            text = { Text("Rename", fontWeight = FontWeight.Medium) },
+                            onClick = {
+                                menuExpanded = false
+                                onRename()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            colors = androidx.compose.material3.MenuDefaults.itemColors(
+                                textColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete", fontWeight = FontWeight.Medium) },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            },
+                            colors = androidx.compose.material3.MenuDefaults.itemColors(
+                                textColor = MaterialTheme.colorScheme.error
+                            )
                         )
                     }
                 }
@@ -388,6 +540,8 @@ private fun ThreadCard(
         }
     }
 }
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

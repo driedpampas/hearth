@@ -351,4 +351,16 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
+
+    fun deleteThread(threadId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            chatThreadDao.deleteThreadById(threadId)
+        }
+    }
+
+    fun renameThread(threadId: String, newTitle: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            chatThreadDao.updateThreadTitle(threadId, newTitle)
+        }
+    }
 }

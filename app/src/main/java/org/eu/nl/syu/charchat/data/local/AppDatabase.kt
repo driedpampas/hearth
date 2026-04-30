@@ -130,6 +130,12 @@ interface ChatThreadDao {
 
     @Query("SELECT COUNT(*) FROM chat_threads WHERE characterId = :characterId")
     suspend fun getThreadCountForCharacter(characterId: String): Int
+
+    @Query("DELETE FROM chat_threads WHERE id = :id")
+    suspend fun deleteThreadById(id: String)
+
+    @Query("UPDATE chat_threads SET title = :title WHERE id = :id")
+    suspend fun updateThreadTitle(id: String, title: String)
 }
 
 @Dao

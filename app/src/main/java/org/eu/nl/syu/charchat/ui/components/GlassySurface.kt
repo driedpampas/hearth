@@ -1,7 +1,8 @@
 package org.eu.nl.syu.charchat.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +17,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GlassySurface(
     modifier: Modifier = Modifier,
@@ -24,14 +26,20 @@ fun GlassySurface(
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     blurRadius: Dp = 4.dp, // Controls how far the color bleeds outward
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     enabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     // 1. Outer Box: No clipping here. This allows the inner blur to escape the bounds.
     Box(
         modifier = modifier.then(
-            if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick)
-            else Modifier
+            if (onClick != null || onLongClick != null) {
+                Modifier.combinedClickable(
+                    enabled = enabled,
+                    onClick = onClick ?: {},
+                    onLongClick = onLongClick
+                )
+            } else Modifier
         )
     ) {
         // 2. The Bleed Layer: This box matches the content size but blurs outwards.
