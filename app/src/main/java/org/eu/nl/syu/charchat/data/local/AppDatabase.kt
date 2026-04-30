@@ -38,7 +38,8 @@ data class ChatThreadEntity(
     val characterId: String,
     val title: String,
     val createdAt: Long,
-    val lastMessageAt: Long
+    val lastMessageAt: Long,
+    val sequenceId: Int
 )
 
 @Entity(tableName = "characters")
@@ -126,6 +127,9 @@ interface ChatThreadDao {
 
     @Query("UPDATE chat_threads SET lastMessageAt = :lastMessageAt WHERE id = :id")
     suspend fun updateLastMessageAt(id: String, lastMessageAt: Long)
+
+    @Query("SELECT COUNT(*) FROM chat_threads WHERE characterId = :characterId")
+    suspend fun getThreadCountForCharacter(characterId: String): Int
 }
 
 @Dao
@@ -151,7 +155,7 @@ interface ChatMessageDao {
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 6, 
+    version = 7, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -200,7 +204,8 @@ fun ChatThreadEntity.toDomain(): ChatThread = ChatThread(
     characterId = characterId,
     title = title,
     createdAt = createdAt,
-    lastMessageAt = lastMessageAt
+    lastMessageAt = lastMessageAt,
+    sequenceId = sequenceId
 )
 
 fun ChatThread.toEntity(): ChatThreadEntity = ChatThreadEntity(
@@ -208,7 +213,8 @@ fun ChatThread.toEntity(): ChatThreadEntity = ChatThreadEntity(
     characterId = characterId,
     title = title,
     createdAt = createdAt,
-    lastMessageAt = lastMessageAt
+    lastMessageAt = lastMessageAt,
+    sequenceId = sequenceId
 )
 
 fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(

@@ -7,5 +7,6 @@ data class ChatThread(
     val characterId: String,
     val title: String,
     val createdAt: Long = System.currentTimeMillis(),
-    val lastMessageAt: Long = createdAt
+    val lastMessageAt: Long = createdAt,
+    val sequenceId: Int = 0
 )

@@ -40,7 +40,7 @@ object AppModule {
             "charchat_db"
         )
             .setDriver(driver)
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
@@ -229,5 +229,20 @@ private val MIGRATION_4_5 = object : Migration(4, 5) {
 private val MIGRATION_5_6 = object : Migration(5, 6) {
     override fun migrate(connection: SQLiteConnection) {
         connection.prepare("ALTER TABLE characters ADD COLUMN enableThinking INTEGER NOT NULL DEFAULT 0").use { it.step() }
+    }
+}
+
+private val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.prepare("ALTER TABLE chat_threads ADD COLUMN sequenceId INTEGER NOT NULL DEFAULT 0").use { it.step() }
+        connection.prepare("""
+            UPDATE chat_threads 
+            SET sequenceId = (
+                SELECT COUNT(*) 
+                FROM chat_threads AS t2 
+                WHERE t2.characterId = chat_threads.characterId 
+                AND (t2.createdAt < chat_threads.createdAt OR (t2.createdAt = chat_threads.createdAt AND t2.id <= chat_threads.id))
+            )
+        """.trimIndent()).use { it.step() }
     }
 }

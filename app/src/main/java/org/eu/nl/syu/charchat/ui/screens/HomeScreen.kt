@@ -1,6 +1,7 @@
 package org.eu.nl.syu.charchat.ui.screens
 
 import android.annotation.SuppressLint
+import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -29,6 +31,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.outlined.Widgets
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ElevatedCard
@@ -284,21 +288,21 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (recentCharacters.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "Recent Characters",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                    }
+                        item {
+                            Text(
+                                text = "Recent Characters",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                        }
 
-                    items(recentCharacters, key = { "recent-${it.id}" }) { character ->
-                        CharacterCard(
-                            character = character,
-                            onClick = { openCharacter(character) }
-                        )
+                        items(recentCharacters, key = { "recent-${it.id}" }) { character ->
+                            CharacterCard(
+                                character = character,
+                                onClick = { openCharacter(character) }
+                            )
+                        }
                     }
-                }
 
                     if (filteredThreads.isNotEmpty()) {
                     item {
@@ -347,12 +351,45 @@ private fun ThreadCard(
 ) {
     ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-            Text(text = character?.name ?: thread.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                text = "Last updated ${thread.lastMessageAt}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(text = thread.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = DateUtils.getRelativeTimeSpanString(thread.lastMessageAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                if (thread.sequenceId > 0) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Numbers,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = thread.sequenceId.toString(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
     }
 }

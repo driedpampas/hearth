@@ -136,7 +136,7 @@ fun ChatScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text(uiState.character?.name ?: threadId, style = MaterialTheme.typography.titleMedium)
+                            Text(uiState.threadTitle ?: uiState.character?.name ?: threadId, style = MaterialTheme.typography.titleMedium)
                             TokenIndicator(uiState.tokenCount, uiState.maxTokens)
                         }
                     },

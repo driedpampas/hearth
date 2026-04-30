@@ -39,7 +39,8 @@ data class ChatUiState(
     val tokenCount: Int = 0,
     val maxTokens: Int = 4096,
     val modelError: String? = null,
-    val isLoadingModel: Boolean = false
+    val isLoadingModel: Boolean = false,
+    val threadTitle: String? = null
 )
 
 @HiltViewModel
@@ -65,7 +66,8 @@ class ChatViewModel @Inject constructor(
                 else -> characterDao.getCharacterById(conversationId)?.toDomain()
             } ?: return@launch
 
-            val threadId = threadEntity?.id ?: createNewThread(character).id
+            val thread = threadEntity?.toDomain() ?: createNewThread(character)
+            val threadId = thread.id
             activeThreadId = threadId
 
             val modelPath = resolveModelPath(character.modelReference)
@@ -74,6 +76,7 @@ class ChatViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         character = character,
+                        threadTitle = thread.title,
                         modelError = if (character.modelReference.isBlank()) {
                             "Select a model first."
                         } else {
@@ -88,6 +91,7 @@ class ChatViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         character = character,
+                        threadTitle = thread.title,
                         modelError = if (character.modelReference.isBlank()) {
                             "Select a model first."
                         } else {
@@ -103,13 +107,14 @@ class ChatViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             character = character,
+                            threadTitle = thread.title,
                             modelError = "Select a model first."
                         )
                     }
                     return@launch
                 }
 
-                _uiState.update { it.copy(character = character, isLoadingModel = true, modelError = null) }
+                _uiState.update { it.copy(character = character, threadTitle = thread.title, isLoadingModel = true, modelError = null) }
 
                 val modelFile = File(modelPath)
                 try {
@@ -132,6 +137,7 @@ class ChatViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             character = character,
+                            threadTitle = thread.title,
                             modelError = msg,
                             isLoadingModel = false
                         )
@@ -143,13 +149,15 @@ class ChatViewModel @Inject constructor(
             val openedAt = System.currentTimeMillis()
             characterDao.updateLastUsedAt(character.id, openedAt)
             val messages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
+            
             _uiState.update {
                 it.copy(
                     character = character.copy(lastUsedAt = openedAt),
                     messages = messages,
                     modelError = null,
                     isLoadingModel = false,
-                    tokenCount = messages.sumOf { message -> (message.content.length / 4).coerceAtLeast(0) }
+                    tokenCount = messages.sumOf { message -> (message.content.length / 4).coerceAtLeast(0) },
+                    threadTitle = thread.title
                 )
             }
 
@@ -158,9 +166,11 @@ class ChatViewModel @Inject constructor(
     }
 
     private suspend fun createNewThread(character: Character): ChatThread {
+        val count = chatThreadDao.getThreadCountForCharacter(character.id)
         val thread = ChatThread(
             characterId = character.id,
-            title = character.name
+            title = character.name,
+            sequenceId = count + 1
         )
         chatThreadDao.insertThread(thread.toEntity())
         return thread
