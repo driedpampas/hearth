@@ -1,94 +1,56 @@
 package org.eu.nl.syu.charchat.ui.components
 
-import android.os.Build
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun GlassySurface(
     modifier: Modifier = Modifier,
     shape: Shape = MaterialTheme.shapes.extraLarge,
-    color: Color = MaterialTheme.colorScheme.onSurface, //surfaceContainerLow,
+    color: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), // Base color for the glass effect
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    blurRadius: Dp = 4.dp, // Controls how far the color bleeds outward
     onClick: (() -> Unit)? = null,
     enabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    // 1. Outer Box: No clipping here. This allows the inner blur to escape the bounds.
     Box(
-        modifier = modifier
-            .clip(shape)
-            .then(
-                if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick)
-                else Modifier
-            )
+        modifier = modifier.then(
+            if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick)
+            else Modifier
+        )
     ) {
+        // 2. The Bleed Layer: This box matches the content size but blurs outwards.
         Box(
             modifier = Modifier
                 .matchParentSize()
-//                .background(color)
-                .drawWithContent {
-                    // Add subtle texture/noise so the blur has something to "smear"
-                    // This makes the blur effect visible even on solid backgrounds
-                    val colors = listOf(color.copy(alpha = 0.1f), color.copy(alpha = 0.1f))//, Color.Transparent, Color.White.copy(alpha = 0.05f))
-                    drawRect(
-                        brush = Brush.linearGradient(
-                            colors = colors,
-                            start = Offset(0f, 0f),
-                            end = Offset(size.width, size.height)
-                        )
-                    )
-                    drawContent()
-                }
-                .then(
-                    Modifier.graphicsLayer {
-                        renderEffect = android.graphics.RenderEffect.createBlurEffect(
-                            150f, 150f, android.graphics.Shader.TileMode.CLAMP
-                        ).asComposeRenderEffect()
-                    }
-                )
+                .blur(blurRadius)
+                .background(color = color, shape = shape)
         )
 
-        // Content layer
+        // 3. The Content Layer: The actual card surface. 
         Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape), // Clip is applied ONLY to the content layer
+            //color = color.copy(alpha = 0.4f), // Semi-transparent so it feels glassy
             color = Color.Transparent,
             contentColor = contentColor,
-            modifier = Modifier.fillMaxWidth()
         ) {
             content()
         }
-
-        // Optional subtle highlight border
-//        Box(
-//            modifier = Modifier
-//                .matchParentSize()
-//                .border(
-//                    width = 0.5.dp,
-//                    brush = Brush.verticalGradient(
-//                        colors = listOf(
-//                            Color.White.copy(alpha = 0.3f),
-//                            Color.White.copy(alpha = 0.05f)
-//                        )
-//                    ),
-//                    shape = shape
-//                )
-//        )
     }
 }
