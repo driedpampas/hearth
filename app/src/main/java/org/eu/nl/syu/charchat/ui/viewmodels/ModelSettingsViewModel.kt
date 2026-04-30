@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,20 +47,12 @@ class ModelSettingsViewModel @Inject constructor(
                 characterDao.getCharacterById(it)?.toDomain()
             }
 
-            launch {
-                modelRepository.preferredBackend.collect { backend ->
-                    _uiState.update { it.copy(preferredBackend = backend) }
-                }
-            }
-            launch {
-                modelRepository.defaultMaxTokens.collect { tokens ->
-                    _uiState.update { it.copy(defaultMaxTokens = tokens) }
-                }
-            }
-            launch {
-                modelRepository.experimentalNpuEnabled.collect { enabled ->
-                    _uiState.update { it.copy(experimentalNpuEnabled = enabled) }
-                }
+            _uiState.update {
+                it.copy(
+                    preferredBackend = modelRepository.preferredBackend.first(),
+                    defaultMaxTokens = modelRepository.defaultMaxTokens.first(),
+                    experimentalNpuEnabled = modelRepository.experimentalNpuEnabled.first()
+                )
             }
 
             if (character != null) {

@@ -44,19 +44,18 @@ object AppModule {
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
-                    initializeDatabase(db, sqliteVecPath)
+                    initializeDatabase(db)
                 }
 
                 override fun onOpen(connection: SQLiteConnection) {
                     super.onOpen(connection)
-                    initializeDatabase(connection, sqliteVecPath)
+                    initializeDatabase(connection)
                 }
             })
             .build()
     }
 
-    private fun initializeDatabase(db: SupportSQLiteDatabase, sqliteVecPath: String) {
-        // Create virtual tables
+    private fun initializeDatabase(db: SupportSQLiteDatabase) {
         db.execSQL(
             """
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_lore USING vec0(
@@ -65,7 +64,6 @@ object AppModule {
                 )
             """.trimIndent()
         )
-
         db.execSQL(
             """
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_memory USING vec0(
@@ -74,13 +72,10 @@ object AppModule {
                 )
             """.trimIndent()
         )
-
-        normalizeDefaultAssistant(db)
         seedDefaultAssistant(db)
     }
 
-    private fun initializeDatabase(connection: SQLiteConnection, sqliteVecPath: String) {
-        // Create virtual tables
+    private fun initializeDatabase(connection: SQLiteConnection) {
         execute(
             connection,
             """
@@ -90,7 +85,6 @@ object AppModule {
                 )
             """.trimIndent()
         )
-
         execute(
             connection,
             """
@@ -100,17 +94,7 @@ object AppModule {
                 )
             """.trimIndent()
         )
-
-        normalizeDefaultAssistant(connection)
         seedDefaultAssistant(connection)
-    }
-
-    private fun normalizeDefaultAssistant(db: SupportSQLiteDatabase) {
-        // Keep any persisted Assistant model selection intact across launches.
-    }
-
-    private fun normalizeDefaultAssistant(connection: SQLiteConnection) {
-        // Keep any persisted Assistant model selection intact across launches.
     }
 
     private fun seedDefaultAssistant(db: SupportSQLiteDatabase) {

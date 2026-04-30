@@ -77,22 +77,22 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun observeSettings() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             modelRepository.preferredBackend.collect { backend ->
                 _uiState.update { it.copy(preferredBackend = backend) }
             }
         }
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             modelRepository.defaultMaxTokens.collect { tokens ->
                 _uiState.update { it.copy(defaultMaxTokens = tokens) }
             }
         }
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             modelRepository.experimentalNpuEnabled.collect { enabled ->
                 _uiState.update { it.copy(experimentalNpuEnabled = enabled) }
             }
         }
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             modelRepository.autoLoadChatModel.collect { enabled ->
                 _uiState.update { it.copy(autoLoadChatModel = enabled) }
             }
@@ -122,12 +122,9 @@ class HomeViewModel @Inject constructor(
     fun loadCharacters() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val characters = characterDao.getAllCharacters().map { it.toDomain() }
-            val selectedChatModel = characters
-                .firstOrNull { it.id == DefaultCharacters.ASSISTANT_CHARACTER_ID }
-                ?.modelReference
-                ?.takeIf { it.isNotBlank() }
-                ?.let { File(it).name }
+            val characters = withContext(Dispatchers.IO) {
+                characterDao.getAllCharacters().map { it.toDomain() }
+            }
             _uiState.update {
                 it.copy(
                     characters = characters,
@@ -138,7 +135,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun loadThreads() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             chatThreadDao.getAllThreads().collectLatest { threads ->
                 _uiState.update { it.copy(chatThreads = threads.map { thread -> thread.toDomain() }) }
             }
@@ -169,7 +166,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun loadCachedModels() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val availableModels = modelRepository.getAvailableModels()
             val models = modelManager.getLocalModels()
                 .filter { it.name.endsWith(".litertlm") && !isBlacklisted(it) }

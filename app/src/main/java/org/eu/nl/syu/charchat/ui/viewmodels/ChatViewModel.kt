@@ -3,6 +3,7 @@ package org.eu.nl.syu.charchat.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.ChatMessage
 import org.eu.nl.syu.charchat.data.ChatThread
@@ -111,7 +113,9 @@ class ChatViewModel @Inject constructor(
 
                 val modelFile = File(modelPath)
                 try {
-                    engineWrapper.initialize(modelPath)
+                    withContext(Dispatchers.IO) {
+                        engineWrapper.initialize(modelPath)
+                    }
                 } catch (e: Exception) {
                     val msg = when {
                         isInputTensorMissing(e) -> {
@@ -302,8 +306,10 @@ class ChatViewModel @Inject constructor(
                     throw IllegalStateException("Model file not found: ${character.modelReference}")
                 }
 
-                engineWrapper.close()
-                engineWrapper.initialize(modelPath)
+                withContext(Dispatchers.IO) {
+                    engineWrapper.close()
+                    engineWrapper.initialize(modelPath)
+                }
                 engineWrapper.createConversation(character.copy(
                     temp = temp,
                     topP = topP,
@@ -335,8 +341,10 @@ class ChatViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoadingModel = false, modelError = "Model file not found") }
                     return@launch
                 }
-                engineWrapper.close()
-                engineWrapper.initialize(modelPath)
+                withContext(Dispatchers.IO) {
+                    engineWrapper.close()
+                    engineWrapper.initialize(modelPath)
+                }
                 _uiState.update { it.copy(isLoadingModel = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoadingModel = false, modelError = e.message) }

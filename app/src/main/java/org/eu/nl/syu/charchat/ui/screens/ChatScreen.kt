@@ -37,15 +37,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -84,6 +81,7 @@ import java.io.File
 fun ChatScreen(
     threadId: String,
     onNavigateBack: () -> Unit,
+    onNavigateToModelSettings: (String) -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
     modelsViewModel: ModelsViewModel = hiltViewModel()
 ) {
@@ -97,11 +95,6 @@ fun ChatScreen(
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
-    var showCharacterSettings by remember { mutableStateOf(false) }
-    var pendingTemp by remember { mutableStateOf(0f) }
-    var pendingTopP by remember { mutableStateOf(0f) }
-    var pendingTopK by remember { mutableStateOf(0) }
-    var pendingThinking by remember { mutableStateOf(false) }
 
     LaunchedEffect(threadId) {
         viewModel.loadConversation(threadId)
@@ -153,8 +146,8 @@ fun ChatScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { showCharacterSettings = true }) {
-                            Icon(Icons.Filled.Settings, contentDescription = "Character settings")
+                        IconButton(onClick = { onNavigateToModelSettings(uiState.character?.id ?: "") }) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Model settings")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -239,46 +232,6 @@ fun ChatScreen(
                 }
             }
         }
-    }
-
-    if (showCharacterSettings && uiState.character != null) {
-        val character = uiState.character!!
-        LaunchedEffect(character.id, showCharacterSettings) {
-            pendingTemp = character.temp
-            pendingTopP = character.topP
-            pendingTopK = character.topK
-            pendingThinking = character.enableThinking
-        }
-        AlertDialog(
-            onDismissRequest = { showCharacterSettings = false },
-            title = { Text("Model Options") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("Temperature: $pendingTemp")
-                    Slider(value = pendingTemp, onValueChange = { pendingTemp = it }, valueRange = 0.0f..2.0f)
-                    Text("Top P: $pendingTopP")
-                    Slider(value = pendingTopP, onValueChange = { pendingTopP = it }, valueRange = 0.0f..1.0f)
-                    Text("Top K: $pendingTopK")
-                    Slider(value = pendingTopK.toFloat(), onValueChange = { pendingTopK = it.toInt() }, valueRange = 1f..100f, steps = 98)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = pendingThinking, onClick = { pendingThinking = !pendingThinking })
-                        Text("Enable thinking")
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showCharacterSettings = false
-                    viewModel.updateCharacterModelSettings(
-                        temp = pendingTemp,
-                        topP = pendingTopP,
-                        topK = pendingTopK,
-                        enableThinking = pendingThinking,
-                        onDone = {}
-                    )
-                }) { Text("Done") }
-            }
-        )
     }
 }
 

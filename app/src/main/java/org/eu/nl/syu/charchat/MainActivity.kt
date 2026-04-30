@@ -33,6 +33,7 @@ import org.eu.nl.syu.charchat.data.AuthRepository
 import org.eu.nl.syu.charchat.ui.screens.ChatScreen
 import org.eu.nl.syu.charchat.ui.screens.CreateCharacterScreen
 import org.eu.nl.syu.charchat.ui.screens.HomeScreen
+import org.eu.nl.syu.charchat.ui.screens.ModelSettingsScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsEmbeddingModelsScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsGeneralScreen
 import org.eu.nl.syu.charchat.ui.screens.SettingsHuggingFaceAccountScreen
@@ -108,7 +109,8 @@ fun CharChatApp() {
                 HomeScreen(
                     onNavigateToChat = { id -> navController.navigate("chat/$id") },
                     onNavigateToSettings = { navController.navigate("settings") },
-                    onNavigateToCreateCharacter = { navController.navigate("create_character") }
+                    onNavigateToCreateCharacter = { navController.navigate("create_character") },
+                    onNavigateToModelSettings = { navController.navigate("model_settings") }
                 )
             }
             composable(route = "settings") {
@@ -155,6 +157,22 @@ fun CharChatApp() {
                 val threadId = backStackEntry.arguments?.getString("threadId") ?: ""
                 ChatScreen(
                     threadId = threadId,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToModelSettings = { characterId ->
+                        navController.navigate("model_settings/$characterId")
+                    }
+                )
+            }
+            composable(route = "model_settings/{characterId}") { backStackEntry ->
+                val characterId = backStackEntry.arguments?.getString("characterId")
+                ModelSettingsScreen(
+                    characterId = characterId,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(route = "model_settings") {
+                ModelSettingsScreen(
+                    characterId = null,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

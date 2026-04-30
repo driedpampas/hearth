@@ -38,6 +38,8 @@ class LiteRtEngineWrapper @Inject constructor(
 
     fun isInitialized(): Boolean = engine != null
 
+    fun getLoadedModelPath(): String? = _loadedModelPath.value
+
     private fun calculateHash(filePath: String): String {
         val file = File(filePath)
         if (!file.exists()) return ""

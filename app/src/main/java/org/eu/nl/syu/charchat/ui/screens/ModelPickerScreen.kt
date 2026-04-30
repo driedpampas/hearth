@@ -44,11 +44,7 @@ fun ModelPickerScreen(
     uiState: HomeUiState,
     onDismiss: () -> Unit,
     onSelectModel: (java.io.File) -> Unit,
-    onOpenSettings: () -> Unit,
-    showModelSettings: Boolean,
-    onDismissModelSettings: () -> Unit,
-    onSaveBackend: (String) -> Unit,
-    onSaveMaxTokens: (Int) -> Unit
+    onOpenSettings: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -188,14 +184,5 @@ fun ModelPickerScreen(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter))
             }
         }
-    }
-
-    if (showModelSettings) {
-        ModelSettingsDialog(
-            uiState = uiState,
-            onDismiss = onDismissModelSettings,
-            onSaveBackend = onSaveBackend,
-            onSaveMaxTokens = onSaveMaxTokens
-        )
     }
 }

@@ -124,6 +124,14 @@ fun HomeScreen(
         uiState.chatThreads.filter { it.characterId in characterIds }
     }
 
+    val recentCharacters = remember(uiState.characters, searchQuery) {
+        if (searchQuery.isNotEmpty()) emptyList()
+        else uiState.characters
+            .filter { it.lastUsedAt > 0 }
+            .sortedByDescending { it.lastUsedAt }
+            .take(4)
+    }
+
     val openCharacter: (Character) -> Unit = { character ->
         viewModel.markCharacterOpened(character.id)
         onNavigateToChat(character.id)
@@ -149,11 +157,7 @@ fun HomeScreen(
                 viewModel.clearNotification()
             },
             onSelectModel = { file -> viewModel.selectModel(file) },
-            onOpenSettings = { showModelSettings = true },
-            showModelSettings = showModelSettings,
-            onDismissModelSettings = { showModelSettings = false },
-            onSaveBackend = { viewModel.setPreferredBackend(it) },
-            onSaveMaxTokens = { viewModel.setDefaultMaxTokens(it) }
+            onOpenSettings = { onNavigateToModelSettings() }
         )
         return
     }
@@ -279,16 +283,33 @@ fun HomeScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (filteredThreads.isNotEmpty()) {
+                    if (recentCharacters.isNotEmpty()) {
                     item {
                         Text(
-                            text = "Chats",
+                            text = "Recent Characters",
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
 
-                    items(filteredThreads, key = { it.id }) { thread ->
+                    items(recentCharacters, key = { "recent-${it.id}" }) { character ->
+                        CharacterCard(
+                            character = character,
+                            onClick = { openCharacter(character) }
+                        )
+                    }
+                }
+
+                    if (filteredThreads.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Chats",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(top = if (recentCharacters.isNotEmpty()) 4.dp else 0.dp, bottom = 4.dp)
+                        )
+                    }
+
+                    items(filteredThreads, key = { "thread-${it.id}" }) { thread ->
                         ThreadCard(
                             thread = thread,
                             character = uiState.characters.firstOrNull { it.id == thread.characterId },
@@ -300,13 +321,13 @@ fun HomeScreen(
                 if (visibleCharacters.isNotEmpty()) {
                     item {
                         Text(
-                            text = if (filteredThreads.isEmpty()) "Characters" else "Start a new chat",
+                            text = if (filteredThreads.isEmpty() && recentCharacters.isEmpty()) "Characters" else "Start a new chat",
                             style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = if (filteredThreads.isNotEmpty()) 4.dp else 0.dp, bottom = 4.dp)
+                            modifier = Modifier.padding(top = if (filteredThreads.isNotEmpty() || recentCharacters.isNotEmpty()) 4.dp else 0.dp, bottom = 4.dp)
                         )
                     }
 
-                    items(visibleCharacters, key = { it.id }) { character ->
+                    items(visibleCharacters, key = { "visible-${it.id}" }) { character ->
                         CharacterCard(
                             character = character,
                             onClick = { openCharacter(character) }
@@ -446,50 +467,4 @@ fun CharacterCard(
             )
         }
     }
-}
-
-@Composable
-fun ModelSettingsDialog(
-    uiState: HomeUiState,
-    onDismiss: () -> Unit,
-    onSaveBackend: (String) -> Unit,
-    onSaveMaxTokens: (Int) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Model Settings") },
-        text = {
-            Column {
-                Text("Preferred Hardware", style = MaterialTheme.typography.labelMedium)
-                for (backend in listOf("Automatic", "CPU", "GPU", "NPU")) {
-                    if (backend == "NPU" && !uiState.experimentalNpuEnabled) continue
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { onSaveBackend(backend) },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = uiState.preferredBackend == backend,
-                            onClick = { onSaveBackend(backend) }
-                        )
-                        Text(backend)
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text("Max Context Tokens: ${uiState.defaultMaxTokens}", style = MaterialTheme.typography.labelMedium)
-                Slider(
-                    value = uiState.defaultMaxTokens.toFloat(),
-                    onValueChange = { onSaveMaxTokens(it.toInt()) },
-                    valueRange = 1024f..16384f,
-                    steps = 15
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Done")
-            }
-        }
-    )
 }
