@@ -43,10 +43,13 @@ data class ModelSettingsUiState(
     val preferredBackend: String = "Automatic",
     val defaultMaxTokens: Int = 4096,
     val experimentalNpuEnabled: Boolean = false,
-    val temp: Float = 0.8f,
+    val temp: Float = 1.0f,
     val topP: Float = 0.95f,
-    val topK: Int = 40,
-    val enableThinking: Boolean = false
+    val topK: Int = 64,
+    val enableThinking: Boolean = false,
+    val enableThinkingCompatibility: Boolean = false,
+    val thinkingCompatibilityToken: String = "",
+    val includeThinkingInContext: Boolean = false
 )
 
 @HiltViewModel
@@ -80,7 +83,10 @@ class ModelSettingsViewModel @Inject constructor(
                         temp = character.temp,
                         topP = character.topP,
                         topK = character.topK,
-                        enableThinking = character.enableThinking
+                        enableThinking = character.enableThinking,
+                        enableThinkingCompatibility = character.enableThinkingCompatibility,
+                        thinkingCompatibilityToken = character.thinkingCompatibilityToken,
+                        includeThinkingInContext = character.includeThinkingInContext
                     )
                 }
             }
@@ -94,7 +100,10 @@ class ModelSettingsViewModel @Inject constructor(
         temp: Float,
         topP: Float,
         topK: Int,
-        enableThinking: Boolean
+        enableThinking: Boolean,
+        enableThinkingCompatibility: Boolean,
+        thinkingCompatibilityToken: String,
+        includeThinkingInContext: Boolean
     ) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
@@ -110,7 +119,10 @@ class ModelSettingsViewModel @Inject constructor(
                         temp = temp,
                         topP = topP,
                         topK = topK,
-                        enableThinking = enableThinking
+                        enableThinking = enableThinking,
+                        enableThinkingCompatibility = enableThinkingCompatibility,
+                        thinkingCompatibilityToken = thinkingCompatibilityToken,
+                        includeThinkingInContext = includeThinkingInContext
                     )
                 }
                 
@@ -123,7 +135,10 @@ class ModelSettingsViewModel @Inject constructor(
                             temp = temp,
                             topP = topP,
                             topK = topK,
-                            enableThinking = enableThinking
+                            enableThinking = enableThinking,
+                            enableThinkingCompatibility = enableThinkingCompatibility,
+                            thinkingCompatibilityToken = thinkingCompatibilityToken,
+                            includeThinkingInContext = includeThinkingInContext
                         )
                     )
                 }

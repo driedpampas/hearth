@@ -43,7 +43,9 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.SettingsSuggest
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -91,10 +93,13 @@ fun ModelSettingsScreen(
         viewModel.loadSettings(characterId)
     }
 
-    var pendingTemp by remember { mutableStateOf(0.8f) }
+    var pendingTemp by remember { mutableStateOf(1.0f) }
     var pendingTopP by remember { mutableStateOf(0.95f) }
-    var pendingTopK by remember { mutableStateOf(40) }
+    var pendingTopK by remember { mutableStateOf(64) }
     var pendingThinking by remember { mutableStateOf(false) }
+    var pendingThinkingCompatibility by remember { mutableStateOf(false) }
+    var pendingThinkingToken by remember { mutableStateOf("") }
+    var pendingIncludeThinkingInContext by remember { mutableStateOf(false) }
     var pendingMaxTokens by remember { mutableStateOf(4096) }
     var pendingBackend by remember { mutableStateOf("Automatic") }
 
@@ -104,6 +109,9 @@ fun ModelSettingsScreen(
             pendingTopP = character.topP
             pendingTopK = character.topK
             pendingThinking = character.enableThinking
+            pendingThinkingCompatibility = character.enableThinkingCompatibility
+            pendingThinkingToken = character.thinkingCompatibilityToken
+            pendingIncludeThinkingInContext = character.includeThinkingInContext
         }
         pendingMaxTokens = uiState.defaultMaxTokens
         pendingBackend = uiState.preferredBackend
@@ -130,7 +138,10 @@ fun ModelSettingsScreen(
                         temp = pendingTemp,
                         topP = pendingTopP,
                         topK = pendingTopK,
-                        enableThinking = pendingThinking
+                        enableThinking = pendingThinking,
+                        enableThinkingCompatibility = pendingThinkingCompatibility,
+                        thinkingCompatibilityToken = pendingThinkingToken,
+                        includeThinkingInContext = pendingIncludeThinkingInContext
                     )
                 },
                 icon = { Icon(Icons.Default.Save, contentDescription = null) },
@@ -296,6 +307,86 @@ fun ModelSettingsScreen(
                                     checked = pendingThinking,
                                     onCheckedChange = { pendingThinking = it }
                                 )
+                            }
+
+                            if (pendingThinking) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 28.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Compatibility Mode", style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                            Text("Inject a trigger token for specific models", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(
+                                            checked = pendingThinkingCompatibility,
+                                            onCheckedChange = { pendingThinkingCompatibility = it }
+                                        )
+                                    }
+
+                                    if (pendingThinkingCompatibility) {
+                                        androidx.compose.material3.OutlinedTextField(
+                                            value = pendingThinkingToken,
+                                            onValueChange = { pendingThinkingToken = it },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            label = { Text("Special Trigger Token") },
+                                            placeholder = { Text("e.g. <|think|>") },
+                                            leadingIcon = { Icon(Icons.Default.Science, contentDescription = null) },
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        Text(
+                                            "This token will be prepended to the system prompt to trigger thinking mode in models like Gemma 4.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 4.dp)
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Include Thinking in Context", style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                            Text("Keeps previous reasoning in history (not recommended)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(
+                                            checked = pendingIncludeThinkingInContext,
+                                            onCheckedChange = { pendingIncludeThinkingInContext = it }
+                                        )
+                                    }
+
+                                    if (pendingIncludeThinkingInContext) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
+                                                .padding(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                "Warning: Including thoughts in context may lead to repetitive or unexpected behavior and consumes more tokens.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

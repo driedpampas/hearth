@@ -108,25 +108,34 @@ fun ThinkingProcess(
  * Returns Triple(thought, remainingContent, isComplete)
  */
 fun parseThinkingContent(content: String): Triple<String?, String, Boolean> {
-    val startTag = "<think>"
-    val endTag = "</think>"
+    val formats = listOf(
+        Pair("<think>", "</think>"),
+        Pair("<|channel>thought\n", "<channel|>"),
+        Pair("<|channel>thought", "<channel|>"), // Fallback for missing newline
+        Pair("<|channel>thought\n", "<|endoftext|>"), // Emergency stop
+        Pair("<|channel>thought", "<|endoftext|>")
+    )
     
-    val startIndex = content.indexOf(startTag)
-    if (startIndex == -1) return Triple(null, content, true)
-    
-    val beforeThought = content.substring(0, startIndex)
-    val afterStart = content.substring(startIndex + startTag.length)
-    
-    val endIndex = afterStart.indexOf(endTag)
-    return if (endIndex == -1) {
-        // Tag started but not ended (streaming)
-        Triple(afterStart, beforeThought, false)
-    } else {
-        // Tag completed
-        val thought = afterStart.substring(0, endIndex)
-        val afterThought = afterStart.substring(endIndex + endTag.length)
-        // Combine text before and after the thought as the main content
-        val combinedContent = (beforeThought.trim() + "\n" + afterThought.trim()).trim()
-        Triple(thought.trim(), combinedContent, true)
+    for ((startTag, endTag) in formats) {
+        val startIndex = content.indexOf(startTag)
+        if (startIndex != -1) {
+            val beforeThought = content.substring(0, startIndex)
+            val afterStart = content.substring(startIndex + startTag.length)
+            
+            val endIndex = afterStart.indexOf(endTag)
+            return if (endIndex == -1) {
+                // Tag started but not ended (streaming)
+                Triple(afterStart, beforeThought, false)
+            } else {
+                // Tag completed
+                val thought = afterStart.substring(0, endIndex)
+                val afterThought = afterStart.substring(endIndex + endTag.length)
+                // Combine text before and after the thought as the main content
+                val combinedContent = (beforeThought.trim() + "\n" + afterThought.trim()).trim()
+                Triple(thought.trim(), combinedContent, true)
+            }
+        }
     }
+    
+    return Triple(null, content, true)
 }

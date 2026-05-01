@@ -58,7 +58,7 @@ object AppModule {
             "charchat_db"
         )
             .setDriver(driver)
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
@@ -125,8 +125,8 @@ object AppModule {
             """
                 INSERT INTO characters (
                     id, name, tagline, avatarUrl, systemPromptLore, reminderMessage,
-                    modelReference, temp, topP, topK, enableThinking, sceneBackgroundUrl, isPredefined, lastUsedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, sceneBackgroundUrl, isPredefined, lastUsedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
             arrayOf<Any?>(
                 character.id,
@@ -140,6 +140,9 @@ object AppModule {
                 character.topP,
                 character.topK,
                 character.enableThinking,
+                character.enableThinkingCompatibility,
+                character.thinkingCompatibilityToken,
+                character.includeThinkingInContext,
                 character.sceneBackgroundUrl,
                 if (character.isPredefined) 1 else 0,
                 character.lastUsedAt
@@ -155,8 +158,8 @@ object AppModule {
             """
                 INSERT INTO characters (
                     id, name, tagline, avatarUrl, systemPromptLore, reminderMessage,
-                    modelReference, temp, topP, topK, enableThinking, sceneBackgroundUrl, isPredefined, lastUsedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, sceneBackgroundUrl, isPredefined, lastUsedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
         ).use { statement ->
             statement.bindText(1, character.id)
@@ -170,9 +173,12 @@ object AppModule {
             statement.bindDouble(9, character.topP.toDouble())
             statement.bindLong(10, character.topK.toLong())
             statement.bindBoolean(11, character.enableThinking)
-            if (character.sceneBackgroundUrl == null) statement.bindNull(12) else statement.bindText(12, character.sceneBackgroundUrl)
-            statement.bindBoolean(13, character.isPredefined)
-            statement.bindLong(14, character.lastUsedAt)
+            statement.bindBoolean(12, character.enableThinkingCompatibility)
+            statement.bindText(13, character.thinkingCompatibilityToken)
+            statement.bindBoolean(14, character.includeThinkingInContext)
+            if (character.sceneBackgroundUrl == null) statement.bindNull(15) else statement.bindText(15, character.sceneBackgroundUrl)
+            statement.bindBoolean(16, character.isPredefined)
+            statement.bindLong(17, character.lastUsedAt)
             statement.step()
         }
     }
@@ -270,5 +276,18 @@ private val MIGRATION_7_8 = object : Migration(7, 8) {
         connection.prepare("ALTER TABLE chat_messages ADD COLUMN parentId TEXT").use { it.step() }
         connection.prepare("ALTER TABLE chat_messages ADD COLUMN versionGroupId TEXT").use { it.step() }
         connection.prepare("ALTER TABLE chat_messages ADD COLUMN versionIndex INTEGER NOT NULL DEFAULT 0").use { it.step() }
+    }
+}
+
+private val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.prepare("ALTER TABLE characters ADD COLUMN enableThinkingCompatibility INTEGER NOT NULL DEFAULT 0").use { it.step() }
+        connection.prepare("ALTER TABLE characters ADD COLUMN thinkingCompatibilityToken TEXT NOT NULL DEFAULT ''").use { it.step() }
+    }
+}
+
+private val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.prepare("ALTER TABLE characters ADD COLUMN includeThinkingInContext INTEGER NOT NULL DEFAULT 0").use { it.step() }
     }
 }

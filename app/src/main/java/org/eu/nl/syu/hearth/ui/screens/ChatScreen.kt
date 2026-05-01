@@ -268,20 +268,30 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(uiState.messages, key = { it.id }) { message ->
+                        val isRegenerating = uiState.regeneratingMessageId != null && 
+                                           (message.versionGroupId ?: message.id) == uiState.regeneratingMessageId
+                        
+                        val displayMessage = if (isRegenerating) {
+                            message.copy(content = uiState.currentGeneratingText)
+                        } else {
+                            message
+                        }
+
                         ChatBubble(
-                            message = message,
+                            message = displayMessage,
                             statsForNerdsEnabled = statsForNerdsEnabled,
-                            modelDisplayName = resolveModelDisplayName(message.modelReference, modelNamesByFile),
-                            versionCount = uiState.versionCounts[message.versionGroupId ?: message.id] ?: 1,
-                            onRegenerate = { viewModel.regenerateMessage(message.id) },
-                            onEdit = { viewModel.editMessage(message.id, it) },
-                            onDelete = { viewModel.deleteMessage(message.id, it) },
-                            onFork = { viewModel.forkThread(message.id) },
-                            onVersionChange = { direction -> viewModel.switchMessageVersion(message.versionGroupId ?: message.id, direction) }
+                            modelDisplayName = resolveModelDisplayName(displayMessage.modelReference, modelNamesByFile),
+                            isGenerating = isRegenerating,
+                            versionCount = uiState.versionCounts[displayMessage.versionGroupId ?: displayMessage.id] ?: 1,
+                            onRegenerate = { viewModel.regenerateMessage(displayMessage.id) },
+                            onEdit = { viewModel.editMessage(displayMessage.id, it) },
+                            onDelete = { viewModel.deleteMessage(displayMessage.id, it) },
+                            onFork = { viewModel.forkThread(displayMessage.id) },
+                            onVersionChange = { direction -> viewModel.switchMessageVersion(displayMessage.versionGroupId ?: displayMessage.id, direction) }
                         )
                     }
 
-                    if (uiState.currentGeneratingText.isNotEmpty()) {
+                    if (uiState.currentGeneratingText.isNotEmpty() && uiState.regeneratingMessageId == null) {
                         item {
                             ChatBubble(
                                 message = ChatMessage(
@@ -420,6 +430,7 @@ fun ChatBubble(
     message: ChatMessage, 
     statsForNerdsEnabled: Boolean, 
     modelDisplayName: String?,
+    isGenerating: Boolean = false,
     versionCount: Int = 1,
     onRegenerate: () -> Unit = {},
     onEdit: (String) -> Unit = {},
@@ -496,6 +507,8 @@ fun ChatBubble(
                             text = mainContent,
                             textColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
                         )
+                    } else if (isGenerating && thought == null) {
+                        TypingIndicator()
                     }
                     
                     if (versionCount > 1 && !isEditing) {

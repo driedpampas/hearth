@@ -147,7 +147,7 @@ class DownloadWorker @AssistedInject constructor(
 
                     val currentTime = System.currentTimeMillis()
                     val timeDiff = currentTime - lastProgressUpdate
-                    if (timeDiff >= 200) { // Update every 200ms for "live" feel
+                    if (timeDiff >= 1000) { // Update every 1000ms to avoid spamming notifications
                         val progress = if (totalBytes > 0) (downloadedBytes.toFloat() / totalBytes * 100f) else 0f
                         val progressInt = progress.toInt()
                         
@@ -160,8 +160,6 @@ class DownloadWorker @AssistedInject constructor(
                             -1L
                         }
 
-                        Log.v(TAG, "Download progress for $fileName: ${String.format("%.2f", progress)}% (${downloadedBytes / 1024} KB/s)")
-                        
                         setProgress(Data.Builder()
                             .putFloat("progress", progress)
                             .putString("fileName", fileName)

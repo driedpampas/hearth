@@ -73,6 +73,9 @@ data class CharacterEntity(
     val topP: Float,
     val topK: Int,
     val enableThinking: Boolean,
+    val enableThinkingCompatibility: Boolean,
+    val thinkingCompatibilityToken: String,
+    val includeThinkingInContext: Boolean,
     val sceneBackgroundUrl: String?,
     val isPredefined: Boolean,
     val lastUsedAt: Long
@@ -124,9 +127,18 @@ interface CharacterDao {
     suspend fun updateModelReference(id: String, modelReference: String)
 
     @Query(
-        "UPDATE characters SET temp = :temp, topP = :topP, topK = :topK, enableThinking = :enableThinking WHERE id = :id"
+        "UPDATE characters SET temp = :temp, topP = :topP, topK = :topK, enableThinking = :enableThinking, enableThinkingCompatibility = :enableThinkingCompatibility, thinkingCompatibilityToken = :thinkingCompatibilityToken, includeThinkingInContext = :includeThinkingInContext WHERE id = :id"
     )
-    suspend fun updateSamplingSettings(id: String, temp: Float, topP: Float, topK: Int, enableThinking: Boolean)
+    suspend fun updateSamplingSettings(
+        id: String,
+        temp: Float,
+        topP: Float,
+        topK: Int,
+        enableThinking: Boolean,
+        enableThinkingCompatibility: Boolean,
+        thinkingCompatibilityToken: String,
+        includeThinkingInContext: Boolean
+    )
 
     @Delete
     suspend fun deleteCharacter(character: CharacterEntity)
@@ -200,7 +212,7 @@ interface ChatMessageDao {
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 8, 
+    version = 10, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -222,6 +234,9 @@ fun CharacterEntity.toDomain(): Character = Character(
     topP = topP,
     topK = topK,
     enableThinking = enableThinking,
+    enableThinkingCompatibility = enableThinkingCompatibility,
+    thinkingCompatibilityToken = thinkingCompatibilityToken,
+    includeThinkingInContext = includeThinkingInContext,
     sceneBackgroundUrl = sceneBackgroundUrl,
     isPredefined = isPredefined,
     lastUsedAt = lastUsedAt
@@ -239,6 +254,9 @@ fun Character.toEntity(): CharacterEntity = CharacterEntity(
     topP = topP,
     topK = topK,
     enableThinking = enableThinking,
+    enableThinkingCompatibility = enableThinkingCompatibility,
+    thinkingCompatibilityToken = thinkingCompatibilityToken,
+    includeThinkingInContext = includeThinkingInContext,
     sceneBackgroundUrl = sceneBackgroundUrl,
     isPredefined = isPredefined,
     lastUsedAt = lastUsedAt

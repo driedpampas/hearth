@@ -132,8 +132,14 @@ class LiteRtEngineWrapper @Inject constructor(
     }
 
     fun createConversation(character: Character) {
+        val systemInstruction = if (character.enableThinking && character.enableThinkingCompatibility && character.thinkingCompatibilityToken.isNotEmpty()) {
+            character.thinkingCompatibilityToken + "\n" + character.systemPromptLore
+        } else {
+            character.systemPromptLore
+        }
+
         val config = ConversationConfig(
-            systemInstruction = Contents.of(character.systemPromptLore),
+            systemInstruction = Contents.of(systemInstruction),
             samplerConfig = SamplerConfig(
                 temperature = character.temp.toDouble(),
                 topK = character.topK,
@@ -145,15 +151,25 @@ class LiteRtEngineWrapper @Inject constructor(
         conversation = engine?.createConversation(config)
     }
 
-    fun sendMessage(text: String, reminder: String = "", history: List<org.eu.nl.syu.hearth.data.ChatMessage> = emptyList()): Flow<String> = callbackFlow {
+    fun sendMessage(
+        text: String, 
+        reminder: String = "", 
+        history: List<org.eu.nl.syu.hearth.data.ChatMessage> = emptyList(),
+        includeThinking: Boolean = false
+    ): Flow<String> = callbackFlow {
         val fullPrompt = StringBuilder()
         
-        // Add history for context if it's a new conversation or we need to ensure context
         if (history.isNotEmpty()) {
             history.filter { !it.isHiddenFromAi }.forEach { msg ->
                 val roleName = if (msg.role == org.eu.nl.syu.hearth.data.MessageRole.USER) "User" else "Assistant"
-                // Clean content from thinking tags for the history view sent to AI to save tokens/focus
-                val content = msg.content.replace(Regex("<think>.*?</think>", RegexOption.DOT_MATCHES_ALL), "").trim()
+                // Clean content from thinking tags if not requested to keep them
+                var content = msg.content
+                if (!includeThinking) {
+                    content = content
+                        .replace(Regex("<think>.*?</think>", RegexOption.DOT_MATCHES_ALL), "")
+                        .replace(Regex("<\\|channel>thought\\n.*?<channel\\|>", RegexOption.DOT_MATCHES_ALL), "")
+                        .trim()
+                }
                 if (content.isNotEmpty()) {
                     fullPrompt.append("$roleName: $content\n")
                 }
@@ -166,6 +182,9 @@ class LiteRtEngineWrapper @Inject constructor(
         if (reminder.isNotEmpty()) {
             fullPrompt.append("\n\n[Reminder: $reminder]")
         }
+
+        // Trigger for Assistant response
+        fullPrompt.append("\nAssistant: ")
 
         val messageContent = fullPrompt.toString()
 

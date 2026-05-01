@@ -65,7 +65,8 @@ data class ChatUiState(
     val isLoadingModel: Boolean = false,
     val threadTitle: String? = null,
     val versionCounts: Map<String, Int> = emptyMap(),
-    val displayedVersions: Map<String, Int> = emptyMap()
+    val displayedVersions: Map<String, Int> = emptyMap(),
+    val regeneratingMessageId: String? = null
 )
 
 @HiltViewModel
@@ -88,7 +89,7 @@ class ChatViewModel @Inject constructor(
     fun stopGeneration() {
         generationJob?.cancel()
         generationJob = null
-        _uiState.update { it.copy(isGenerating = false, currentGeneratingText = "") }
+        _uiState.update { it.copy(isGenerating = false, currentGeneratingText = "", regeneratingMessageId = null) }
     }
 
     fun loadConversation(conversationId: String) {
@@ -332,7 +333,12 @@ class ChatViewModel @Inject constructor(
             var fullResponse = ""
 
             val history = _uiState.value.messages.dropLast(1).takeLast(10) // Send last 10 PREVIOUS messages
-            generationJob = engineWrapper.sendMessage(content, reminder, history)
+            generationJob = engineWrapper.sendMessage(
+                text = content,
+                reminder = reminder,
+                history = history,
+                includeThinking = character.includeThinkingInContext
+            )
                 .onEach { partial ->
                     fullResponse += partial
                     _uiState.update { it.copy(currentGeneratingText = fullResponse) }
@@ -343,8 +349,12 @@ class ChatViewModel @Inject constructor(
                     
                     var finalContent = fullResponse
                     if (cause is kotlinx.coroutines.CancellationException) {
-                        if (finalContent.contains("<think>") && !finalContent.contains("</think>")) {
-                            finalContent += "\n</think>\n[Stopped by user]"
+                        val hasOpenThink = (finalContent.contains("<think>") && !finalContent.contains("</think>")) ||
+                                         (finalContent.contains("<|channel>thought") && !finalContent.contains("<channel|>"))
+                        
+                        if (hasOpenThink) {
+                            val closingTag = if (finalContent.contains("<think>")) "\n</think>" else "\n<channel|>"
+                            finalContent += "$closingTag\n[Stopped by user]"
                         } else {
                             finalContent += "\n[Stopped by user]"
                         }
@@ -397,6 +407,9 @@ class ChatViewModel @Inject constructor(
         topP: Float,
         topK: Int,
         enableThinking: Boolean,
+        enableThinkingCompatibility: Boolean,
+        thinkingCompatibilityToken: String,
+        includeThinkingInContext: Boolean,
         onDone: (() -> Unit)? = null
     ) {
         val character = _uiState.value.character ?: return
@@ -407,7 +420,10 @@ class ChatViewModel @Inject constructor(
                 temp = temp,
                 topP = topP,
                 topK = topK,
-                enableThinking = enableThinking
+                enableThinking = enableThinking,
+                enableThinkingCompatibility = enableThinkingCompatibility,
+                thinkingCompatibilityToken = thinkingCompatibilityToken,
+                includeThinkingInContext = includeThinkingInContext
             )
 
             _uiState.update {
@@ -416,7 +432,10 @@ class ChatViewModel @Inject constructor(
                         temp = temp,
                         topP = topP,
                         topK = topK,
-                        enableThinking = enableThinking
+                        enableThinking = enableThinking,
+                        enableThinkingCompatibility = enableThinkingCompatibility,
+                        thinkingCompatibilityToken = thinkingCompatibilityToken,
+                        includeThinkingInContext = includeThinkingInContext
                     ),
                     isLoadingModel = true,
                     modelError = null
@@ -439,7 +458,10 @@ class ChatViewModel @Inject constructor(
                     temp = temp,
                     topP = topP,
                     topK = topK,
-                    enableThinking = enableThinking
+                    enableThinking = enableThinking,
+                    enableThinkingCompatibility = enableThinkingCompatibility,
+                    thinkingCompatibilityToken = thinkingCompatibilityToken,
+                    includeThinkingInContext = includeThinkingInContext
                 ))
 
                 _uiState.update { it.copy(isLoadingModel = false) }
@@ -550,9 +572,8 @@ class ChatViewModel @Inject constructor(
 
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
-            _uiState.update { it.copy(isGenerating = true) }
-
             val versionGroupId = originalMessage.versionGroupId ?: originalMessage.id
+            _uiState.update { it.copy(isGenerating = true, regeneratingMessageId = versionGroupId) }
             val nextVersionIndex = (_uiState.value.versionCounts[versionGroupId] ?: 1)
 
             // To regenerate, we need the context up to the parent of this message
@@ -614,6 +635,7 @@ class ChatViewModel @Inject constructor(
                             messages = newMessages,
                             isGenerating = false,
                             currentGeneratingText = "",
+                            regeneratingMessageId = null,
                             tokenCount = newMessages.sumOf { (it.content.length / 4).coerceAtLeast(0) },
                             versionCounts = state.versionCounts + (versionGroupId to nextVersionIndex + 1),
                             displayedVersions = state.displayedVersions + (versionGroupId to nextVersionIndex)

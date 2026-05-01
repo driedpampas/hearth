@@ -35,8 +35,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 
 @Composable
+@Preview
 fun FadeTextAnimation(
     modifier: Modifier = Modifier,
     text: String = "Loading...",
@@ -77,7 +79,7 @@ fun FadeTextAnimation(
                     drawContent()
                     drawRect(
                         brush = brush,
-                        blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn
+                        blendMode = androidx.compose.ui.graphics.BlendMode.DstOut
                     )
                 }
             }

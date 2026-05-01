@@ -42,9 +42,9 @@ object DefaultCharacters {
         systemPromptLore = ASSISTANT_SYSTEM_PROMPT,
         reminderMessage = ASSISTANT_REMINDER,
         modelReference = "",
-        temp = 0.7f,
-        topP = 0.9f,
-        topK = 40,
+        temp = 1.0f,
+        topP = 0.95f,
+        topK = 64,
         sceneBackgroundUrl = null,
         isPredefined = true,
         lastUsedAt = 0L

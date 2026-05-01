@@ -32,10 +32,13 @@ data class Character(
     val reminderMessage: String = "",
     val initialMessages: List<ChatMessage> = emptyList(),
     val modelReference: String, // Path or ID of the .litertlm file
-    val temp: Float = 0.8f,
+    val temp: Float = 1.0f,
     val topP: Float = 0.95f,
-    val topK: Int = 40,
+    val topK: Int = 64,
     val enableThinking: Boolean = false,
+    val enableThinkingCompatibility: Boolean = false,
+    val thinkingCompatibilityToken: String = "",
+    val includeThinkingInContext: Boolean = false,
     val sceneBackgroundUrl: String? = null,
     val isPredefined: Boolean = false,
     val lastUsedAt: Long = 0L
