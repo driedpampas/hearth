@@ -1,0 +1,85 @@
+/*
+ * Hearth: An offline AI chat application for Android.
+ * Copyright (C) 2026 syulze <me@syu.nl.eu.org>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package org.eu.nl.syu.hearth.data.local
+
+import androidx.room.Dao
+import androidx.room.Query
+import androidx.room.SkipQueryVerification
+
+/**
+ * Data class to represent search results from the virtual vec0 table.
+ */
+data class VectorSearchResult(
+    val rowId: Long,
+    val distance: Float
+)
+
+@Dao
+interface VectorDao {
+
+    /**
+     * Insert embedding for a lore chunk into the vec_lore table.
+     */
+    @SkipQueryVerification
+    @Query("INSERT INTO vec_lore(lore_id, embedding) VALUES (:loreId, :embedding)")
+    suspend fun insertLoreEmbedding(loreId: String, embedding: ByteArray)
+
+    /**
+     * Insert embedding for a memory entry into the vec_memory table.
+     */
+    @SkipQueryVerification
+    @Query("INSERT INTO vec_memory(memory_id, embedding) VALUES (:memoryId, :embedding)")
+    suspend fun insertMemoryEmbedding(memoryId: String, embedding: ByteArray)
+
+    /**
+     * KNN search for lore chunks. Returns the rowid and distance.
+     */
+    @SkipQueryVerification
+    @Query("""
+        SELECT rowid as rowId, distance
+        FROM vec_lore
+        WHERE embedding MATCH :queryEmbedding
+        AND k = :topK
+        ORDER BY distance ASC
+    """)
+    suspend fun searchNearestLore(queryEmbedding: ByteArray, topK: Int = 3): List<VectorSearchResult>
+
+    /**
+     * Given the search results, retrieve the actual lore chunks.
+     * Note: We use rowid mapping here. If you need to map by lore_id, you can join with the actual table.
+     */
+    @SkipQueryVerification
+    @Query("""
+        SELECT lc.* 
+        FROM lore_chunks lc
+        INNER JOIN vec_lore vl ON lc.id = vl.lore_id
+        WHERE vl.embedding MATCH :queryEmbedding
+        AND vl.k = :topK
+        ORDER BY vl.distance ASC
+    """)
+    suspend fun searchLoreChunks(queryEmbedding: ByteArray, topK: Int = 3): List<LoreChunkEntity>
+
+    @SkipQueryVerification
+    @Query("DELETE FROM vec_lore")
+    suspend fun clearLoreVectors()
+
+    @SkipQueryVerification
+    @Query("DELETE FROM vec_memory")
+    suspend fun clearMemoryVectors()
+}

@@ -16,10 +16,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-plugins {
-    alias(libs.plugins.android.application) apply false
-    alias(libs.plugins.kotlin.compose) apply false
-    alias(libs.plugins.hilt) apply false
-    alias(libs.plugins.ksp) apply false
+package org.eu.nl.syu.hearth.common
+
+import androidx.core.net.toUri
+import net.openid.appauth.AuthorizationServiceConfiguration
+import org.eu.nl.syu.hearth.BuildConfig
+
+object ProjectConfig {
+    // Hugging Face Client ID.
+    val clientId = BuildConfig.HF_CLIENT_ID
+
+    // Registered redirect URI.
+    const val redirectUri = "org.eu.nl.syu.hearth://oauth"
+
+    // OAuth 2.0 Endpoints
+    private const val authEndpoint = "https://huggingface.co/oauth/authorize"
+    private const val tokenEndpoint = "https://huggingface.co/oauth/token"
+
+    // OAuth service configuration
+    val authServiceConfig = AuthorizationServiceConfiguration(
+        authEndpoint.toUri(),
+        tokenEndpoint.toUri()
+    )
 }

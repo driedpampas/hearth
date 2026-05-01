@@ -16,10 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-plugins {
-    alias(libs.plugins.android.application) apply false
-    alias(libs.plugins.kotlin.compose) apply false
-    alias(libs.plugins.hilt) apply false
-    alias(libs.plugins.ksp) apply false
-}
+package org.eu.nl.syu.hearth.data
+
+import java.util.UUID
+
+data class ChatThread(
+    val id: String = UUID.randomUUID().toString(),
+    val characterId: String,
+    val title: String,
+    val createdAt: Long = System.currentTimeMillis(),
+    val lastMessageAt: Long = createdAt,
+    val sequenceId: Int = 0
+)

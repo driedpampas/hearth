@@ -16,10 +16,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-plugins {
-    alias(libs.plugins.android.application) apply false
-    alias(libs.plugins.kotlin.compose) apply false
-    alias(libs.plugins.hilt) apply false
-    alias(libs.plugins.ksp) apply false
+package org.eu.nl.syu.hearth.data
+
+import java.util.UUID
+
+/**
+ * Message model supporting system-level notes and AI hidden states.
+ */
+data class ChatMessage(
+    val id: String = UUID.randomUUID().toString(),
+    val role: MessageRole,
+    val content: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    val isHiddenFromAi: Boolean = false,
+    val modelReference: String? = null,
+    val generationTimeMs: Long? = null,
+    val tokensPerSecond: Float? = null,
+    val parentId: String? = null,
+    val versionGroupId: String? = null,
+    val versionIndex: Int = 0
+)
+
+enum class MessageRole {
+    USER, MODEL, SYSTEM
 }

@@ -1,6 +1,3 @@
-#!/bin/bash
-
-# Exit on any error
 set -e
 
 # Check for ANDROID_NDK_HOME
