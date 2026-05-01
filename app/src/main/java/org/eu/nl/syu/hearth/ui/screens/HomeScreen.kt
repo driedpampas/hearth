@@ -57,7 +57,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingActionButtonMenu
 import androidx.compose.material3.FloatingActionButtonMenuItem
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -100,6 +99,7 @@ import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ChatThread
 import org.eu.nl.syu.hearth.data.DefaultCharacters
 import org.eu.nl.syu.hearth.ui.components.GlassySurface
+import org.eu.nl.syu.hearth.ui.components.GlassyDropdownMenu
 import org.eu.nl.syu.hearth.ui.viewmodels.HomeViewModel
 import androidx.compose.foundation.lazy.grid.items as gridItems
 
@@ -542,60 +542,44 @@ private fun ThreadCard(
             }
         }
 
-        DropdownMenu(
+        GlassyDropdownMenu(
             expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false },
-            containerColor = Color.Transparent,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-            border = null,
-            shape = androidx.compose.ui.graphics.RectangleShape,
-            modifier = Modifier.background(Color.Transparent).padding(16.dp)
+            onDismissRequest = { menuExpanded = false }
         ) {
-            Box(modifier = Modifier.padding(16.dp)) {
-                GlassySurface(
-                    shape = MaterialTheme.shapes.large,
-                    blurRadius = 12.dp,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f)
-                ) {
-                    Column(modifier = Modifier.padding(vertical = 4.dp).width(160.dp)) {
-                        DropdownMenuItem(
-                            text = { Text("Rename", fontWeight = FontWeight.Medium) },
-                            onClick = {
-                                menuExpanded = false
-                                onRename()
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            },
-                            colors = androidx.compose.material3.MenuDefaults.itemColors(
-                                textColor = MaterialTheme.colorScheme.onSurface
-                            )
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete", fontWeight = FontWeight.Medium) },
-                            onClick = {
-                                menuExpanded = false
-                                onDelete()
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            },
-                            colors = androidx.compose.material3.MenuDefaults.itemColors(
-                                textColor = MaterialTheme.colorScheme.error
-                            )
-                        )
-                    }
-                }
-            }
+            DropdownMenuItem(
+                text = { Text("Rename", fontWeight = FontWeight.Medium) },
+                onClick = {
+                    menuExpanded = false
+                    onRename()
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                colors = androidx.compose.material3.MenuDefaults.itemColors(
+                    textColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+            DropdownMenuItem(
+                text = { Text("Delete", fontWeight = FontWeight.Medium) },
+                onClick = {
+                    menuExpanded = false
+                    onDelete()
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                colors = androidx.compose.material3.MenuDefaults.itemColors(
+                    textColor = MaterialTheme.colorScheme.error
+                )
+            )
         }
     }
 }

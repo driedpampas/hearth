@@ -399,4 +399,20 @@ class HomeViewModel @Inject constructor(
             chatThreadDao.updateThreadTitle(threadId, newTitle)
         }
     }
+
+    fun deleteModel(file: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Unload if it's the current model
+            if (_uiState.value.selectedModel == file.name) {
+                withContext(Dispatchers.Main) {
+                    unloadModel()
+                }
+            }
+            
+            val success = modelManager.deleteModel(file.name)
+            if (success) {
+                reloadLocalModels()
+            }
+        }
+    }
 }

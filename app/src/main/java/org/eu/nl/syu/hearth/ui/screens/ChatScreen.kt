@@ -75,7 +75,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.text.style.TextAlign
@@ -120,6 +119,7 @@ import org.eu.nl.syu.hearth.ui.components.MarkdownText
 import org.eu.nl.syu.hearth.ui.viewmodels.ChatViewModel
 import org.eu.nl.syu.hearth.ui.viewmodels.DeletionMode
 import org.eu.nl.syu.hearth.ui.components.GlassySurface
+import org.eu.nl.syu.hearth.ui.components.GlassyDropdownMenu
 import org.eu.nl.syu.hearth.ui.components.ThinkingProcess
 import org.eu.nl.syu.hearth.ui.components.parseThinkingContent
 import java.io.File
@@ -207,7 +207,7 @@ fun ChatScreen(
                                 Icon(Icons.Filled.Settings, contentDescription = "Thread settings")
                             }
                             
-                            DropdownMenu(
+                            GlassyDropdownMenu(
                                 expanded = threadMenuExpanded,
                                 onDismissRequest = { threadMenuExpanded = false }
                             ) {
@@ -555,7 +555,7 @@ fun ChatBubble(
                     }
                 }
 
-                DropdownMenu(
+                GlassyDropdownMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false }
                 ) {

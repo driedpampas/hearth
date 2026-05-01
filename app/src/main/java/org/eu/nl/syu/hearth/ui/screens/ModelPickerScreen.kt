@@ -69,6 +69,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.platform.LocalContext
 import org.eu.nl.syu.hearth.common.ModelSizeUtils
+import org.eu.nl.syu.hearth.ui.components.GlassyDropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Delete
 import java.io.File
 
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -105,6 +108,8 @@ fun ModelPickerScreen(
 
     var showRetryDialog by remember { mutableStateOf(false) }
     var retryFile by remember { mutableStateOf<File?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var modelToDelete by remember { mutableStateOf<File?>(null) }
 
     if (showRetryDialog && retryFile != null) {
         AlertDialog(
@@ -121,6 +126,32 @@ fun ModelPickerScreen(
             },
             dismissButton = {
                 Button(onClick = { showRetryDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showDeleteConfirm && modelToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Model") },
+            text = { Text("Are you sure you want to delete ${modelToDelete!!.name}? This will remove the model from your device.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        viewModel.deleteModel(modelToDelete!!)
+                        showDeleteConfirm = false
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDeleteConfirm = false }) {
                     Text("Cancel")
                 }
             }
@@ -252,7 +283,8 @@ fun ModelPickerScreen(
                                 onSelectModel = onSelectModel,
                                 onOpenModelSettings = onNavigateToModelSettings,
                                 isFailed = isFailed,
-                                onRetry = { retryFile = mFile; showRetryDialog = true }
+                                onRetry = { retryFile = mFile; showRetryDialog = true },
+                                onDelete = { modelToDelete = mFile; showDeleteConfirm = true }
                             )
                         }
                     }
@@ -273,9 +305,13 @@ private fun ModelItem(
     onSelectModel: (java.io.File) -> Unit,
     onOpenModelSettings: () -> Unit,
     isFailed: Boolean = false,
-    onRetry: () -> Unit = {}
+    onRetry: () -> Unit = {},
+    onDelete: () -> Unit = {}
 ) {
-    val currentModelName = mFile.name
+    var menuExpanded by remember { mutableStateOf(false) }
+    
+    Box {
+        val currentModelName = mFile.name
     val isSelected = uiState.selectedModel == currentModelName && uiState.isModelLoaded
     val allowedModel = filenameToModel[currentModelName]
     val diskSizeMb = mFile.length().toFloat() / (1024f * 1024f)
@@ -286,6 +322,7 @@ private fun ModelItem(
 
     GlassySurface(
         onClick = { if (isFailed) onRetry() else onSelectModel(mFile) },
+        onLongClick = { menuExpanded = true },
         modifier = Modifier
             .fillMaxWidth()
             .alpha(if (uiState.isModelLoading || isFailed) 0.5f else 1f),
@@ -448,6 +485,30 @@ private fun ModelItem(
             IconButton(onClick = onOpenModelSettings) {
                 Icon(Icons.Default.Settings, contentDescription = "Model Options")
             }
+        }
+    }
+        
+    GlassyDropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Delete", fontWeight = FontWeight.Medium) },
+                onClick = {
+                    menuExpanded = false
+                    onDelete()
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                colors = androidx.compose.material3.MenuDefaults.itemColors(
+                    textColor = MaterialTheme.colorScheme.error
+                )
+            )
         }
     }
 }
