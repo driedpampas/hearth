@@ -82,4 +82,12 @@ interface VectorDao {
     @SkipQueryVerification
     @Query("DELETE FROM vec_memory")
     suspend fun clearMemoryVectors()
+
+    @SkipQueryVerification
+    @Query("DELETE FROM vec_lore WHERE lore_id IN (SELECT id FROM lore_chunks WHERE characterId = :characterId)")
+    suspend fun deleteLoreVectorsForCharacter(characterId: String)
+
+    @SkipQueryVerification
+    @Query("DELETE FROM vec_memory WHERE memory_id = :memoryId")
+    suspend fun deleteMemoryVector(memoryId: String)
 }

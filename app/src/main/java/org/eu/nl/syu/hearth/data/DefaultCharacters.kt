@@ -39,7 +39,7 @@ object DefaultCharacters {
         name = ASSISTANT_NAME,
         tagline = ASSISTANT_TAGLINE,
         avatarUrl = null,
-        systemPromptLore = ASSISTANT_SYSTEM_PROMPT,
+        roleInstruction = ASSISTANT_SYSTEM_PROMPT,
         reminderMessage = ASSISTANT_REMINDER,
         modelReference = "",
         temp = 1.0f,

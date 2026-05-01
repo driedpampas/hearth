@@ -48,6 +48,10 @@ import org.eu.nl.syu.hearth.data.local.toEntity
 import org.eu.nl.syu.hearth.data.stripThinking
 import org.eu.nl.syu.hearth.runtime.EmbeddingEngine
 import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
+import org.eu.nl.syu.hearth.runtime.MemorySyncWorker
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.Data
 import java.io.File
 import javax.inject.Inject
 
@@ -68,7 +72,10 @@ data class ChatUiState(
     val threadTitle: String? = null,
     val versionCounts: Map<String, Int> = emptyMap(),
     val displayedVersions: Map<String, Int> = emptyMap(),
-    val regeneratingMessageId: String? = null
+    val regeneratingMessageId: String? = null,
+    val isSummarizing: Boolean = false,
+    val isEmbedding: Boolean = false,
+    val styleJson: String? = null
 )
 
 @HiltViewModel
@@ -79,7 +86,11 @@ class ChatViewModel @Inject constructor(
     private val engineWrapper: LiteRtEngineWrapper,
     private val embeddingEngine: EmbeddingEngine,
     private val modelManager: ModelManager,
-    private val modelRepository: ModelRepository
+    private val modelRepository: ModelRepository,
+    private val narrativeContextFactory: org.eu.nl.syu.hearth.domain.NarrativeContextFactory,
+    private val vectorDao: org.eu.nl.syu.hearth.data.local.VectorDao,
+    private val memoryDao: org.eu.nl.syu.hearth.data.local.MemoryDao,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -154,7 +165,8 @@ class ChatViewModel @Inject constructor(
                     threadTitle = thread.title,
                     maxTokens = initialMaxTokens,
                     versionCounts = versionCounts,
-                    displayedVersions = displayedVersions
+                    displayedVersions = displayedVersions,
+                    styleJson = thread.styleJson
                 )
             }
 
@@ -344,23 +356,16 @@ class ChatViewModel @Inject constructor(
                 contextInjection.append("]")
             }
             
-            // If you had memories, you'd add them here too
-            // if (memoryContexts.isNotEmpty()) { ... }
+            val prompt = narrativeContextFactory.constructPrompt(
+                userInput = content,
+                character = character,
+                history = _uiState.value.messages.dropLast(1).takeLast(10)
+            )
 
-            val thinkingHint = if (character.enableThinking) {
-                "\n\nThink through the answer carefully before responding."
-            } else {
-                ""
-            }
-            val reminder = character.reminderMessage + thinkingHint + contextInjection.toString()
             var fullResponse = ""
 
-            val history = _uiState.value.messages.dropLast(1).takeLast(10) // Send last 10 PREVIOUS messages
-            generationJob = engineWrapper.sendMessage(
-                text = content,
-                reminder = reminder,
-                history = history,
-                includeThinking = character.includeThinkingInContext,
+            generationJob = engineWrapper.sendRawPrompt(
+                prompt = prompt,
                 enableThinking = character.enableThinking
             )
                 .onEach { partial ->
@@ -706,6 +711,29 @@ class ChatViewModel @Inject constructor(
                     versionCounts = state.versionCounts + (versionGroupId to nextVersionIndex + 1),
                     displayedVersions = state.displayedVersions + (versionGroupId to nextVersionIndex)
                 )
+            }
+
+            // Invalidate affected memories
+            val affectedMemories = memoryDao.findMemoriesCoveringTimestamp(originalMessage.timestamp)
+            if (affectedMemories.isNotEmpty()) {
+                affectedMemories.forEach { memory ->
+                    memoryDao.deleteMemory(memory.id)
+                    vectorDao.deleteMemoryVector(memory.id)
+
+                    val data = Data.Builder()
+                        .putString("characterId", character.id)
+                        .putString("threadId", threadId)
+                        .putLong("startTs", memory.startMessageTimestamp)
+                        .putLong("endTs", memory.endMessageTimestamp)
+                        .putString("modelPath", character.modelReference)
+                        .build()
+
+                    val workRequest = OneTimeWorkRequestBuilder<MemorySyncWorker>()
+                        .setInputData(data)
+                        .build()
+
+                    WorkManager.getInstance(context).enqueue(workRequest)
+                }
             }
         }
     }

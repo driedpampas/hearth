@@ -72,15 +72,16 @@ class EmbeddingEngine @Inject constructor(
 
     private suspend fun initialize(modelPath: String) {
         withContext(Dispatchers.IO) {
+            val useNpu = modelRepository.experimentalNpuEnabled.first()
             try {
                 embedder = GemmaEmbeddingModel(
                     modelPath,
                     context.cacheDir.path,
-                    true // isNpu
+                    useNpu
                 )
                 currentModelPath = modelPath
             } catch (e: Exception) {
-                // Fallback to CPU if NPU fails
+                // Fallback to CPU if NPU fails or if was already using CPU and failed (unlikely)
                 embedder = GemmaEmbeddingModel(
                     modelPath,
                     context.cacheDir.path,

@@ -43,7 +43,7 @@ class ScraperUseCase @Inject constructor(
                 {
                   "name": "...",
                   "tagline": "...",
-                  "systemPromptLore": "..."
+                  "roleInstruction": "..."
                 }
             """.trimIndent()
             
@@ -69,8 +69,8 @@ class ScraperUseCase @Inject constructor(
             // Very basic manual parsing for demonstration
             val name = json.substringAfter("\"name\": \"").substringBefore("\"")
             val tagline = json.substringAfter("\"tagline\": \"").substringBefore("\"")
-            val lore = json.substringAfter("\"systemPromptLore\": \"").substringBefore("\"")
-            mapOf("name" to name, "tagline" to tagline, "systemPromptLore" to lore)
+            val lore = json.substringAfter("\"roleInstruction\": \"").substringBefore("\"")
+            mapOf("name" to name, "tagline" to tagline, "roleInstruction" to lore)
         } catch (e: Exception) {
             null
         }

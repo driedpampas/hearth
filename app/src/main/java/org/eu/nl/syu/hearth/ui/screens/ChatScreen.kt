@@ -72,6 +72,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -146,6 +147,16 @@ fun ChatScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var newThreadTitle by remember { mutableStateOf("") }
 
+    val chatStyle = remember(uiState.styleJson) {
+        uiState.styleJson?.let {
+            try {
+                com.google.gson.Gson().fromJson(it, org.eu.nl.syu.hearth.data.ChatStyle::class.java)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     LaunchedEffect(threadId) {
         viewModel.loadConversation(threadId)
     }
@@ -167,6 +178,12 @@ fun ChatScreen(
                 modifier = Modifier.fillMaxSize().blur(8.dp),
                 colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
             )
+        } else if (chatStyle?.backgroundColor != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(android.graphics.Color.parseColor(chatStyle.backgroundColor)))
+            )
         } else {
             // Default gradient background for immersion
             Box(
@@ -182,6 +199,10 @@ fun ChatScreen(
                         )
                     )
             )
+        }
+
+        if (chatStyle != null && chatStyle.backgroundBlur > 0) {
+            Box(modifier = Modifier.fillMaxSize().blur(chatStyle.backgroundBlur.dp))
         }
 
         Scaffold(
@@ -307,6 +328,14 @@ fun ChatScreen(
                     if (uiState.isGenerating && uiState.currentGeneratingText.isEmpty() && uiState.regeneratingMessageId == null) {
                         item {
                             TypingIndicator()
+                        }
+                    }
+
+                    if (uiState.isSummarizing || uiState.isEmbedding) {
+                        item {
+                            StatusIndicator(
+                                text = if (uiState.isSummarizing) "Summarizing conversation..." else "Embedding memories..."
+                            )
                         }
                     }
                 }
@@ -690,5 +719,27 @@ fun TypingIndicator() {
         }
         Spacer(modifier = Modifier.width(8.dp))
         Text("AI is thinking...", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+    }
+}
+
+@Composable
+fun StatusIndicator(text: String) {
+    Row(
+        modifier = Modifier.padding(8.dp).fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(16.dp),
+            strokeWidth = 2.dp,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+        )
     }
 }

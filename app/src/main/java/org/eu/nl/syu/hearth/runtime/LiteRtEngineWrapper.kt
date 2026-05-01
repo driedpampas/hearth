@@ -139,9 +139,9 @@ class LiteRtEngineWrapper @Inject constructor(
 
     fun createConversation(character: Character) {
         val systemInstruction = if (character.enableThinking && character.enableThinkingCompatibility && character.thinkingCompatibilityToken.isNotEmpty()) {
-            character.thinkingCompatibilityToken + "\n" + character.systemPromptLore
+            character.thinkingCompatibilityToken + "\n" + character.roleInstruction
         } else {
-            character.systemPromptLore
+            character.roleInstruction
         }
 
         val config = ConversationConfig(
@@ -191,8 +191,14 @@ class LiteRtEngineWrapper @Inject constructor(
         // Trigger for Assistant response
         fullPrompt.append("\nAssistant: ")
 
-        val messageContent = fullPrompt.toString()
+        sendRawPrompt(fullPrompt.toString(), enableThinking).collect { trySend(it) }
+        awaitClose { conversation?.cancelProcess() }
+    }
 
+    fun sendRawPrompt(
+        prompt: String,
+        enableThinking: Boolean = false
+    ): Flow<String> = callbackFlow {
         var inThinkingMode = false
         var lastThought = ""
         var lastMain = ""
@@ -202,7 +208,6 @@ class LiteRtEngineWrapper @Inject constructor(
                 val currentThought = message.channels["thought"] ?: ""
                 val currentMain = message.toString()
                 
-                // Calculate deltas because LiteRT-LM provides accumulated messages
                 val thoughtDelta = if (currentThought.startsWith(lastThought)) {
                     currentThought.substring(lastThought.length)
                 } else {
@@ -227,7 +232,6 @@ class LiteRtEngineWrapper @Inject constructor(
                 
                 if (mainDelta.isNotEmpty()) {
                     if (inThinkingMode) {
-                        // Close thinking block before sending main content
                         response.append("\n</think>\n")
                         inThinkingMode = false
                     }
@@ -255,13 +259,12 @@ class LiteRtEngineWrapper @Inject constructor(
         }
 
         conversation?.sendMessageAsync(
-            Contents.of(messageContent), 
+            Contents.of(prompt), 
             callback,
             extraContext = mapOf("enable_thinking" to enableThinking)
         )
 
         awaitClose {
-            // Cancel process if the flow is cancelled
             conversation?.cancelProcess()
         }
     }

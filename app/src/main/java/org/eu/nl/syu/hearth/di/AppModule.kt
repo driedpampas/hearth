@@ -35,6 +35,8 @@ import org.eu.nl.syu.hearth.data.local.AppDatabase
 import org.eu.nl.syu.hearth.data.local.CharacterDao
 import org.eu.nl.syu.hearth.data.local.ChatMessageDao
 import org.eu.nl.syu.hearth.data.local.ChatThreadDao
+import org.eu.nl.syu.hearth.data.local.MemoryDao
+import org.eu.nl.syu.hearth.data.local.LoreChunkDao
 import org.eu.nl.syu.hearth.data.local.VectorDao
 import java.io.File
 import javax.inject.Singleton
@@ -58,7 +60,7 @@ object AppModule {
             "charchat_db"
         )
             .setDriver(driver)
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
@@ -124,7 +126,7 @@ object AppModule {
         db.execSQL(
             """
                 INSERT INTO characters (
-                    id, name, tagline, avatarUrl, systemPromptLore, reminderMessage,
+                    id, name, tagline, avatarUrl, roleInstruction, reminderMessage,
                     modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, sceneBackgroundUrl, isPredefined, lastUsedAt
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
@@ -133,7 +135,7 @@ object AppModule {
                 character.name,
                 character.tagline,
                 character.avatarUrl,
-                character.systemPromptLore,
+                character.roleInstruction,
                 character.reminderMessage,
                 character.modelReference,
                 character.temp,
@@ -157,7 +159,7 @@ object AppModule {
         connection.prepare(
             """
                 INSERT INTO characters (
-                    id, name, tagline, avatarUrl, systemPromptLore, reminderMessage,
+                    id, name, tagline, avatarUrl, roleInstruction, reminderMessage,
                     modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, sceneBackgroundUrl, isPredefined, lastUsedAt
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
@@ -166,7 +168,7 @@ object AppModule {
             statement.bindText(2, character.name)
             statement.bindText(3, character.tagline)
             if (character.avatarUrl == null) statement.bindNull(4) else statement.bindText(4, character.avatarUrl)
-            statement.bindText(5, character.systemPromptLore)
+            statement.bindText(5, character.roleInstruction)
             statement.bindText(6, character.reminderMessage)
             statement.bindText(7, character.modelReference)
             statement.bindDouble(8, character.temp.toDouble())
@@ -214,6 +216,16 @@ object AppModule {
     @Provides
     fun provideVectorDao(database: AppDatabase): VectorDao {
         return database.vectorDao()
+    }
+
+    @Provides
+    fun provideMemoryDao(database: AppDatabase): MemoryDao {
+        return database.memoryDao()
+    }
+
+    @Provides
+    fun provideLoreChunkDao(database: AppDatabase): LoreChunkDao {
+        return database.loreChunkDao()
     }
 }
 
@@ -289,5 +301,19 @@ private val MIGRATION_8_9 = object : Migration(8, 9) {
 private val MIGRATION_9_10 = object : Migration(9, 10) {
     override fun migrate(connection: SQLiteConnection) {
         connection.prepare("ALTER TABLE characters ADD COLUMN includeThinkingInContext INTEGER NOT NULL DEFAULT 0").use { it.step() }
+    }
+}
+
+private val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(connection: SQLiteConnection) {
+        // CharacterEntity: rename systemPromptLore to roleInstruction
+        connection.prepare("ALTER TABLE characters RENAME COLUMN systemPromptLore TO roleInstruction").use { it.step() }
+        
+        // ChatThreadEntity: add styleJson
+        connection.prepare("ALTER TABLE chat_threads ADD COLUMN styleJson TEXT").use { it.step() }
+        
+        // MemoryEntryEntity: add startMessageTimestamp, endMessageTimestamp
+        connection.prepare("ALTER TABLE memory_entries ADD COLUMN startMessageTimestamp INTEGER NOT NULL DEFAULT 0").use { it.step() }
+        connection.prepare("ALTER TABLE memory_entries ADD COLUMN endMessageTimestamp INTEGER NOT NULL DEFAULT 0").use { it.step() }
     }
 }

@@ -47,7 +47,9 @@ data class MemoryEntryEntity(
     @PrimaryKey val id: String,
     val characterId: String,
     val text: String,
-    val timestamp: Long
+    val timestamp: Long,
+    val startMessageTimestamp: Long,
+    val endMessageTimestamp: Long
 )
 
 @Entity(tableName = "chat_threads")
@@ -57,7 +59,8 @@ data class ChatThreadEntity(
     val title: String,
     val createdAt: Long,
     val lastMessageAt: Long,
-    val sequenceId: Int
+    val sequenceId: Int,
+    val styleJson: String? = null
 )
 
 @Entity(tableName = "characters")
@@ -66,7 +69,7 @@ data class CharacterEntity(
     val name: String,
     val tagline: String,
     val avatarUrl: String?,
-    val systemPromptLore: String,
+    val roleInstruction: String,
     val reminderMessage: String,
     val modelReference: String,
     val temp: Float,
@@ -204,6 +207,36 @@ interface ChatMessageDao {
     suspend fun updateThreadTitle(id: String, newTitle: String)
 }
 
+@Dao
+interface MemoryDao {
+    @Query("SELECT * FROM memory_entries WHERE characterId = :characterId ORDER BY timestamp DESC")
+    suspend fun getMemoriesForCharacter(characterId: String): List<MemoryEntryEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMemory(memory: MemoryEntryEntity)
+
+    @Query("DELETE FROM memory_entries WHERE id = :id")
+    suspend fun deleteMemory(id: String)
+
+    @Query("SELECT * FROM memory_entries WHERE :messageTimestamp BETWEEN startMessageTimestamp AND endMessageTimestamp")
+    suspend fun findMemoriesCoveringTimestamp(messageTimestamp: Long): List<MemoryEntryEntity>
+
+    @Query("DELETE FROM memory_entries WHERE characterId = :characterId")
+    suspend fun deleteMemoriesForCharacter(characterId: String)
+}
+
+@Dao
+interface LoreChunkDao {
+    @Query("SELECT * FROM lore_chunks WHERE characterId = :characterId")
+    suspend fun getChunksForCharacter(characterId: String): List<LoreChunkEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChunks(chunks: List<LoreChunkEntity>)
+
+    @Query("DELETE FROM lore_chunks WHERE characterId = :characterId")
+    suspend fun deleteChunksForCharacter(characterId: String)
+}
+
 @Database(
     entities = [
         CharacterEntity::class, 
@@ -212,13 +245,15 @@ interface ChatMessageDao {
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 10, 
+    version = 11, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun characterDao(): CharacterDao
     abstract fun chatThreadDao(): ChatThreadDao
     abstract fun chatMessageDao(): ChatMessageDao
+    abstract fun memoryDao(): MemoryDao
+    abstract fun loreChunkDao(): LoreChunkDao
     abstract fun vectorDao(): VectorDao
 }
 
@@ -227,7 +262,7 @@ fun CharacterEntity.toDomain(): Character = Character(
     name = name,
     tagline = tagline,
     avatarUrl = avatarUrl,
-    systemPromptLore = systemPromptLore,
+    roleInstruction = roleInstruction,
     reminderMessage = reminderMessage,
     modelReference = modelReference,
     temp = temp,
@@ -247,7 +282,7 @@ fun Character.toEntity(): CharacterEntity = CharacterEntity(
     name = name,
     tagline = tagline,
     avatarUrl = avatarUrl,
-    systemPromptLore = systemPromptLore,
+    roleInstruction = roleInstruction,
     reminderMessage = reminderMessage,
     modelReference = modelReference,
     temp = temp,
@@ -268,7 +303,8 @@ fun ChatThreadEntity.toDomain(): ChatThread = ChatThread(
     title = title,
     createdAt = createdAt,
     lastMessageAt = lastMessageAt,
-    sequenceId = sequenceId
+    sequenceId = sequenceId,
+    styleJson = styleJson
 )
 
 fun ChatThread.toEntity(): ChatThreadEntity = ChatThreadEntity(
@@ -277,7 +313,8 @@ fun ChatThread.toEntity(): ChatThreadEntity = ChatThreadEntity(
     title = title,
     createdAt = createdAt,
     lastMessageAt = lastMessageAt,
-    sequenceId = sequenceId
+    sequenceId = sequenceId,
+    styleJson = styleJson
 )
 
 fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(

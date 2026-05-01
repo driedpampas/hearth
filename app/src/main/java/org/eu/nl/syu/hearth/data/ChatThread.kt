@@ -26,5 +26,6 @@ data class ChatThread(
     val title: String,
     val createdAt: Long = System.currentTimeMillis(),
     val lastMessageAt: Long = createdAt,
-    val sequenceId: Int = 0
+    val sequenceId: Int = 0,
+    val styleJson: String? = null
 )

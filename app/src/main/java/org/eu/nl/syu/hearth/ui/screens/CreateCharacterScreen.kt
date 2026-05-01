@@ -19,6 +19,9 @@
 package org.eu.nl.syu.hearth.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -114,10 +117,12 @@ data class CreateCharacterState(
 class CreateCharacterViewModel @Inject constructor(
     private val scraperUseCase: ScraperUseCase,
     private val characterDao: CharacterDao,
-    private val modelManager: ModelManager
+    private val modelManager: ModelManager,
+    private val loreSyncManager: org.eu.nl.syu.hearth.runtime.LoreSyncManager
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CreateCharacterState())
     val uiState: StateFlow<CreateCharacterState> = _uiState.asStateFlow()
+    val syncState = loreSyncManager.syncState
 
     init {
         refreshModels()
@@ -131,7 +136,7 @@ class CreateCharacterViewModel @Inject constructor(
                     characterId = characterId,
                     name = character.name,
                     tagline = character.tagline,
-                    lore = character.systemPromptLore,
+                    lore = character.roleInstruction,
                     reminderMessage = character.reminderMessage,
                     modelPath = character.modelReference,
                     temp = character.temp,
@@ -205,7 +210,7 @@ class CreateCharacterViewModel @Inject constructor(
                         isScraping = false,
                         name = scraped["name"] ?: it.name,
                         tagline = scraped["tagline"] ?: it.tagline,
-                        lore = scraped["systemPromptLore"] ?: it.lore
+                        lore = scraped["roleInstruction"] ?: it.lore
                     )
                 }
             } else {
@@ -224,7 +229,7 @@ class CreateCharacterViewModel @Inject constructor(
                 name = state.name,
                 tagline = state.tagline,
                 avatarUrl = null,
-                systemPromptLore = state.lore,
+                roleInstruction = state.lore,
                 reminderMessage = state.reminderMessage,
                 modelReference = state.modelPath,
                 temp = state.temp,
@@ -235,6 +240,7 @@ class CreateCharacterViewModel @Inject constructor(
                 isPredefined = false
             )
             characterDao.insertCharacter(character.toEntity())
+            loreSyncManager.syncLore(character, state.lore)
             onSuccess()
         }
     }
@@ -249,6 +255,7 @@ fun CreateCharacterScreen(
     viewModel: CreateCharacterViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val syncState by viewModel.syncState.collectAsStateWithLifecycle()
     
     LaunchedEffect(characterId) {
         if (characterId != null) {
@@ -479,6 +486,10 @@ fun CreateCharacterScreen(
                 }
             }
         }
+
+        if (syncState is org.eu.nl.syu.hearth.runtime.LoreSyncManager.SyncState.Syncing) {
+            LoreSyncOverlay()
+        }
     }
 }
 
@@ -544,6 +555,39 @@ private fun CreateCharacterModelPickerScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun LoreSyncOverlay() {
+    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "loreSync")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(1000, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.8f))
+            .clickable(enabled = false) {},
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "Recalculating embeddings...",
+                style = MaterialTheme.typography.titleMedium,
+                color = androidx.compose.ui.graphics.Color.White,
+                modifier = Modifier.alpha(alpha)
+            )
         }
     }
 }

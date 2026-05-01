@@ -28,7 +28,7 @@ data class Character(
     val name: String,
     val tagline: String,
     val avatarUrl: String? = null,
-    val systemPromptLore: String,
+    val roleInstruction: String,
     val reminderMessage: String = "",
     val initialMessages: List<ChatMessage> = emptyList(),
     val modelReference: String, // Path or ID of the .litertlm file

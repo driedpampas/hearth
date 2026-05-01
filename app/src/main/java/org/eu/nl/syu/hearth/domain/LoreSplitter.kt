@@ -18,10 +18,14 @@
 
 package org.eu.nl.syu.hearth.domain
 
+import javax.inject.Inject
+import javax.inject.Singleton
+
 /**
  * Utility to chunk large character bios into searchable pieces.
  */
-object LoreSplitter {
+@Singleton
+class LoreSplitter @Inject constructor() {
 
     /**
      * Splits a large text into chunks of approximately [chunkSize] characters,
