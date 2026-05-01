@@ -47,7 +47,6 @@ fun GlassySurface(
     enabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    // 1. Outer Box: No clipping here. This allows the inner blur to escape the bounds.
     Box(
         modifier = modifier.then(
             if (onClick != null || onLongClick != null) {
@@ -59,7 +58,7 @@ fun GlassySurface(
             } else Modifier
         )
     ) {
-        // 2. The Bleed Layer: This box matches the content size but blurs outwards.
+        // blur layer
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -67,11 +66,10 @@ fun GlassySurface(
                 .background(color = color, shape = shape)
         )
 
-        // 3. The Content Layer: The actual card surface. 
+        // content layer
         Surface(
             modifier = Modifier
-                .clip(shape), // Clip is applied ONLY to the content layer
-            //color = color.copy(alpha = 0.4f), // Semi-transparent so it feels glassy
+                .clip(shape),
             color = Color.Transparent,
             contentColor = contentColor,
         ) {

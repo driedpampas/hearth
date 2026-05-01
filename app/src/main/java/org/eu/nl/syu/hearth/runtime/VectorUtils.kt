@@ -34,8 +34,6 @@ object VectorUtils {
      * and converts it to a Little-Endian ByteArray for sqlite-vec storage.
      */
     fun processEmbedding(raw: FloatArray): ByteArray {
-        // Matryoshka Truncation: Only take the first 256 dimensions.
-        // This retains ~95%+ retrieval accuracy for Gemma models while saving 3x space.
         val truncated = if (raw.size > TARGET_DIMS) {
             raw.copyOfRange(0, TARGET_DIMS)
         } else {
