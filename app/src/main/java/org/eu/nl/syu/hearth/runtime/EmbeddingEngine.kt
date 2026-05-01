@@ -19,18 +19,29 @@
 package org.eu.nl.syu.hearth.runtime
 
 import android.content.Context
+import com.google.ai.edge.localagents.rag.models.EmbedData
+import com.google.ai.edge.localagents.rag.models.Embedder
+import com.google.ai.edge.localagents.rag.models.EmbeddingRequest
+import com.google.ai.edge.localagents.rag.models.GemmaEmbeddingModel
+import com.google.common.util.concurrent.FutureCallback
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.eu.nl.syu.hearth.data.ModelManager
 import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.local.VectorDao
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import java.util.concurrent.Executors
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 
 @Singleton
 class EmbeddingEngine @Inject constructor(
@@ -39,68 +50,96 @@ class EmbeddingEngine @Inject constructor(
     private val modelRepository: ModelRepository,
     private val modelManager: ModelManager
 ) {
-    private var modelFile: File? = null
-    // Note: If you are using Google Play Services TFLite, you'd initialize InterpreterApi here.
-    // private var interpreter: InterpreterApi? = null
+    private var embedder: Embedder<String>? = null
+    private var currentModelPath: String? = null
+    private val mutex = Mutex()
+    private val callbackExecutor = Executors.newSingleThreadExecutor()
 
-    suspend fun ensureInitialized() {
-        val selectedModelName = modelRepository.selectedEmbeddingModel.first() ?: return
+    /**
+     * Ensures the embedder is initialized with the currently selected embedding model.
+     */
+    suspend fun ensureInitialized() = mutex.withLock {
+        val selectedModelName = modelRepository.selectedEmbeddingModel.first() ?: "EmbeddingGemma-300m"
         val availableModels = modelRepository.getAvailableModels()
-        val model = availableModels.find { it.name == selectedModelName } ?: return
+        val model = availableModels.find { it.name == selectedModelName } ?: return@withLock
         val fileName = modelRepository.getDownloadFileName(model)
         
         val file = File(context.filesDir, "models/$fileName")
-        if (file.exists() && file != modelFile) {
-            initialize(file)
+        if (file.exists() && file.absolutePath != currentModelPath) {
+            initialize(file.absolutePath)
         }
     }
 
-    suspend fun initialize(file: File) {
+    private suspend fun initialize(modelPath: String) {
         withContext(Dispatchers.IO) {
-            modelFile = file
-            // TODO: Initialize TFLite Interpreter here
-            // interpreter = Interpreter(modelFile!!)
+            try {
+                embedder = GemmaEmbeddingModel(
+                    modelPath,
+                    context.cacheDir.path,
+                    true // isNpu
+                )
+                currentModelPath = modelPath
+            } catch (e: Exception) {
+                // Fallback to CPU if NPU fails
+                embedder = GemmaEmbeddingModel(
+                    modelPath,
+                    context.cacheDir.path,
+                    false // isNpu
+                )
+                currentModelPath = modelPath
+            }
         }
-    }
-
-    suspend fun generateEmbedding(text: String): FloatArray = withContext(Dispatchers.Default) {
-        // TODO: Replace with actual inference using `interpreter?.run(...)` or LiteRT.
-        // This is a placeholder generating a dummy 256-dimensional embedding.
-        val dummyEmbedding = FloatArray(256) { 0.0f }
-        // Simple hash-based dummy to make it deterministic
-        val hash = text.hashCode().toFloat()
-        dummyEmbedding[0] = hash
-        
-        // Normalize vector for cosine similarity
-        var norm = 0f
-        for (v in dummyEmbedding) norm += v * v
-        norm = kotlin.math.sqrt(norm)
-        if (norm > 0) {
-            for (i in dummyEmbedding.indices) dummyEmbedding[i] /= norm
-        }
-        
-        dummyEmbedding
     }
 
     /**
-     * Converts a FloatArray into a Little-Endian ByteArray for sqlite-vec.
+     * Generates a vector for the given text.
+     * Truncates to 256 dims and returns a Little-Endian ByteArray.
      */
-    fun floatArrayToByteArray(floatArray: FloatArray): ByteArray {
-        val byteBuffer = ByteBuffer.allocate(floatArray.size * 4)
-        byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-        for (value in floatArray) {
-            byteBuffer.putFloat(value)
-        }
-        return byteBuffer.array()
+    suspend fun getVector(text: String, isQuery: Boolean): ByteArray = withContext(Dispatchers.Default) {
+        ensureInitialized()
+        val currentEmbedder = embedder ?: return@withContext ByteArray(256 * 4)
+
+        // GEMMA Embedding expects TaskType
+        val taskType = if (isQuery) EmbedData.TaskType.RETRIEVAL_QUERY else EmbedData.TaskType.RETRIEVAL_DOCUMENT
+        val embedData = EmbedData.create(text, taskType, isQuery)
+        val request = EmbeddingRequest.create(listOf(embedData))
+        
+        val future = currentEmbedder.getEmbeddings(request)
+        val rawList = future.await()
+        val rawArray = FloatArray(rawList.size) { rawList[it] }
+        
+        VectorUtils.processEmbedding(rawArray)
     }
 
+    /**
+     * Performs a similarity search in the lore chunks.
+     */
     suspend fun similaritySearch(query: String, topK: Int = 3): List<String> {
-        ensureInitialized()
-        val queryEmbedding = generateEmbedding(query)
-        val queryBytes = floatArrayToByteArray(queryEmbedding)
-
-        // The VectorDao searchLoreChunks method joins vec_lore with lore_chunks
-        val results = vectorDao.searchLoreChunks(queryBytes, topK)
+        val queryVector = getVector(query, isQuery = true)
+        val results = vectorDao.searchLoreChunks(queryVector, topK)
         return results.map { it.text }
+    }
+
+    /**
+     * Cleans up the embedder resources.
+     */
+    fun close() {
+        // GemmaEmbeddingModel in 0.3.0 doesn't seem to have a close method in the javap output,
+        // but it might implement AutoCloseable.
+        (embedder as? AutoCloseable)?.close()
+        embedder = null
+        currentModelPath = null
+    }
+
+    // Helper to await ListenableFuture
+    private suspend fun <T> ListenableFuture<T>.await(): T = suspendCoroutine { cont ->
+        Futures.addCallback(this, object : FutureCallback<T> {
+            override fun onSuccess(result: T) {
+                cont.resume(result)
+            }
+            override fun onFailure(t: Throwable) {
+                cont.resumeWithException(t)
+            }
+        }, callbackExecutor)
     }
 }

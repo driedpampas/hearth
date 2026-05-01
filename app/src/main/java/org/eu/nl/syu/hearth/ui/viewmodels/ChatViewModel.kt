@@ -326,19 +326,33 @@ class ChatViewModel @Inject constructor(
                 )
             }
 
-            val loreContexts = embeddingEngine.similaritySearch(content)
-            val contextInjection = if (loreContexts.isNotEmpty()) {
-                "\n\n[Lore Context:\n" + loreContexts.joinToString("\n---\n") + "]"
-            } else {
-                ""
+            // RAG: Retrieve relevant Lore and Memories
+            val loreContexts = embeddingEngine.similaritySearch(content, topK = 3)
+            
+            // Optional: Search memories as well if applicable
+            val queryVector = embeddingEngine.getVector(content, isQuery = true)
+            val memoryContexts = chatMessageDao.getMessageById(activeThreadId ?: "")?.let {
+                // This is a placeholder for searching memories. 
+                // In a real implementation, you'd call vectorDao.searchMemoryEntries
+                emptyList<String>()
+            } ?: emptyList()
+
+            val contextInjection = StringBuilder()
+            if (loreContexts.isNotEmpty()) {
+                contextInjection.append("\n\n[Lore Context:\n")
+                loreContexts.forEach { contextInjection.append("- $it\n") }
+                contextInjection.append("]")
             }
+            
+            // If you had memories, you'd add them here too
+            // if (memoryContexts.isNotEmpty()) { ... }
 
             val thinkingHint = if (character.enableThinking) {
                 "\n\nThink through the answer carefully before responding."
             } else {
                 ""
             }
-            val reminder = character.reminderMessage + thinkingHint + contextInjection
+            val reminder = character.reminderMessage + thinkingHint + contextInjection.toString()
             var fullResponse = ""
 
             val history = _uiState.value.messages.dropLast(1).takeLast(10) // Send last 10 PREVIOUS messages

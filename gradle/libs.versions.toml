@@ -1,6 +1,6 @@
 [versions]
 gson = "2.14.0"
-agp = "9.1.1"
+agp = "9.2.0"
 coreKtx = "1.18.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
@@ -30,6 +30,7 @@ workRuntimeKtx = "2.11.2"
 appauth = "0.11.1"
 datastore = "1.2.1"
 litert = "2.1.4"
+localagents-rag = "0.3.0"
 
 [libraries]
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
@@ -73,6 +74,7 @@ litertlm = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", v
 tflite = { group = "com.google.android.gms", name = "play-services-tflite-java", version.ref = "playServicesTfliteJava" }
 tflite-gpu = { group = "com.google.android.gms", name = "play-services-tflite-gpu", version.ref = "playServicesTfliteGpu" }
 litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
+localagents-rag = { group = "com.google.ai.edge.localagents", name = "localagents-rag", version.ref = "localagents-rag" }
 
 # Richtext
 commonmark = { group = "com.halilibo.compose-richtext", name = "richtext-commonmark", version.ref = "commonmark" }

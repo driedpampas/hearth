@@ -48,21 +48,7 @@ interface VectorDao {
     suspend fun insertMemoryEmbedding(memoryId: String, embedding: ByteArray)
 
     /**
-     * KNN search for lore chunks. Returns the rowid and distance.
-     */
-    @SkipQueryVerification
-    @Query("""
-        SELECT rowid as rowId, distance
-        FROM vec_lore
-        WHERE embedding MATCH :queryEmbedding
-        AND k = :topK
-        ORDER BY distance ASC
-    """)
-    suspend fun searchNearestLore(queryEmbedding: ByteArray, topK: Int = 3): List<VectorSearchResult>
-
-    /**
-     * Given the search results, retrieve the actual lore chunks.
-     * Note: We use rowid mapping here. If you need to map by lore_id, you can join with the actual table.
+     * KNN search for lore chunks. Returns the actual lore chunks.
      */
     @SkipQueryVerification
     @Query("""
@@ -70,10 +56,24 @@ interface VectorDao {
         FROM lore_chunks lc
         INNER JOIN vec_lore vl ON lc.id = vl.lore_id
         WHERE vl.embedding MATCH :queryEmbedding
-        AND vl.k = :topK
+          AND vl.k = :topK
         ORDER BY vl.distance ASC
     """)
-    suspend fun searchLoreChunks(queryEmbedding: ByteArray, topK: Int = 3): List<LoreChunkEntity>
+    suspend fun searchLoreChunks(queryEmbedding: ByteArray, topK: Int = 5): List<LoreChunkEntity>
+
+    /**
+     * KNN search for memory entries. Returns the actual memory entries.
+     */
+    @SkipQueryVerification
+    @Query("""
+        SELECT me.* 
+        FROM memory_entries me
+        INNER JOIN vec_memory vm ON me.id = vm.memory_id
+        WHERE vm.embedding MATCH :queryEmbedding
+          AND vm.k = :topK
+        ORDER BY vm.distance ASC
+    """)
+    suspend fun searchMemoryEntries(queryEmbedding: ByteArray, topK: Int = 5): List<MemoryEntryEntity>
 
     @SkipQueryVerification
     @Query("DELETE FROM vec_lore")
