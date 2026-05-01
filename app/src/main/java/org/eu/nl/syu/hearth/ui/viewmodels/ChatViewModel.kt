@@ -63,7 +63,6 @@ data class ChatUiState(
     val tokenCount: Int = 0,
     val maxTokens: Int = 4096,
     val modelError: String? = null,
-    val isRawModel: Boolean = false,
     val fallbackReason: String? = null,
     val isLoadingModel: Boolean = false,
     val threadTitle: String? = null,
@@ -149,7 +148,6 @@ class ChatViewModel @Inject constructor(
                     character = character.copy(lastUsedAt = openedAt),
                     messages = visibleMessages,
                     modelError = null,
-                    isRawModel = false,
                     fallbackReason = null,
                     isLoadingModel = false,
                     tokenCount = estimatedTokens,
@@ -224,19 +222,13 @@ class ChatViewModel @Inject constructor(
                 _uiState.update { it.copy(modelError = "Model not loaded.") }
             }
 
-            // Sync raw model state to UI
-            viewModelScope.launch {
-                engineWrapper.isRawModel.collect { isRaw ->
-                    _uiState.update { it.copy(isRawModel = isRaw) }
-                }
-            }
             viewModelScope.launch {
                 engineWrapper.fallbackReason.collect { reason ->
                     _uiState.update { it.copy(fallbackReason = reason) }
                 }
             }
 
-            if (engineWrapper.isInitialized() && !engineWrapper.isRawModel.value) {
+            if (engineWrapper.isInitialized()) {
                 engineWrapper.createConversation(character)
             }
         }
@@ -588,7 +580,7 @@ class ChatViewModel @Inject constructor(
         val threadId = activeThreadId ?: return
         val originalMessage = _uiState.value.messages.find { it.id == messageId } ?: return
         if (originalMessage.role != MessageRole.MODEL) return
-        if (engineWrapper.isRawModel.value || _uiState.value.modelError != null || !engineWrapper.isInitialized()) return
+        if (_uiState.value.modelError != null || !engineWrapper.isInitialized()) return
 
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()

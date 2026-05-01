@@ -193,7 +193,7 @@ fun ChatScreen(
                     title = {
                         Column {
                             Text(uiState.threadTitle ?: uiState.character?.name ?: threadId, style = MaterialTheme.typography.titleMedium)
-                            TokenIndicator(uiState.tokenCount, uiState.maxTokens, uiState.modelError, uiState.isRawModel, uiState.fallbackReason)
+                            TokenIndicator(uiState.tokenCount, uiState.maxTokens, uiState.modelError, uiState.fallbackReason)
                         }
                     },
                     navigationIcon = {
@@ -255,7 +255,7 @@ fun ChatScreen(
                     },
                     onStop = { viewModel.stopGeneration() },
                     isGenerating = uiState.isGenerating,
-                    enabled = !uiState.isLoadingModel && uiState.modelError == null && !uiState.isRawModel
+                    enabled = !uiState.isLoadingModel && uiState.modelError == null
                 )
             }
         ) { paddingValues ->
@@ -288,7 +288,7 @@ fun ChatScreen(
                             onDelete = { viewModel.deleteMessage(displayMessage.id, it) },
                             onFork = { viewModel.forkThread(displayMessage.id) },
                             onVersionChange = { direction -> viewModel.switchMessageVersion(displayMessage.versionGroupId ?: displayMessage.id, direction) },
-                            isChatEnabled = !uiState.isRawModel && uiState.modelError == null
+                            isChatEnabled = uiState.modelError == null
                         )
                     }
 
@@ -301,7 +301,7 @@ fun ChatScreen(
                                 ),
                                 statsForNerdsEnabled = statsForNerdsEnabled,
                                 modelDisplayName = null,
-                                isChatEnabled = !uiState.isRawModel && uiState.modelError == null
+                                isChatEnabled = uiState.modelError == null
                             )
                         }
                     }
@@ -342,42 +342,24 @@ fun ChatScreen(
 }
 
 @Composable
-fun TokenIndicator(current: Int, max: Int, modelError: String?, isRawModel: Boolean = false, fallbackReason: String? = null) {
-    if (modelError != null || isRawModel) {
-        val message = when {
-            modelError == "Model not loaded." -> "Model not loaded"
-            isRawModel -> "Raw Mode (No Chat)"
-            else -> "Model error"
-        }
-        val color = if (isRawModel) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+fun TokenIndicator(current: Int, max: Int, modelError: String?, fallbackReason: String? = null) {
+    if (modelError != null) {
+        val color = MaterialTheme.colorScheme.error
         
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    if (isRawModel) Icons.Default.Tune else Icons.Default.Tune, 
-                    contentDescription = null, 
-                    modifier = Modifier.size(12.dp),
-                    tint = color
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    message,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = color,
-                    fontSize = 10.sp
-                )
-            }
-            if (isRawModel && fallbackReason != null) {
-                Text(
-                    fallbackReason,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = color.copy(alpha = 0.7f),
-                    fontSize = 8.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(150.dp)
-                )
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Tune, 
+                contentDescription = null, 
+                modifier = Modifier.size(12.dp),
+                tint = color
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                if (modelError == "Model not loaded.") "Model not loaded" else "Model error",
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                fontSize = 10.sp
+            )
         }
     } else {
         val progress = (current.toFloat() / max).coerceIn(0f, 1f)

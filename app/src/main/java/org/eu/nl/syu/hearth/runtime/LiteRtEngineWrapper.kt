@@ -48,20 +48,17 @@ import javax.inject.Singleton
 @Singleton
 class LiteRtEngineWrapper @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val modelRepository: ModelRepository,
-    private val rawModelWrapper: LiteRtRawModelWrapper
+    private val modelRepository: ModelRepository
 ) {
     private var engine: Engine? = null
     private var conversation: Conversation? = null
     private val _loadedModelPath = MutableStateFlow<String?>(null)
 
     val loadedModelPath: StateFlow<String?> = _loadedModelPath.asStateFlow()
-    private val _isRawModel = MutableStateFlow(false)
-    val isRawModel: StateFlow<Boolean> = _isRawModel.asStateFlow()
     private val _fallbackReason = MutableStateFlow<String?>(null)
     val fallbackReason: StateFlow<String?> = _fallbackReason.asStateFlow()
 
-    fun isInitialized(): Boolean = engine != null || rawModelWrapper.isInitialized()
+    fun isInitialized(): Boolean = engine != null
 
     fun getLoadedModelPath(): String? = _loadedModelPath.value
 
@@ -113,31 +110,14 @@ class LiteRtEngineWrapper @Inject constructor(
             loadModel(modelPath, Backend.GPU(), maxTokens)
             modelRepository.setCachedBackend(hash, "GPU")
         } catch (e: Exception) {
-            try {
-                onFallback?.invoke("GPU not supported for this model. Falling back to CPU.")
-                loadModel(modelPath, Backend.CPU(), maxTokens)
-                modelRepository.setCachedBackend(hash, "CPU")
-            } catch (e2: Exception) {
-                // If both fail, try loading as a raw model
-                val reason = "Model is not a LiteRT LM or incompatible backend. Error: ${e2.message}. Attempting raw load."
-                onFallback?.invoke(reason)
-                _fallbackReason.value = reason
-                tryLoadRaw(modelPath)
-            }
+            onFallback?.invoke("GPU not supported for this model. Falling back to CPU.")
+            loadModel(modelPath, Backend.CPU(), maxTokens)
+            modelRepository.setCachedBackend(hash, "CPU")
         }
     }
 
-    private suspend fun tryLoadRaw(modelPath: String) {
-        val accelerator = Accelerator.CPU
-        rawModelWrapper.loadModel(modelPath, accelerator)
-        _isRawModel.value = true
-        _loadedModelPath.value = modelPath
-        modelRepository.setLastLoadedModelPath(modelPath)
-    }
 
     private suspend fun loadModel(modelPath: String, backend: Backend, maxTokens: Int) {
-        rawModelWrapper.close()
-        _isRawModel.value = false
         _fallbackReason.value = null
         val config = EngineConfig(
             modelPath = modelPath,
@@ -290,11 +270,9 @@ class LiteRtEngineWrapper @Inject constructor(
     suspend fun close() {
         conversation?.close()
         engine?.close()
-        rawModelWrapper.close()
         conversation = null
         engine = null
         _loadedModelPath.value = null
-        _isRawModel.value = false
         _fallbackReason.value = null
         modelRepository.setLastLoadedModelPath(null)
     }

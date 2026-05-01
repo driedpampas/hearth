@@ -262,6 +262,9 @@ class ModelRepository @Inject constructor(
                             }
                         }.toMap()
 
+                        val isCandidate = hfModel.libraryName == "litert-lm"
+                        val forcedExtension = if (isCandidate) ".litertlm" else null
+
                         val modelFile = siblings
                             .firstOrNull { it.rfilename.endsWith(".litertlm") && extractSocTag(it.rfilename) == null }
                             ?.rfilename
@@ -270,6 +273,10 @@ class ModelRepository @Inject constructor(
                             ?: siblings.firstOrNull { it.rfilename.endsWith(".tflite") }?.rfilename
 
                         if (modelFile != null) {
+                            val localFileName = if (forcedExtension != null && !modelFile.endsWith(forcedExtension)) {
+                                modelFile.substringBeforeLast(".") + forcedExtension
+                            } else null
+
                             models.add(
                                 AllowedModel(
                                     name = hfModel.id.substringAfter("/"),
@@ -281,7 +288,8 @@ class ModelRepository @Inject constructor(
                                     sizeInBytes = 0,
                                     socToModelFiles = socToModelFiles.ifEmpty { null },
                                     taskTypes = if (hfModel.pipelineTag != null) listOf(hfModel.pipelineTag) else emptyList(),
-                                    gated = hfModel.gated
+                                    gated = hfModel.gated,
+                                    localFileName = localFileName
                                 )
                             )
                         } else {
@@ -466,7 +474,15 @@ class ModelRepository @Inject constructor(
     fun getDownloadFileName(model: AllowedModel): String {
         val soc = getSoc()
         val socFile = model.socToModelFiles?.entries?.find { soc.contains(it.key) }?.value
-        return socFile?.modelFile ?: model.modelFile
+        val fileName = socFile?.modelFile ?: model.modelFile
+        
+        val isChatModel = (model.author == "litert-community" || model.taskTypes.contains("text-generation")) && !model.taskTypes.contains("embedding")
+        
+        return if (isChatModel && !fileName.endsWith(".litertlm")) {
+            fileName.substringBeforeLast(".") + ".litertlm"
+        } else {
+            fileName
+        }
     }
 
     private fun extractSocTag(fileName: String): String? {

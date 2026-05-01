@@ -371,22 +371,6 @@ private fun ModelItem(
                         }
                     }
 
-                    if (isSelected && uiState.isRawModel) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        androidx.compose.material3.Surface(
-                            color = MaterialTheme.colorScheme.secondary,
-                            contentColor = MaterialTheme.colorScheme.onSecondary,
-                            shape = androidx.compose.foundation.shape.CircleShape,
-                            modifier = Modifier.height(18.dp)
-                        ) {
-                            Text(
-                                text = "RAW",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
                 }
                 
                 Spacer(modifier = Modifier.height(4.dp))

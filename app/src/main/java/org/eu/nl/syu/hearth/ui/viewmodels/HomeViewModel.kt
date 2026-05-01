@@ -58,7 +58,6 @@ data class HomeUiState(
     val experimentalNpuEnabled: Boolean = false,
     val autoLoadChatModel: Boolean = false,
     val failedModels: Set<String> = emptySet(),
-    val isRawModel: Boolean = false,
     val fallbackReason: String? = null
 )
 
@@ -94,11 +93,6 @@ class HomeViewModel @Inject constructor(
                         isModelLoading = false
                     )
                 }
-            }
-        }
-        viewModelScope.launch {
-            engineWrapper.isRawModel.collect { isRaw ->
-                _uiState.update { it.copy(isRawModel = isRaw) }
             }
         }
         viewModelScope.launch {
