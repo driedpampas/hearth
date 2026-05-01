@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,7 +57,9 @@ data class HomeUiState(
     val defaultMaxTokens: Int = 4096,
     val experimentalNpuEnabled: Boolean = false,
     val autoLoadChatModel: Boolean = false,
-    val failedModels: Set<String> = emptySet()
+    val failedModels: Set<String> = emptySet(),
+    val isRawModel: Boolean = false,
+    val fallbackReason: String? = null
 )
 
 @HiltViewModel
@@ -78,6 +81,7 @@ class HomeViewModel @Inject constructor(
         loadCachedModels()
         observeSettings()
         observeFailedModels()
+        autoLoadLastModel()
     }
 
     private fun observeEngineState() {
@@ -89,6 +93,20 @@ class HomeViewModel @Inject constructor(
                         isModelLoaded = loadedModelPath != null,
                         isModelLoading = false
                     )
+                }
+            }
+        }
+        viewModelScope.launch {
+            engineWrapper.isRawModel.collect { isRaw ->
+                _uiState.update { it.copy(isRawModel = isRaw) }
+            }
+        }
+        viewModelScope.launch {
+            engineWrapper.fallbackReason.collect { reason ->
+                if (reason != null) {
+                    _uiState.update { it.copy(fallbackReason = reason, notification = reason) }
+                } else {
+                    _uiState.update { it.copy(fallbackReason = null) }
                 }
             }
         }
@@ -237,16 +255,6 @@ class HomeViewModel @Inject constructor(
 
     fun selectModel(file: File) {
         viewModelScope.launch {
-            if (isEmbeddingModel(file, _uiState.value.availableModels)) {
-                _uiState.update {
-                    it.copy(
-                        isModelLoading = false,
-                        notification = "Embedding models cannot be used for chat. Select a LiteRT LM model instead."
-                    )
-                }
-                return@launch
-            }
-
             loadModel(file = file)
         }
     }
@@ -257,6 +265,21 @@ class HomeViewModel @Inject constructor(
             ?: return
         if (_uiState.value.isModelLoaded) {
             loadModel(file = currentFile)
+        }
+    }
+
+    private fun autoLoadLastModel() {
+        viewModelScope.launch {
+            val autoLoad = modelRepository.autoLoadChatModel.first()
+            if (!autoLoad) return@launch
+
+            val lastPath = modelRepository.lastLoadedModelPath.first()
+            if (lastPath != null && !engineWrapper.isInitialized()) {
+                val file = File(lastPath)
+                if (file.exists()) {
+                    loadModel(file)
+                }
+            }
         }
     }
 
@@ -300,9 +323,6 @@ class HomeViewModel @Inject constructor(
                 isInputTensorMissing(e) -> {
                     modelRepository.addFailedModel(file.name)
                     "This model failed to load.\n\nTip: Try changing the hardware mode or reducing the context length."
-                }
-                isUnsupportedChatModel(file.name) -> {
-                    "This model cannot be used for chat. Select a LiteRT LM model instead."
                 }
                 else -> {
                     modelRepository.addFailedModel(file.name)

@@ -28,6 +28,7 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litert.Accelerator
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -46,15 +47,20 @@ import javax.inject.Singleton
 @Singleton
 class LiteRtEngineWrapper @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val modelRepository: ModelRepository
+    private val modelRepository: ModelRepository,
+    private val rawModelWrapper: LiteRtRawModelWrapper
 ) {
     private var engine: Engine? = null
     private var conversation: Conversation? = null
     private val _loadedModelPath = MutableStateFlow<String?>(null)
 
     val loadedModelPath: StateFlow<String?> = _loadedModelPath.asStateFlow()
+    private val _isRawModel = MutableStateFlow(false)
+    val isRawModel: StateFlow<Boolean> = _isRawModel.asStateFlow()
+    private val _fallbackReason = MutableStateFlow<String?>(null)
+    val fallbackReason: StateFlow<String?> = _fallbackReason.asStateFlow()
 
-    fun isInitialized(): Boolean = engine != null
+    fun isInitialized(): Boolean = engine != null || rawModelWrapper.isInitialized()
 
     fun getLoadedModelPath(): String? = _loadedModelPath.value
 
@@ -106,13 +112,32 @@ class LiteRtEngineWrapper @Inject constructor(
             loadModel(modelPath, Backend.GPU(), maxTokens)
             modelRepository.setCachedBackend(hash, "GPU")
         } catch (e: Exception) {
-            onFallback?.invoke("GPU not supported for this model. Falling back to CPU.")
-            loadModel(modelPath, Backend.CPU(), maxTokens)
-            modelRepository.setCachedBackend(hash, "CPU")
+            try {
+                onFallback?.invoke("GPU not supported for this model. Falling back to CPU.")
+                loadModel(modelPath, Backend.CPU(), maxTokens)
+                modelRepository.setCachedBackend(hash, "CPU")
+            } catch (e2: Exception) {
+                // If both fail, try loading as a raw model
+                val reason = "Model is not a LiteRT LM or incompatible backend. Error: ${e2.message}. Attempting raw load."
+                onFallback?.invoke(reason)
+                _fallbackReason.value = reason
+                tryLoadRaw(modelPath)
+            }
         }
     }
 
-    private fun loadModel(modelPath: String, backend: Backend, maxTokens: Int) {
+    private suspend fun tryLoadRaw(modelPath: String) {
+        val accelerator = Accelerator.CPU
+        rawModelWrapper.loadModel(modelPath, accelerator)
+        _isRawModel.value = true
+        _loadedModelPath.value = modelPath
+        modelRepository.setLastLoadedModelPath(modelPath)
+    }
+
+    private suspend fun loadModel(modelPath: String, backend: Backend, maxTokens: Int) {
+        rawModelWrapper.close()
+        _isRawModel.value = false
+        _fallbackReason.value = null
         val config = EngineConfig(
             modelPath = modelPath,
             backend = backend,
@@ -125,6 +150,7 @@ class LiteRtEngineWrapper @Inject constructor(
             engine?.close()
             engine = nextEngine
             _loadedModelPath.value = modelPath
+            modelRepository.setLastLoadedModelPath(modelPath)
         } catch (e: Exception) {
             nextEngine.close()
             throw e
@@ -144,7 +170,8 @@ class LiteRtEngineWrapper @Inject constructor(
                 temperature = character.temp.toDouble(),
                 topK = character.topK,
                 topP = character.topP.toDouble()
-            )
+            ),
+            extraContext = mapOf("enable_thinking" to character.enableThinking)
         )
         
         conversation?.close()
@@ -155,7 +182,8 @@ class LiteRtEngineWrapper @Inject constructor(
         text: String, 
         reminder: String = "", 
         history: List<org.eu.nl.syu.hearth.data.ChatMessage> = emptyList(),
-        includeThinking: Boolean = false
+        includeThinking: Boolean = false,
+        enableThinking: Boolean = false
     ): Flow<String> = callbackFlow {
         val fullPrompt = StringBuilder()
         
@@ -190,7 +218,13 @@ class LiteRtEngineWrapper @Inject constructor(
 
         val callback = object : MessageCallback {
             override fun onMessage(message: Message) {
-                trySend(message.toString())
+                val response = StringBuilder()
+                val thought = message.channels["thought"]
+                if (!thought.isNullOrEmpty()) {
+                    response.append("<think>\n$thought\n</think>\n")
+                }
+                response.append(message.toString())
+                trySend(response.toString())
             }
 
             override fun onDone() {
@@ -202,7 +236,11 @@ class LiteRtEngineWrapper @Inject constructor(
             }
         }
 
-        conversation?.sendMessageAsync(Contents.of(messageContent), callback)
+        conversation?.sendMessageAsync(
+            Contents.of(messageContent), 
+            callback,
+            extraContext = mapOf("enable_thinking" to enableThinking)
+        )
 
         awaitClose {
             // Cancel process if the flow is cancelled
@@ -210,11 +248,15 @@ class LiteRtEngineWrapper @Inject constructor(
         }
     }
 
-    fun close() {
+    suspend fun close() {
         conversation?.close()
         engine?.close()
+        rawModelWrapper.close()
         conversation = null
         engine = null
         _loadedModelPath.value = null
+        _isRawModel.value = false
+        _fallbackReason.value = null
+        modelRepository.setLastLoadedModelPath(null)
     }
 }

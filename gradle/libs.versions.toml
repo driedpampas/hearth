@@ -29,6 +29,7 @@ sqliteBundled = "2.6.2"
 workRuntimeKtx = "2.11.2"
 appauth = "0.11.1"
 datastore = "1.2.1"
+litert = "2.1.4"
 
 [libraries]
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
@@ -71,6 +72,7 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 litertlm = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
 tflite = { group = "com.google.android.gms", name = "play-services-tflite-java", version.ref = "playServicesTfliteJava" }
 tflite-gpu = { group = "com.google.android.gms", name = "play-services-tflite-gpu", version.ref = "playServicesTfliteGpu" }
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 
 # Richtext
 commonmark = { group = "com.halilibo.compose-richtext", name = "richtext-commonmark", version.ref = "commonmark" }

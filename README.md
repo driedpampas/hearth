@@ -1,8 +1,8 @@
 # hearth (offline ai chat app for android)
 
-## in progress
+## building
 
-To assemble the app, first run `build_sqlite_vec.sh` to build the native libraries needed for storing embeddings.
+See [BUILD_INFO.md](BUILD_INFO.md) for detailed instructions on building native components and the patched LiteRT-LM library.
 
 ## license
 

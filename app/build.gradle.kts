@@ -125,9 +125,19 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     // LiteRT
-    implementation(libs.litertlm)
-    implementation(libs.tflite)
-    implementation(libs.tflite.gpu)
+    val litertlmDir = localProperties.getProperty("litertlm.dir")
+    if (litertlmDir != null && file("$litertlmDir/dist/litert-lm-custom.aar").exists()) {
+        implementation(files("$litertlmDir/dist/litert-lm-custom.aar"))
+    } else {
+        implementation(libs.litertlm)
+    }
+    implementation(libs.litert)
+    implementation(libs.tflite) {
+        exclude(group = "com.google.ai.edge.litert", module = "litert-api")
+    }
+    implementation(libs.tflite.gpu) {
+        exclude(group = "com.google.ai.edge.litert", module = "litert-api")
+    }
 
     // Richtext
     implementation(libs.commonmark)

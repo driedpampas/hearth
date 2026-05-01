@@ -36,15 +36,9 @@ class HearthApplication : Application(), Configuration.Provider, ImageLoaderFact
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var engineWrapper: LiteRtEngineWrapper
 
-    private val appLifecycleObserver = object : DefaultLifecycleObserver {
-        override fun onStop(owner: LifecycleOwner) {
-            engineWrapper.close()
-        }
-    }
 
     override fun onCreate() {
         super.onCreate()
-        ProcessLifecycleOwner.get().lifecycle.addObserver(appLifecycleObserver)
     }
 
     override val workManagerConfiguration: Configuration

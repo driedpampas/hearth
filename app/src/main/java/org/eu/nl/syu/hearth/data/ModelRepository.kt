@@ -85,6 +85,7 @@ class ModelRepository @Inject constructor(
     private val AUTO_LOAD_CHAT_MODEL = androidx.datastore.preferences.core.booleanPreferencesKey("auto_load_chat_model")
     private val BLACKLISTED_MODEL_HASHES = stringSetPreferencesKey("blacklisted_model_hashes")
     private val FAILED_MODELS = stringSetPreferencesKey("failed_models")
+    private val LAST_LOADED_MODEL_PATH = stringPreferencesKey("last_loaded_model_path")
 
     val selectedEmbeddingModel: Flow<String?> = context.modelDataStore.data.map { preferences ->
         preferences[SELECTED_EMBEDDING_MODEL]
@@ -375,6 +376,20 @@ class ModelRepository @Inject constructor(
     suspend fun setAutoLoadChatModel(enabled: Boolean) {
         context.modelDataStore.edit { preferences ->
             preferences[AUTO_LOAD_CHAT_MODEL] = enabled
+        }
+    }
+
+    val lastLoadedModelPath: Flow<String?> = context.modelDataStore.data.map { preferences ->
+        preferences[LAST_LOADED_MODEL_PATH]
+    }
+
+    suspend fun setLastLoadedModelPath(path: String?) {
+        context.modelDataStore.edit { preferences ->
+            if (path == null) {
+                preferences.remove(LAST_LOADED_MODEL_PATH)
+            } else {
+                preferences[LAST_LOADED_MODEL_PATH] = path
+            }
         }
     }
 

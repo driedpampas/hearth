@@ -62,6 +62,8 @@ data class ChatUiState(
     val tokenCount: Int = 0,
     val maxTokens: Int = 4096,
     val modelError: String? = null,
+    val isRawModel: Boolean = false,
+    val fallbackReason: String? = null,
     val isLoadingModel: Boolean = false,
     val threadTitle: String? = null,
     val versionCounts: Map<String, Int> = emptyMap(),
@@ -143,6 +145,8 @@ class ChatViewModel @Inject constructor(
                     character = character.copy(lastUsedAt = openedAt),
                     messages = visibleMessages,
                     modelError = null,
+                    isRawModel = false,
+                    fallbackReason = null,
                     isLoadingModel = false,
                     tokenCount = visibleMessages.sumOf { message -> (message.content.length / 4).coerceAtLeast(0) },
                     threadTitle = thread.title,
@@ -205,9 +209,6 @@ class ChatViewModel @Inject constructor(
                                 modelRepository.quarantineModel(modelFile)
                                 "This model is corrupted/incompatible and has been removed. Please select a compatible LiteRT LM chat model."
                             }
-                            isUnsupportedChatModel(character.modelReference) -> {
-                                "This model cannot be used for chat. Select a LiteRT LM model instead."
-                            }
                             else -> {
                                 "Failed to initialize the model: ${e.message}"
                             }
@@ -219,7 +220,19 @@ class ChatViewModel @Inject constructor(
                 _uiState.update { it.copy(modelError = "Model not loaded.") }
             }
 
-            if (engineWrapper.isInitialized()) {
+            // Sync raw model state to UI
+            viewModelScope.launch {
+                engineWrapper.isRawModel.collect { isRaw ->
+                    _uiState.update { it.copy(isRawModel = isRaw) }
+                }
+            }
+            viewModelScope.launch {
+                engineWrapper.fallbackReason.collect { reason ->
+                    _uiState.update { it.copy(fallbackReason = reason) }
+                }
+            }
+
+            if (engineWrapper.isInitialized() && !engineWrapper.isRawModel.value) {
                 engineWrapper.createConversation(character)
             }
         }
@@ -228,8 +241,7 @@ class ChatViewModel @Inject constructor(
     // Removed immediate createNewThread insertion to avoid empty threads in history.
 
     private fun isUnsupportedChatModel(modelReference: String): Boolean {
-        val lower = modelReference.lowercase()
-        return lower.endsWith(".tflite") && !lower.contains("chat") && !lower.contains("lm")
+        return false // Allow everything now
     }
 
     private fun isInputTensorMissing(e: Exception): Boolean {
@@ -337,7 +349,8 @@ class ChatViewModel @Inject constructor(
                 text = content,
                 reminder = reminder,
                 history = history,
-                includeThinking = character.includeThinkingInContext
+                includeThinking = character.includeThinkingInContext,
+                enableThinking = character.enableThinking
             )
                 .onEach { partial ->
                     fullResponse += partial
@@ -569,6 +582,7 @@ class ChatViewModel @Inject constructor(
         val threadId = activeThreadId ?: return
         val originalMessage = _uiState.value.messages.find { it.id == messageId } ?: return
         if (originalMessage.role != MessageRole.MODEL) return
+        if (engineWrapper.isRawModel.value || _uiState.value.modelError != null || !engineWrapper.isInitialized()) return
 
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
@@ -604,7 +618,12 @@ class ChatViewModel @Inject constructor(
             val lastUserMessage = historyUpToParent.lastOrNull { it.role == MessageRole.USER } ?: return@launch
             
             var fullResponse = ""
-            engineWrapper.sendMessage(lastUserMessage.content, history = contextHistory)
+            engineWrapper.sendMessage(
+                text = lastUserMessage.content, 
+                history = contextHistory,
+                includeThinking = character.includeThinkingInContext,
+                enableThinking = character.enableThinking
+            )
                 .onEach { partial ->
                     fullResponse += partial
                     _uiState.update { it.copy(currentGeneratingText = fullResponse) }

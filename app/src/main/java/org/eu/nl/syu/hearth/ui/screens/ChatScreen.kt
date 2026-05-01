@@ -193,7 +193,7 @@ fun ChatScreen(
                     title = {
                         Column {
                             Text(uiState.threadTitle ?: uiState.character?.name ?: threadId, style = MaterialTheme.typography.titleMedium)
-                            TokenIndicator(uiState.tokenCount, uiState.maxTokens, uiState.modelError)
+                            TokenIndicator(uiState.tokenCount, uiState.maxTokens, uiState.modelError, uiState.isRawModel, uiState.fallbackReason)
                         }
                     },
                     navigationIcon = {
@@ -255,7 +255,7 @@ fun ChatScreen(
                     },
                     onStop = { viewModel.stopGeneration() },
                     isGenerating = uiState.isGenerating,
-                    enabled = !uiState.isLoadingModel && uiState.modelError == null
+                    enabled = !uiState.isLoadingModel && uiState.modelError == null && !uiState.isRawModel
                 )
             }
         ) { paddingValues ->
@@ -287,7 +287,8 @@ fun ChatScreen(
                             onEdit = { viewModel.editMessage(displayMessage.id, it) },
                             onDelete = { viewModel.deleteMessage(displayMessage.id, it) },
                             onFork = { viewModel.forkThread(displayMessage.id) },
-                            onVersionChange = { direction -> viewModel.switchMessageVersion(displayMessage.versionGroupId ?: displayMessage.id, direction) }
+                            onVersionChange = { direction -> viewModel.switchMessageVersion(displayMessage.versionGroupId ?: displayMessage.id, direction) },
+                            isChatEnabled = !uiState.isRawModel && uiState.modelError == null
                         )
                     }
 
@@ -299,12 +300,13 @@ fun ChatScreen(
                                     content = uiState.currentGeneratingText
                                 ),
                                 statsForNerdsEnabled = statsForNerdsEnabled,
-                                modelDisplayName = null
+                                modelDisplayName = null,
+                                isChatEnabled = !uiState.isRawModel && uiState.modelError == null
                             )
                         }
                     }
 
-                    if (uiState.isGenerating && uiState.currentGeneratingText.isEmpty()) {
+                    if (uiState.isGenerating && uiState.currentGeneratingText.isEmpty() && uiState.regeneratingMessageId == null) {
                         item {
                             TypingIndicator()
                         }
@@ -340,22 +342,42 @@ fun ChatScreen(
 }
 
 @Composable
-fun TokenIndicator(current: Int, max: Int, modelError: String?) {
-    if (modelError != null) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Default.Tune, 
-                contentDescription = null, 
-                modifier = Modifier.size(12.dp),
-                tint = MaterialTheme.colorScheme.error
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                if (modelError == "Model not loaded.") "Model not loaded" else "Model error",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-                fontSize = 10.sp
-            )
+fun TokenIndicator(current: Int, max: Int, modelError: String?, isRawModel: Boolean = false, fallbackReason: String? = null) {
+    if (modelError != null || isRawModel) {
+        val message = when {
+            modelError == "Model not loaded." -> "Model not loaded"
+            isRawModel -> "Raw Mode (No Chat)"
+            else -> "Model error"
+        }
+        val color = if (isRawModel) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+        
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (isRawModel) Icons.Default.Tune else Icons.Default.Tune, 
+                    contentDescription = null, 
+                    modifier = Modifier.size(12.dp),
+                    tint = color
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    message,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = color,
+                    fontSize = 10.sp
+                )
+            }
+            if (isRawModel && fallbackReason != null) {
+                Text(
+                    fallbackReason,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = color.copy(alpha = 0.7f),
+                    fontSize = 8.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.width(150.dp)
+                )
+            }
         }
     } else {
         val progress = (current.toFloat() / max).coerceIn(0f, 1f)
@@ -396,7 +418,7 @@ fun ChatInput(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text(if (enabled) "Speak with your character..." else "Model not available") },
+                placeholder = { Text(if (enabled) "Speak with your character..." else if (isGenerating) "AI is thinking..." else "Model not available") },
                 enabled = enabled && !isGenerating,
                 shape = RoundedCornerShape(28.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -436,7 +458,8 @@ fun ChatBubble(
     onEdit: (String) -> Unit = {},
     onDelete: (DeletionMode) -> Unit = {},
     onFork: () -> Unit = {},
-    onVersionChange: (Int) -> Unit = {}
+    onVersionChange: (Int) -> Unit = {},
+    isChatEnabled: Boolean = true
 ) {
     val isUser = message.role == MessageRole.USER
     val (thought, mainContent, isThoughtComplete) = remember(message.content) {
@@ -561,7 +584,8 @@ fun ChatBubble(
                                 menuExpanded = false
                                 onRegenerate()
                             },
-                            leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
+                            leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                            enabled = isChatEnabled
                         )
                     }
                     DropdownMenuItem(
