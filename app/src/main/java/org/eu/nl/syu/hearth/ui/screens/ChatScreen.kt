@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -54,6 +55,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
@@ -146,6 +148,8 @@ fun ChatScreen(
     var threadMenuExpanded by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var newThreadTitle by remember { mutableStateOf("") }
+    var showLoreDialog by remember { mutableStateOf(false) }
+    var tempThreadLore by remember { mutableStateOf("") }
 
     val chatStyle = remember(uiState.styleJson) {
         uiState.styleJson?.let {
@@ -238,6 +242,15 @@ fun ChatScreen(
                                         showRenameDialog = true
                                     },
                                     leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Thread Lore") },
+                                    onClick = {
+                                        threadMenuExpanded = false
+                                        tempThreadLore = uiState.threadLore ?: ""
+                                        showLoreDialog = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Character Editor") },
@@ -363,6 +376,45 @@ fun ChatScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showLoreDialog) {
+        AlertDialog(
+            onDismissRequest = { showLoreDialog = false },
+            title = { Text("Thread-Specific Lore") },
+            text = {
+                Column {
+                    Text(
+                        "Add unique facts for this specific conversation. These take priority over global character lore.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    OutlinedTextField(
+                        value = tempThreadLore,
+                        onValueChange = { tempThreadLore = it },
+                        label = { Text("Thread Lore") },
+                        placeholder = { Text("Separate individual facts with an empty line.") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                        minLines = 3
+                    )
+                    Text(
+                        "Separate individual facts with an empty line.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.updateThreadLore(tempThreadLore)
+                    showLoreDialog = false
+                }) { Text("Save & Embed") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLoreDialog = false }) { Text("Cancel") }
             }
         )
     }

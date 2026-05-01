@@ -28,10 +28,28 @@ import javax.inject.Singleton
 class LoreSplitter @Inject constructor() {
 
     /**
-     * Splits a large text into chunks of approximately [chunkSize] characters,
-     * with an overlap of [overlap] characters.
+     * Fact-Based Splitter: Splits text by double-newlines (facts).
+     * Falls back to character-count chunking if a single fact is too large.
      */
     fun splitLore(text: String, chunkSize: Int = 500, overlap: Int = 50): List<String> {
+        if (text.isBlank()) return emptyList()
+
+        val facts = text.split(Regex("\\n\\n+")).map { it.trim() }.filter { it.isNotBlank() }
+        val finalChunks = mutableListOf<String>()
+
+        for (fact in facts) {
+            if (fact.length <= chunkSize) {
+                finalChunks.add(fact)
+            } else {
+                // Fallback for large wall of text
+                finalChunks.addAll(chunkText(fact, chunkSize, overlap))
+            }
+        }
+
+        return finalChunks
+    }
+
+    private fun chunkText(text: String, chunkSize: Int, overlap: Int): List<String> {
         if (text.isEmpty()) return emptyList()
         if (text.length <= chunkSize) return listOf(text)
 
@@ -69,7 +87,7 @@ class LoreSplitter @Inject constructor() {
             }
             
             // Move forward, ensuring overlap
-            i = breakPoint - overlap
+            i = (breakPoint - overlap).coerceAtLeast(i + 1)
         }
 
         return chunks

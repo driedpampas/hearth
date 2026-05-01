@@ -28,6 +28,7 @@ class NarrativeContextFactory @Inject constructor(
     suspend fun constructPrompt(
         userInput: String,
         character: Character,
+        threadId: String?,
         history: List<ChatMessage>,
         userName: String = "User"
     ): String {
@@ -37,9 +38,14 @@ class NarrativeContextFactory @Inject constructor(
         val templatedRole = TemplateProcessor.process(character.roleInstruction, character, userName)
         promptBuilder.append(templatedRole).append("\n\n")
 
-        // 2. Retrieved Lore (RAG): Top 3 matches
+        // 2. Retrieved Lore (RAG): Top 5 matches across Global and Thread scopes
         val queryVector = embeddingEngine.getVector(userInput, isQuery = true)
-        val loreChunks = vectorDao.searchLoreChunks(queryVector, topK = 3)
+        val loreChunks = vectorDao.searchLoreChunks(
+            queryEmbedding = queryVector,
+            characterId = character.id,
+            threadId = threadId,
+            topK = 5
+        )
         if (loreChunks.isNotEmpty()) {
             promptBuilder.append("[Lore & Knowledge:]\n")
             loreChunks.forEach { promptBuilder.append("- ").append(it.text).append("\n") }

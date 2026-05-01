@@ -60,7 +60,7 @@ object AppModule {
             "charchat_db"
         )
             .setDriver(driver)
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
@@ -315,5 +315,14 @@ private val MIGRATION_10_11 = object : Migration(10, 11) {
         // MemoryEntryEntity: add startMessageTimestamp, endMessageTimestamp
         connection.prepare("ALTER TABLE memory_entries ADD COLUMN startMessageTimestamp INTEGER NOT NULL DEFAULT 0").use { it.step() }
         connection.prepare("ALTER TABLE memory_entries ADD COLUMN endMessageTimestamp INTEGER NOT NULL DEFAULT 0").use { it.step() }
+    }
+}
+private val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(connection: SQLiteConnection) {
+        // LoreChunkEntity: add threadId
+        connection.prepare("ALTER TABLE lore_chunks ADD COLUMN threadId TEXT").use { it.step() }
+        
+        // ChatThreadEntity: add threadLore
+        connection.prepare("ALTER TABLE chat_threads ADD COLUMN threadLore TEXT").use { it.step() }
     }
 }

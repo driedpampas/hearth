@@ -70,6 +70,7 @@ data class ChatUiState(
     val fallbackReason: String? = null,
     val isLoadingModel: Boolean = false,
     val threadTitle: String? = null,
+    val threadLore: String? = null,
     val versionCounts: Map<String, Int> = emptyMap(),
     val displayedVersions: Map<String, Int> = emptyMap(),
     val regeneratingMessageId: String? = null,
@@ -90,6 +91,7 @@ class ChatViewModel @Inject constructor(
     private val narrativeContextFactory: org.eu.nl.syu.hearth.domain.NarrativeContextFactory,
     private val vectorDao: org.eu.nl.syu.hearth.data.local.VectorDao,
     private val memoryDao: org.eu.nl.syu.hearth.data.local.MemoryDao,
+    private val loreSyncManager: org.eu.nl.syu.hearth.runtime.LoreSyncManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
 
@@ -163,6 +165,7 @@ class ChatViewModel @Inject constructor(
                     isLoadingModel = false,
                     tokenCount = estimatedTokens,
                     threadTitle = thread.title,
+                    threadLore = thread.threadLore,
                     maxTokens = initialMaxTokens,
                     versionCounts = versionCounts,
                     displayedVersions = displayedVersions,
@@ -338,27 +341,10 @@ class ChatViewModel @Inject constructor(
                 )
             }
 
-            // RAG: Retrieve relevant Lore and Memories
-            val loreContexts = embeddingEngine.similaritySearch(content, topK = 3)
-            
-            // Optional: Search memories as well if applicable
-            val queryVector = embeddingEngine.getVector(content, isQuery = true)
-            val memoryContexts = chatMessageDao.getMessageById(activeThreadId ?: "")?.let {
-                // This is a placeholder for searching memories. 
-                // In a real implementation, you'd call vectorDao.searchMemoryEntries
-                emptyList<String>()
-            } ?: emptyList()
-
-            val contextInjection = StringBuilder()
-            if (loreContexts.isNotEmpty()) {
-                contextInjection.append("\n\n[Lore Context:\n")
-                loreContexts.forEach { contextInjection.append("- $it\n") }
-                contextInjection.append("]")
-            }
-            
             val prompt = narrativeContextFactory.constructPrompt(
                 userInput = content,
                 character = character,
+                threadId = threadId,
                 history = _uiState.value.messages.dropLast(1).takeLast(10)
             )
 
@@ -808,5 +794,21 @@ class ChatViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+    }
+    fun updateThreadLore(newLore: String) {
+        val character = _uiState.value.character ?: return
+        val threadId = activeThreadId ?: return
+        
+        viewModelScope.launch {
+            // 1. Update the source text in DB
+            val thread = chatThreadDao.getThreadById(threadId)?.toDomain() ?: return@launch
+            chatThreadDao.insertThread(thread.copy(threadLore = newLore).toEntity())
+            
+            // 2. Update UI state
+            _uiState.update { it.copy(threadLore = newLore) }
+            
+            // 3. Re-embed lore for this thread
+            loreSyncManager.syncLore(character, newLore, threadId)
+        }
     }
 }

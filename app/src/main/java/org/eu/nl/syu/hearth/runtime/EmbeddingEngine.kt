@@ -112,14 +112,7 @@ class EmbeddingEngine @Inject constructor(
         VectorUtils.processEmbedding(rawArray)
     }
 
-    /**
-     * Performs a similarity search in the lore chunks.
-     */
-    suspend fun similaritySearch(query: String, topK: Int = 3): List<String> {
-        val queryVector = getVector(query, isQuery = true)
-        val results = vectorDao.searchLoreChunks(queryVector, topK)
-        return results.map { it.text }
-    }
+
 
     /**
      * Cleans up the embedder resources.

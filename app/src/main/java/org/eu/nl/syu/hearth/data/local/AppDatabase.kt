@@ -39,7 +39,8 @@ import org.eu.nl.syu.hearth.data.MessageRole
 data class LoreChunkEntity(
     @PrimaryKey val id: String,
     val characterId: String,
-    val text: String
+    val text: String,
+    val threadId: String? = null
 )
 
 @Entity(tableName = "memory_entries")
@@ -60,7 +61,8 @@ data class ChatThreadEntity(
     val createdAt: Long,
     val lastMessageAt: Long,
     val sequenceId: Int,
-    val styleJson: String? = null
+    val styleJson: String? = null,
+    val threadLore: String? = null
 )
 
 @Entity(tableName = "characters")
@@ -227,14 +229,20 @@ interface MemoryDao {
 
 @Dao
 interface LoreChunkDao {
-    @Query("SELECT * FROM lore_chunks WHERE characterId = :characterId")
-    suspend fun getChunksForCharacter(characterId: String): List<LoreChunkEntity>
+    @Query("SELECT * FROM lore_chunks WHERE characterId = :characterId AND threadId IS NULL")
+    suspend fun getGlobalChunksForCharacter(characterId: String): List<LoreChunkEntity>
+
+    @Query("SELECT * FROM lore_chunks WHERE threadId = :threadId")
+    suspend fun getChunksForThread(threadId: String): List<LoreChunkEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChunks(chunks: List<LoreChunkEntity>)
 
-    @Query("DELETE FROM lore_chunks WHERE characterId = :characterId")
-    suspend fun deleteChunksForCharacter(characterId: String)
+    @Query("DELETE FROM lore_chunks WHERE characterId = :characterId AND threadId IS NULL")
+    suspend fun deleteGlobalChunksForCharacter(characterId: String)
+
+    @Query("DELETE FROM lore_chunks WHERE threadId = :threadId")
+    suspend fun deleteChunksForThread(threadId: String)
 }
 
 @Database(
@@ -245,7 +253,7 @@ interface LoreChunkDao {
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 11, 
+    version = 12, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -304,7 +312,8 @@ fun ChatThreadEntity.toDomain(): ChatThread = ChatThread(
     createdAt = createdAt,
     lastMessageAt = lastMessageAt,
     sequenceId = sequenceId,
-    styleJson = styleJson
+    styleJson = styleJson,
+    threadLore = threadLore
 )
 
 fun ChatThread.toEntity(): ChatThreadEntity = ChatThreadEntity(
@@ -314,7 +323,8 @@ fun ChatThread.toEntity(): ChatThreadEntity = ChatThreadEntity(
     createdAt = createdAt,
     lastMessageAt = lastMessageAt,
     sequenceId = sequenceId,
-    styleJson = styleJson
+    styleJson = styleJson,
+    threadLore = threadLore
 )
 
 fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(

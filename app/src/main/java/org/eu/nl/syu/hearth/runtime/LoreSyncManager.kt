@@ -33,23 +33,36 @@ class LoreSyncManager @Inject constructor(
     }
 
     /**
-     * Re-chunks and re-embeds lore for a character.
-     * This should be called when character lore is edited.
+     * Re-chunks and re-embeds lore for a character or specific thread.
+     * Handles templating {{char}} and {{user}} before embedding.
      */
-    suspend fun syncLore(character: Character, loreText: String) = withContext(Dispatchers.IO) {
+    suspend fun syncLore(
+        character: Character, 
+        loreText: String, 
+        threadId: String? = null,
+        userName: String = "User"
+    ) = withContext(Dispatchers.IO) {
         _syncState.value = SyncState.Syncing
         try {
-            // 1. Invalidate old data
-            db.vectorDao().deleteLoreVectorsForCharacter(character.id)
-            db.loreChunkDao().deleteChunksForCharacter(character.id)
+            // 1. Invalidate old data based on scope
+            if (threadId == null) {
+                db.vectorDao().deleteLoreVectorsForCharacter(character.id)
+                db.loreChunkDao().deleteGlobalChunksForCharacter(character.id)
+            } else {
+                db.vectorDao().deleteLoreVectorsForThread(threadId)
+                db.loreChunkDao().deleteChunksForThread(threadId)
+            }
 
             // 2. Chunk lore
             val chunks: List<String> = loreSplitter.splitLore(loreText)
             val chunkEntities = chunks.map { text ->
+                // Resolve templates before embedding
+                val processedText = org.eu.nl.syu.hearth.domain.TemplateProcessor.process(text, character, userName)
                 LoreChunkEntity(
                     id = UUID.randomUUID().toString(),
                     characterId = character.id,
-                    text = text
+                    text = processedText,
+                    threadId = threadId
                 )
             }
 

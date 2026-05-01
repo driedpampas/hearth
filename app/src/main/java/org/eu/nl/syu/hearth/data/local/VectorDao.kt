@@ -48,7 +48,8 @@ interface VectorDao {
     suspend fun insertMemoryEmbedding(memoryId: String, embedding: ByteArray)
 
     /**
-     * KNN search for lore chunks. Returns the actual lore chunks.
+     * KNN search for lore chunks across Global and Thread scopes.
+     * Priorities Thread Lore over Global Lore.
      */
     @SkipQueryVerification
     @Query("""
@@ -56,10 +57,17 @@ interface VectorDao {
         FROM lore_chunks lc
         INNER JOIN vec_lore vl ON lc.id = vl.lore_id
         WHERE vl.embedding MATCH :queryEmbedding
+          AND lc.characterId = :characterId
+          AND (lc.threadId IS NULL OR lc.threadId = :threadId)
           AND vl.k = :topK
-        ORDER BY vl.distance ASC
+        ORDER BY (lc.threadId IS NOT NULL) DESC, vl.distance ASC
     """)
-    suspend fun searchLoreChunks(queryEmbedding: ByteArray, topK: Int = 5): List<LoreChunkEntity>
+    suspend fun searchLoreChunks(
+        queryEmbedding: ByteArray, 
+        characterId: String, 
+        threadId: String?, 
+        topK: Int = 10
+    ): List<LoreChunkEntity>
 
     /**
      * KNN search for memory entries. Returns the actual memory entries.
@@ -86,6 +94,10 @@ interface VectorDao {
     @SkipQueryVerification
     @Query("DELETE FROM vec_lore WHERE lore_id IN (SELECT id FROM lore_chunks WHERE characterId = :characterId)")
     suspend fun deleteLoreVectorsForCharacter(characterId: String)
+
+    @SkipQueryVerification
+    @Query("DELETE FROM vec_lore WHERE lore_id IN (SELECT id FROM lore_chunks WHERE threadId = :threadId)")
+    suspend fun deleteLoreVectorsForThread(threadId: String)
 
     @SkipQueryVerification
     @Query("DELETE FROM vec_memory WHERE memory_id = :memoryId")
