@@ -113,7 +113,7 @@ class LiteRtEngineWrapper @Inject constructor(
         }
     }
 
-    fun createConversation(character: Character): Flow<String> = callbackFlow {
+    fun createConversation(character: Character) {
         val config = ConversationConfig(
             systemInstruction = Contents.of(character.systemPromptLore),
             samplerConfig = SamplerConfig(
@@ -125,20 +125,31 @@ class LiteRtEngineWrapper @Inject constructor(
         
         conversation?.close()
         conversation = engine?.createConversation(config)
-
-        awaitClose { 
-            // We don't necessarily want to close the conversation here if it's reused,
-            // but for a one-off stream it might be appropriate.
-            // However, the wrapper manages the conversation lifecycle.
-        }
     }
 
-    fun sendMessage(text: String, reminder: String = ""): Flow<String> = callbackFlow {
-        val messageContent = if (reminder.isNotEmpty()) {
-            "$text\n\n[Reminder: $reminder]"
-        } else {
-            text
+    fun sendMessage(text: String, reminder: String = "", history: List<org.eu.nl.syu.charchat.data.ChatMessage> = emptyList()): Flow<String> = callbackFlow {
+        val fullPrompt = StringBuilder()
+        
+        // Add history for context if it's a new conversation or we need to ensure context
+        if (history.isNotEmpty()) {
+            history.filter { !it.isHiddenFromAi }.forEach { msg ->
+                val roleName = if (msg.role == org.eu.nl.syu.charchat.data.MessageRole.USER) "User" else "Assistant"
+                // Clean content from thinking tags for the history view sent to AI to save tokens/focus
+                val content = msg.content.replace(Regex("<think>.*?</think>", RegexOption.DOT_MATCHES_ALL), "").trim()
+                if (content.isNotEmpty()) {
+                    fullPrompt.append("$roleName: $content\n")
+                }
+            }
+            fullPrompt.append("User: ")
         }
+        
+        fullPrompt.append(text)
+        
+        if (reminder.isNotEmpty()) {
+            fullPrompt.append("\n\n[Reminder: $reminder]")
+        }
+
+        val messageContent = fullPrompt.toString()
 
         val callback = object : MessageCallback {
             override fun onMessage(message: Message) {

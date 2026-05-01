@@ -34,6 +34,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ForkRight
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +59,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -87,6 +100,7 @@ import org.eu.nl.syu.charchat.data.ChatMessage
 import org.eu.nl.syu.charchat.data.MessageRole
 import org.eu.nl.syu.charchat.ui.components.MarkdownText
 import org.eu.nl.syu.charchat.ui.viewmodels.ChatViewModel
+import org.eu.nl.syu.charchat.ui.viewmodels.DeletionMode
 import org.eu.nl.syu.charchat.ui.screens.ModelsViewModel
 import org.eu.nl.syu.charchat.ui.components.GlassySurface
 import org.eu.nl.syu.charchat.ui.components.ThinkingProcess
@@ -99,6 +113,7 @@ fun ChatScreen(
     threadId: String,
     onNavigateBack: () -> Unit,
     onNavigateToModelSettings: (String) -> Unit,
+    onNavigateToEditCharacter: (String) -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
     modelsViewModel: ModelsViewModel = hiltViewModel()
 ) {
@@ -112,6 +127,9 @@ fun ChatScreen(
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
+    var threadMenuExpanded by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var newThreadTitle by remember { mutableStateOf("") }
 
     LaunchedEffect(threadId) {
         viewModel.loadConversation(threadId)
@@ -158,7 +176,7 @@ fun ChatScreen(
                     title = {
                         Column {
                             Text(uiState.threadTitle ?: uiState.character?.name ?: threadId, style = MaterialTheme.typography.titleMedium)
-                            TokenIndicator(uiState.tokenCount, uiState.maxTokens)
+                            TokenIndicator(uiState.tokenCount, uiState.maxTokens, uiState.modelError)
                         }
                     },
                     navigationIcon = {
@@ -167,71 +185,64 @@ fun ChatScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { onNavigateToModelSettings(uiState.character?.id ?: "") }) {
-                            Icon(Icons.Filled.Settings, contentDescription = "Model settings")
+                        Box {
+                            IconButton(onClick = { threadMenuExpanded = true }) {
+                                Icon(Icons.Filled.Settings, contentDescription = "Thread settings")
+                            }
+                            
+                            DropdownMenu(
+                                expanded = threadMenuExpanded,
+                                onDismissRequest = { threadMenuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Rename Thread") },
+                                    onClick = {
+                                        threadMenuExpanded = false
+                                        newThreadTitle = uiState.threadTitle ?: ""
+                                        showRenameDialog = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Character Editor") },
+                                    onClick = {
+                                        threadMenuExpanded = false
+                                        onNavigateToEditCharacter(uiState.character?.id ?: "")
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Model: ${resolveModelDisplayName(uiState.character?.modelReference, modelNamesByFile) ?: "Default"}") },
+                                    onClick = {
+                                        threadMenuExpanded = false
+                                        onNavigateToModelSettings(uiState.character?.id ?: "")
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null) },
+                                    enabled = uiState.modelError == null
+                                )
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                 )
             },
             bottomBar = {
-                if (uiState.modelError == null && !uiState.isLoadingModel) {
-                    ChatInput(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        onSend = {
-                            if (inputText.isNotBlank()) {
-                                viewModel.sendMessage(inputText)
-                                inputText = ""
-                            }
+                ChatInput(
+                    value = inputText,
+                    onValueChange = { inputText = it },
+                    onSend = {
+                        if (inputText.isNotBlank()) {
+                            viewModel.sendMessage(inputText)
+                            inputText = ""
                         }
-                    )
-                }
+                    },
+                    onStop = { viewModel.stopGeneration() },
+                    isGenerating = uiState.isGenerating,
+                    enabled = !uiState.isLoadingModel && uiState.modelError == null
+                )
             }
         ) { paddingValues ->
-            if (uiState.isLoadingModel && autoLoadChatModel) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        LinearProgressIndicator()
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("Loading assistant model...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            } else if (uiState.modelError != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-                        Text(
-                            text = if (uiState.modelError == "Model not loaded.") "Model Ready" else "Assistant unavailable",
-                            color = if (uiState.modelError == "Model not loaded.") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.headlineSmall
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = uiState.modelError ?: "Model unavailable",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center
-                        )
-                        if (uiState.modelError == "Model not loaded.") {
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Button(onClick = { viewModel.loadModel() }) {
-                                Text("Load Model")
-                            }
-                        }
-                    }
-                }
-            } else {
-                LazyColumn(
+            LazyColumn(
                     state = scrollState,
                     modifier = Modifier
                         .fillMaxSize()
@@ -239,11 +250,17 @@ fun ChatScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(uiState.messages) { message ->
+                    items(uiState.messages, key = { it.id }) { message ->
                         ChatBubble(
                             message = message,
                             statsForNerdsEnabled = statsForNerdsEnabled,
-                            modelDisplayName = resolveModelDisplayName(message.modelReference, modelNamesByFile)
+                            modelDisplayName = resolveModelDisplayName(message.modelReference, modelNamesByFile),
+                            versionCount = uiState.versionCounts[message.versionGroupId ?: message.id] ?: 1,
+                            onRegenerate = { viewModel.regenerateMessage(message.id) },
+                            onEdit = { viewModel.editMessage(message.id, it) },
+                            onDelete = { viewModel.deleteMessage(message.id, it) },
+                            onFork = { viewModel.forkThread(message.id) },
+                            onVersionChange = { direction -> viewModel.switchMessageVersion(message.versionGroupId ?: message.id, direction) }
                         )
                     }
 
@@ -268,21 +285,63 @@ fun ChatScreen(
                 }
             }
         }
+
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("Rename Thread") },
+            text = {
+                OutlinedTextField(
+                    value = newThreadTitle,
+                    onValueChange = { newThreadTitle = it },
+                    label = { Text("New Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.renameThread(newThreadTitle)
+                    showRenameDialog = false
+                }) { Text("Rename") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
 @Composable
-fun TokenIndicator(current: Int, max: Int) {
-    val progress = (current.toFloat() / max).coerceIn(0f, 1f)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        LinearProgressIndicator(
-            progress = { progress },
-            modifier = Modifier.width(60.dp).height(4.dp).clip(CircleShape),
-            color = if (progress > 0.8f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text("${(progress * 100).toInt()}% Context", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+fun TokenIndicator(current: Int, max: Int, modelError: String?) {
+    if (modelError != null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Tune, 
+                contentDescription = null, 
+                modifier = Modifier.size(12.dp),
+                tint = MaterialTheme.colorScheme.error
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                if (modelError == "Model not loaded.") "Model not loaded" else "Model error",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 10.sp
+            )
+        }
+    } else {
+        val progress = (current.toFloat() / max).coerceIn(0f, 1f)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.width(60.dp).height(4.dp).clip(CircleShape),
+                color = if (progress > 0.8f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("${(progress * 100).toInt()}% Context", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+        }
     }
 }
 
@@ -290,7 +349,10 @@ fun TokenIndicator(current: Int, max: Int) {
 fun ChatInput(
     value: String,
     onValueChange: (String) -> Unit,
-    onSend: () -> Unit
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+    isGenerating: Boolean,
+    enabled: Boolean = true
 ) {
     GlassySurface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
@@ -307,7 +369,8 @@ fun ChatInput(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Speak with your character...") },
+                placeholder = { Text(if (enabled) "Speak with your character..." else "Model not available") },
+                enabled = enabled && !isGenerating,
                 shape = RoundedCornerShape(28.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -317,15 +380,18 @@ fun ChatInput(
             )
             Spacer(modifier = Modifier.width(8.dp))
             IconButton(
-                onClick = onSend,
-                enabled = value.isNotBlank(),
+                onClick = if (isGenerating) onStop else onSend,
+                enabled = enabled && (isGenerating || value.isNotBlank()),
                 colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = if (isGenerating) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    contentColor = if (isGenerating) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary,
                     disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                Icon(
+                    imageVector = if (isGenerating) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
+                    contentDescription = if (isGenerating) "Stop" else "Send"
+                )
             }
         }
     }
@@ -333,11 +399,26 @@ fun ChatInput(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean, modelDisplayName: String?) {
+fun ChatBubble(
+    message: ChatMessage, 
+    statsForNerdsEnabled: Boolean, 
+    modelDisplayName: String?,
+    versionCount: Int = 1,
+    onRegenerate: () -> Unit = {},
+    onEdit: (String) -> Unit = {},
+    onDelete: (DeletionMode) -> Unit = {},
+    onFork: () -> Unit = {},
+    onVersionChange: (Int) -> Unit = {}
+) {
     val isUser = message.role == MessageRole.USER
     val (thought, mainContent, isThoughtComplete) = remember(message.content) {
         if (isUser) Triple(null, message.content, true) else parseThinkingContent(message.content)
     }
+    
+    var menuExpanded by remember { mutableStateOf(false) }
+    var isEditing by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var editValue by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -361,27 +442,148 @@ fun ChatBubble(message: ChatMessage, statsForNerdsEnabled: Boolean, modelDisplay
                     onClick = { /* No-op or single tap action if needed */ },
                     onLongClick = {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        clipboardManager.setText(AnnotatedString(message.content))
-                        Toast.makeText(context, "Message copied", Toast.LENGTH_SHORT).show()
+                        menuExpanded = true
                     }
                 ),
             shape = bubbleShape,
             color = if (isUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
         ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                if (thought != null) {
-                    ThinkingProcess(
-                        thought = thought,
-                        isComplete = isThoughtComplete
-                    )
+            Box {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    if (thought != null) {
+                        ThinkingProcess(
+                            thought = thought,
+                            isComplete = isThoughtComplete
+                        )
+                    }
+                    if (isEditing) {
+                        OutlinedTextField(
+                            value = editValue,
+                            onValueChange = { editValue = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                                unfocusedTextColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        )
+                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                            TextButton(onClick = { isEditing = false }) { Text("Cancel", color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary) }
+                            TextButton(onClick = { 
+                                onEdit(if (thought != null) "<think>\n$thought\n</think>\n$editValue" else editValue)
+                                isEditing = false 
+                            }) { Text("Save", color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary) }
+                        }
+                    } else if (mainContent.isNotEmpty()) {
+                        MarkdownText(
+                            text = mainContent,
+                            textColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    
+                    if (versionCount > 1 && !isEditing) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(top = 4.dp).alpha(0.7f)
+                        ) {
+                            IconButton(onClick = { onVersionChange(-1) }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.ChevronLeft, contentDescription = "Previous version", tint = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            }
+                            Text(
+                                "${message.versionIndex + 1}/$versionCount",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            IconButton(onClick = { onVersionChange(1) }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.ChevronRight, contentDescription = "Next version", tint = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
                 }
-                if (mainContent.isNotEmpty()) {
-                    MarkdownText(
-                        text = mainContent,
-                        textColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Copy") },
+                        onClick = {
+                            menuExpanded = false
+                            clipboardManager.setText(AnnotatedString(message.content))
+                            Toast.makeText(context, "Message copied", Toast.LENGTH_SHORT).show()
+                        },
+                        leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) }
+                    )
+                    if (message.role == MessageRole.MODEL) {
+                        DropdownMenuItem(
+                            text = { Text("Regenerate") },
+                            onClick = {
+                                menuExpanded = false
+                                onRegenerate()
+                            },
+                            leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        onClick = {
+                            menuExpanded = false
+                            editValue = mainContent
+                            isEditing = true
+                        },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Fork from here") },
+                        onClick = {
+                            menuExpanded = false
+                            onFork()
+                        },
+                        leadingIcon = { Icon(Icons.Default.ForkRight, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        onClick = {
+                            menuExpanded = false
+                            showDeleteDialog = true
+                        },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
                     )
                 }
             }
+        }
+
+        if (showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                title = { Text("Delete Message") },
+                text = { Text("How would you like to delete this message?") },
+                confirmButton = {
+                    Column {
+                        TextButton(
+                            onClick = {
+                                onDelete(DeletionMode.ONLY_THIS)
+                                showDeleteDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { 
+                            Text("Delete only this message", textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth()) 
+                        }
+                        TextButton(
+                            onClick = {
+                                onDelete(DeletionMode.EVERYTHING_AFTER)
+                                showDeleteDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { 
+                            Text("Delete this and all after", textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth()) 
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+                }
+            )
         }
         
         // Stats for Nerds: show below model messages when enabled

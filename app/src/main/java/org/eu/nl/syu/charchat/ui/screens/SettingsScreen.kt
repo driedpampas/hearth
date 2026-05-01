@@ -98,6 +98,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.openid.appauth.AuthorizationException
@@ -1033,6 +1034,10 @@ fun SettingsHuggingFaceAccountScreen(
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.fetchUserInfo()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -1309,25 +1314,27 @@ class ModelsViewModel @Inject constructor(
     private fun observeAuthToken() {
         viewModelScope.launch {
             authRepository.authToken.collect { token ->
-                if (token != null) {
-                    val userInfo = hfApiService.whoami()
-                    _uiState.update { 
-                        it.copy(
-                            userName = userInfo?.name,
-                            preferredUsername = userInfo?.preferredUsername,
-                            userEmail = userInfo?.email,
-                            accessToken = token.accessToken,
-                            profilePicture = userInfo?.picture
-                        )
-                    }
-                } else {
-                    _uiState.update { it.copy(
-                        userName = null, 
-                        preferredUsername = null,
-                        userEmail = null, 
-                        accessToken = null,
-                        profilePicture = null
-                    ) }
+                _uiState.update { 
+                    it.copy(
+                        accessToken = token?.accessToken,
+                    )
+                }
+            }
+        }
+    }
+
+    fun fetchUserInfo() {
+        viewModelScope.launch {
+            val token = authRepository.authToken.first()
+            if (token != null) {
+                val userInfo = hfApiService.whoami()
+                _uiState.update { 
+                    it.copy(
+                        userName = userInfo?.name,
+                        preferredUsername = userInfo?.preferredUsername,
+                        userEmail = userInfo?.email,
+                        profilePicture = userInfo?.picture
+                    )
                 }
             }
         }

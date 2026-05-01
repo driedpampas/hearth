@@ -5,6 +5,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -71,12 +73,13 @@ fun ThinkingProcess(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 shape = MaterialTheme.shapes.small
             ) {
-                MarkdownText(
-                    text = thought,
-                    modifier = Modifier.padding(12.dp),
-                    smallFontSize = true,
-                    textColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                )
+                Box(modifier = Modifier.heightIn(max = 300.dp).fillMaxWidth().padding(12.dp).verticalScroll(rememberScrollState())) {
+                    MarkdownText(
+                        text = thought,
+                        smallFontSize = true,
+                        textColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+                }
             }
         }
     }

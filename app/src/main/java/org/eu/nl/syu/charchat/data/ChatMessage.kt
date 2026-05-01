@@ -13,7 +13,10 @@ data class ChatMessage(
     val isHiddenFromAi: Boolean = false,
     val modelReference: String? = null,
     val generationTimeMs: Long? = null,
-    val tokensPerSecond: Float? = null
+    val tokensPerSecond: Float? = null,
+    val parentId: String? = null,
+    val versionGroupId: String? = null,
+    val versionIndex: Int = 0
 )
 
 enum class MessageRole {

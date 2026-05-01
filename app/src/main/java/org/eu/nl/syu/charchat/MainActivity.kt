@@ -131,7 +131,10 @@ fun CharChatApp() {
                 HomeScreen(
                     onNavigateToChat = { id -> navController.navigate("chat/$id") },
                     onNavigateToSettings = { navController.navigate("settings") },
-                    onNavigateToCreateCharacter = { navController.navigate("create_character") },
+                    onNavigateToCreateCharacter = { id: String? -> 
+                        if (id != null) navController.navigate("create_character?characterId=$id")
+                        else navController.navigate("create_character")
+                    },
                     onNavigateToModelSettings = { navController.navigate("model_settings") },
                     onNavigateToModelPicker = { navController.navigate("model_picker") },
                     onNavigateToCharacterPicker = { navController.navigate("character_picker") }
@@ -184,8 +187,17 @@ fun CharChatApp() {
                     onNavigateBack = { safeNavigateBack() }
                 )
             }
-            composable(route = "create_character") {
+            composable(
+                route = "create_character?characterId={characterId}",
+                arguments = listOf(navArgument("characterId") { 
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                })
+            ) { backStackEntry ->
+                val characterId = backStackEntry.arguments?.getString("characterId")
                 CreateCharacterScreen(
+                    characterId = characterId,
                     onNavigateBack = { safeNavigateBack() }
                 )
             }
@@ -200,6 +212,9 @@ fun CharChatApp() {
                     },
                     onNavigateToModelSettings = { characterId ->
                         navController.navigate("model_settings/$characterId")
+                    },
+                    onNavigateToEditCharacter = { characterId ->
+                        navController.navigate("create_character?characterId=$characterId")
                     }
                 )
             }

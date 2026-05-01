@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -30,6 +31,11 @@ import org.eu.nl.syu.charchat.runtime.EmbeddingEngine
 import org.eu.nl.syu.charchat.runtime.LiteRtEngineWrapper
 import java.io.File
 import javax.inject.Inject
+import javax.inject.Singleton
+
+enum class DeletionMode {
+    ONLY_THIS, EVERYTHING_AFTER
+}
 
 data class ChatUiState(
     val character: Character? = null,
@@ -40,7 +46,9 @@ data class ChatUiState(
     val maxTokens: Int = 4096,
     val modelError: String? = null,
     val isLoadingModel: Boolean = false,
-    val threadTitle: String? = null
+    val threadTitle: String? = null,
+    val versionCounts: Map<String, Int> = emptyMap(),
+    val displayedVersions: Map<String, Int> = emptyMap()
 )
 
 @HiltViewModel
@@ -58,6 +66,13 @@ class ChatViewModel @Inject constructor(
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
     private var activeThreadId: String? = null
     private var isThreadSaved: Boolean = false
+    private var generationJob: kotlinx.coroutines.Job? = null
+
+    fun stopGeneration() {
+        generationJob?.cancel()
+        generationJob = null
+        _uiState.update { it.copy(isGenerating = false, currentGeneratingText = "") }
+    }
 
     fun loadConversation(conversationId: String) {
         viewModelScope.launch {
@@ -66,22 +81,67 @@ class ChatViewModel @Inject constructor(
             val character = when {
                 threadEntity != null -> characterDao.getCharacterById(threadEntity.characterId)?.toDomain()
                 else -> characterDao.getCharacterById(conversationId)?.toDomain()
-            } ?: return@launch
+            }
+            
+            if (character == null) {
+                return@launch
+            }
 
-            val thread = threadEntity?.toDomain() ?: ChatThread(
-                characterId = character.id,
-                title = character.name
-            )
+            // If we don't have a thread entity for this ID, check if it's a characterId and if they have an existing thread
+            val thread = when {
+                threadEntity != null -> threadEntity.toDomain()
+                else -> ChatThread(
+                    characterId = character.id,
+                    title = character.name
+                )
+            }
+            
             val threadId = thread.id
             activeThreadId = threadId
+            isThreadSaved = chatThreadDao.getThreadById(threadId) != null
 
+            val openedAt = System.currentTimeMillis()
+            characterDao.updateLastUsedAt(character.id, openedAt)
+            
+            val allMessages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
+            
+            // Group by versionGroupId. If versionGroupId is null, treat as single version.
+            val grouped = allMessages.groupBy { it.versionGroupId ?: it.id }
+            val versionCounts = grouped.mapValues { it.value.size }
+            
+            // For each group, pick the highest index by default
+            val displayedVersions = grouped.mapValues { it.value.maxByOrNull { m -> m.versionIndex }?.versionIndex ?: 0 }
+            
+            // Filter messages to only show the ones matching displayedVersions
+            val visibleMessages = grouped.mapNotNull { (vgId, versions) ->
+                val activeIndex = displayedVersions[vgId] ?: 0
+                versions.find { it.versionIndex == activeIndex }
+            }.sortedBy { it.timestamp }
+
+            val initialMaxTokens = modelRepository.defaultMaxTokens.first()
+            
+            _uiState.update {
+                it.copy(
+                    character = character.copy(lastUsedAt = openedAt),
+                    messages = visibleMessages,
+                    modelError = null,
+                    isLoadingModel = false,
+                    tokenCount = visibleMessages.sumOf { message -> (message.content.length / 4).coerceAtLeast(0) },
+                    threadTitle = thread.title,
+                    maxTokens = initialMaxTokens,
+                    versionCounts = versionCounts,
+                    displayedVersions = displayedVersions
+                )
+            }
+
+            // Path resolution
             val modelPath = resolveModelPath(character.modelReference)
             val autoLoadEnabled = modelRepository.autoLoadChatModel.first()
+
+            // If no model is loaded and auto-load is off, just show history (which we already did)
             if (!engineWrapper.isInitialized() && !autoLoadEnabled) {
                 _uiState.update {
                     it.copy(
-                        character = character,
-                        threadTitle = thread.title,
                         modelError = when {
                             character.modelReference.isBlank() -> "Select a model first."
                             modelPath == null -> "Model file not found: ${character.modelReference}.\nDid you download it?"
@@ -92,11 +152,10 @@ class ChatViewModel @Inject constructor(
                 return@launch
             }
 
+            // If model path is missing but auto-load is on, we still can't load it
             if (modelPath == null && !engineWrapper.isInitialized()) {
                 _uiState.update {
                     it.copy(
-                        character = character,
-                        threadTitle = thread.title,
                         modelError = if (character.modelReference.isBlank()) {
                             "Select a model first."
                         } else {
@@ -106,71 +165,45 @@ class ChatViewModel @Inject constructor(
                 }
                 return@launch
             }
+            
 
+
+
+            // Now handle model loading
             if (!engineWrapper.isInitialized() && autoLoadEnabled) {
                 if (modelPath == null) {
-                    _uiState.update {
-                        it.copy(
-                            character = character,
-                            threadTitle = thread.title,
-                            modelError = "Select a model first."
-                        )
+                    _uiState.update { it.copy(modelError = "Select a model first.") }
+                } else {
+                    _uiState.update { it.copy(isLoadingModel = true) }
+                    val modelFile = File(modelPath)
+                    try {
+                        withContext(Dispatchers.IO) {
+                            engineWrapper.initialize(modelPath, maxTokens = initialMaxTokens)
+                        }
+                        _uiState.update { it.copy(isLoadingModel = false) }
+                    } catch (e: Exception) {
+                        val msg = when {
+                            isInputTensorMissing(e) -> {
+                                modelRepository.quarantineModel(modelFile)
+                                "This model is corrupted/incompatible and has been removed. Please select a compatible LiteRT LM chat model."
+                            }
+                            isUnsupportedChatModel(character.modelReference) -> {
+                                "This model cannot be used for chat. Select a LiteRT LM model instead."
+                            }
+                            else -> {
+                                "Failed to initialize the model: ${e.message}"
+                            }
+                        }
+                        _uiState.update { it.copy(modelError = msg, isLoadingModel = false) }
                     }
-                    return@launch
                 }
-
-                _uiState.update { it.copy(character = character, threadTitle = thread.title, isLoadingModel = true, modelError = null) }
-
-                val modelFile = File(modelPath)
-                try {
-                    val maxTokens = modelRepository.defaultMaxTokens.first()
-                    withContext(Dispatchers.IO) {
-                        engineWrapper.initialize(modelPath, maxTokens = maxTokens)
-                    }
-                    _uiState.update { it.copy(maxTokens = maxTokens) }
-                } catch (e: Exception) {
-                    val msg = when {
-                        isInputTensorMissing(e) -> {
-                            modelRepository.quarantineModel(modelFile)
-                            "This model is corrupted/incompatible and has been removed. Please select a compatible LiteRT LM chat model."
-                        }
-                        isUnsupportedChatModel(character.modelReference) -> {
-                            "This model cannot be used for chat. Select a LiteRT LM model instead."
-                        }
-                        else -> {
-                            "Failed to initialize the model: ${e.message}"
-                        }
-                    }
-                    _uiState.update {
-                        it.copy(
-                            character = character,
-                            threadTitle = thread.title,
-                            modelError = msg,
-                            isLoadingModel = false
-                        )
-                    }
-                    return@launch
-                }
+            } else if (!engineWrapper.isInitialized()) {
+                _uiState.update { it.copy(modelError = "Model not loaded.") }
             }
 
-            val openedAt = System.currentTimeMillis()
-            characterDao.updateLastUsedAt(character.id, openedAt)
-            val messages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
-            val maxTokens = modelRepository.defaultMaxTokens.first()
-            
-            _uiState.update {
-                it.copy(
-                    character = character.copy(lastUsedAt = openedAt),
-                    messages = messages,
-                    modelError = null,
-                    isLoadingModel = false,
-                    tokenCount = messages.sumOf { message -> (message.content.length / 4).coerceAtLeast(0) },
-                    threadTitle = thread.title,
-                    maxTokens = maxTokens
-                )
+            if (engineWrapper.isInitialized()) {
+                engineWrapper.createConversation(character)
             }
-
-            engineWrapper.createConversation(character).collect()
         }
     }
 
@@ -217,7 +250,7 @@ class ChatViewModel @Inject constructor(
                     engineWrapper.initialize(modelPath, maxTokens = maxTokens)
                 }
                 _uiState.update { it.copy(isLoadingModel = false, maxTokens = maxTokens) }
-                engineWrapper.createConversation(character).collect()
+                engineWrapper.createConversation(character)
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoadingModel = false, modelError = "Failed to load model: ${e.message}") }
             }
@@ -227,10 +260,14 @@ class ChatViewModel @Inject constructor(
     fun sendMessage(content: String) {
         val character = _uiState.value.character ?: return
         val threadId = activeThreadId ?: return
+        val lastMessage = _uiState.value.messages.lastOrNull()
         val userMessage = ChatMessage(
             role = MessageRole.USER,
             content = content,
-            modelReference = character.modelReference
+            modelReference = character.modelReference,
+            parentId = lastMessage?.id,
+            versionGroupId = java.util.UUID.randomUUID().toString(),
+            versionIndex = 0
         )
 
         viewModelScope.launch {
@@ -256,7 +293,9 @@ class ChatViewModel @Inject constructor(
                 it.copy(
                     messages = it.messages + userMessage,
                     isGenerating = true,
-                    tokenCount = it.tokenCount + (content.length / 4)
+                    tokenCount = it.tokenCount + (content.length / 4),
+                    versionCounts = it.versionCounts + (userMessage.versionGroupId!! to 1),
+                    displayedVersions = it.displayedVersions + (userMessage.versionGroupId to 0)
                 )
             }
 
@@ -275,41 +314,64 @@ class ChatViewModel @Inject constructor(
             val reminder = character.reminderMessage + thinkingHint + contextInjection
             var fullResponse = ""
 
-            engineWrapper.sendMessage(content, reminder)
+            val history = _uiState.value.messages.dropLast(1).takeLast(10) // Send last 10 PREVIOUS messages
+            generationJob = engineWrapper.sendMessage(content, reminder, history)
                 .onEach { partial ->
                     fullResponse += partial
                     _uiState.update { it.copy(currentGeneratingText = fullResponse) }
                 }
-                .onCompletion {
+                .onCompletion { cause ->
                     val endTime = System.currentTimeMillis()
                     val generationTimeMs = endTime - startTime
-                    val responseTokenCount = fullResponse.length / 4
-                    val tps = if (generationTimeMs > 0) responseTokenCount / (generationTimeMs / 1000f) else null
-
-                    val modelMessage = ChatMessage(
-                        role = MessageRole.MODEL,
-                        content = fullResponse,
-                        modelReference = character.modelReference,
-                        generationTimeMs = generationTimeMs,
-                        tokensPerSecond = tps
-                    )
-                    chatMessageDao.insertMessage(modelMessage.toEntity(character.id, threadId))
-                    chatThreadDao.updateLastMessageAt(threadId, endTime)
-                    _uiState.update {
-                        it.copy(
-                            messages = it.messages + modelMessage,
-                            isGenerating = false,
-                            currentGeneratingText = "",
-                            tokenCount = it.tokenCount + responseTokenCount
-                        )
+                    
+                    var finalContent = fullResponse
+                    if (cause is kotlinx.coroutines.CancellationException) {
+                        if (finalContent.contains("<think>") && !finalContent.contains("</think>")) {
+                            finalContent += "\n</think>\n[Stopped by user]"
+                        } else {
+                            finalContent += "\n[Stopped by user]"
+                        }
                     }
 
-                    checkAndSummarize(threadId, character)
+                    if (finalContent.isNotEmpty()) {
+                        withContext(kotlinx.coroutines.NonCancellable) {
+                            val responseTokenCount = finalContent.length / 4
+                            val tps = if (generationTimeMs > 0) responseTokenCount / (generationTimeMs / 1000f) else null
+
+                            val modelMessage = ChatMessage(
+                                role = MessageRole.MODEL,
+                                content = finalContent,
+                                modelReference = character.modelReference,
+                                generationTimeMs = generationTimeMs,
+                                tokensPerSecond = tps,
+                                parentId = userMessage.id,
+                                versionGroupId = java.util.UUID.randomUUID().toString(),
+                                versionIndex = 0
+                            )
+                            chatMessageDao.insertMessage(modelMessage.toEntity(character.id, threadId))
+                            chatThreadDao.updateLastMessageAt(threadId, endTime)
+                            _uiState.update {
+                                it.copy(
+                                    messages = it.messages + modelMessage,
+                                    isGenerating = false,
+                                    currentGeneratingText = "",
+                                    tokenCount = it.tokenCount + responseTokenCount,
+                                    versionCounts = it.versionCounts + (modelMessage.versionGroupId!! to 1),
+                                    displayedVersions = it.displayedVersions + (modelMessage.versionGroupId to 0)
+                                )
+                            }
+                            checkAndSummarize(threadId, character)
+                        }
+                    } else {
+                        _uiState.update { it.copy(isGenerating = false, currentGeneratingText = "") }
+                    }
+                    generationJob = null
                 }
                 .catch { e ->
                     _uiState.update { it.copy(isGenerating = false, currentGeneratingText = "Error: ${e.message}") }
+                    generationJob = null
                 }
-                .collect()
+                .launchIn(this)
         }
     }
 
@@ -361,7 +423,7 @@ class ChatViewModel @Inject constructor(
                     topP = topP,
                     topK = topK,
                     enableThinking = enableThinking
-                )).collect()
+                ))
 
                 _uiState.update { it.copy(isLoadingModel = false) }
                 onDone?.invoke()
@@ -434,6 +496,204 @@ class ChatViewModel @Inject constructor(
                 val remainingTokens = (summary.length / 4) + (updatedMessages.takeLast(6).sumOf { it.content.length / 4 })
                 _uiState.update { it.copy(messages = updatedMessages, tokenCount = remainingTokens) }
             }
+        }
+    }
+
+    fun switchMessageVersion(versionGroupId: String, direction: Int) {
+        val currentVersion = _uiState.value.displayedVersions[versionGroupId] ?: 0
+        val totalVersions = _uiState.value.versionCounts[versionGroupId] ?: 1
+        val newVersion = (currentVersion + direction).coerceIn(0, totalVersions - 1)
+        
+        if (newVersion == currentVersion) return
+
+        viewModelScope.launch {
+            val allMessages = chatMessageDao.getMessagesForThread(activeThreadId!!).map { it.toDomain() }
+            val group = allMessages.filter { (it.versionGroupId ?: it.id) == versionGroupId }
+            val targetMessage = group.find { it.versionIndex == newVersion } ?: return@launch
+
+            _uiState.update { state ->
+                val newDisplayed = state.displayedVersions + (versionGroupId to newVersion)
+                val newMessages = state.messages.map { 
+                    if ((it.versionGroupId ?: it.id) == versionGroupId) targetMessage else it 
+                }
+                state.copy(
+                    messages = newMessages,
+                    displayedVersions = newDisplayed,
+                    tokenCount = newMessages.sumOf { (it.content.length / 4).coerceAtLeast(0) }
+                )
+            }
+        }
+    }
+
+    fun regenerateMessage(messageId: String) {
+        val character = _uiState.value.character ?: return
+        val threadId = activeThreadId ?: return
+        val originalMessage = _uiState.value.messages.find { it.id == messageId } ?: return
+        if (originalMessage.role != MessageRole.MODEL) return
+
+        viewModelScope.launch {
+            val startTime = System.currentTimeMillis()
+            _uiState.update { it.copy(isGenerating = true) }
+
+            val versionGroupId = originalMessage.versionGroupId ?: originalMessage.id
+            val nextVersionIndex = (_uiState.value.versionCounts[versionGroupId] ?: 1)
+
+            // To regenerate, we need the context up to the parent of this message
+            val allMessages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
+            val historyUpToParent = mutableListOf<ChatMessage>()
+            var current: ChatMessage? = originalMessage
+            while (current?.parentId != null) {
+                val parent = allMessages.find { it.id == current?.parentId }
+                if (parent != null) {
+                    historyUpToParent.add(0, parent)
+                    current = parent
+                } else break
+            }
+            // Add root message if it has no parent but is in the history
+            if (current != null && current.parentId == null && !historyUpToParent.contains(current)) {
+                historyUpToParent.add(0, current)
+            }
+
+            // We need to re-initialize the conversation with history up to parent
+            engineWrapper.createConversation(character)
+            for (msg in historyUpToParent) {
+                // This is a bit inefficient, but needed to restore state
+                // Actually LiteRtEngineWrapper might need a better way to restore history
+                // For now, let's assume we can just send the last user message again with full context
+            }
+            
+            val contextHistory = historyUpToParent.dropLast(1)
+            val lastUserMessage = historyUpToParent.lastOrNull { it.role == MessageRole.USER } ?: return@launch
+            
+            var fullResponse = ""
+            engineWrapper.sendMessage(lastUserMessage.content, history = contextHistory)
+                .onEach { partial ->
+                    fullResponse += partial
+                    _uiState.update { it.copy(currentGeneratingText = fullResponse) }
+                }
+                .onCompletion {
+                    val endTime = System.currentTimeMillis()
+                    val generationTimeMs = endTime - startTime
+                    val responseTokenCount = fullResponse.length / 4
+                    val tps = if (generationTimeMs > 0) responseTokenCount / (generationTimeMs / 1000f) else null
+
+                    val modelMessage = ChatMessage(
+                        role = MessageRole.MODEL,
+                        content = fullResponse,
+                        modelReference = character.modelReference,
+                        generationTimeMs = generationTimeMs,
+                        tokensPerSecond = tps,
+                        parentId = originalMessage.parentId,
+                        versionGroupId = versionGroupId,
+                        versionIndex = nextVersionIndex
+                    )
+                    chatMessageDao.insertMessage(modelMessage.toEntity(character.id, threadId))
+                    
+                    _uiState.update { state ->
+                        val newMessages = state.messages.map { 
+                            if ((it.versionGroupId ?: it.id) == versionGroupId) modelMessage else it 
+                        }
+                        state.copy(
+                            messages = newMessages,
+                            isGenerating = false,
+                            currentGeneratingText = "",
+                            tokenCount = newMessages.sumOf { (it.content.length / 4).coerceAtLeast(0) },
+                            versionCounts = state.versionCounts + (versionGroupId to nextVersionIndex + 1),
+                            displayedVersions = state.displayedVersions + (versionGroupId to nextVersionIndex)
+                        )
+                    }
+                }
+                .collect()
+        }
+    }
+
+    fun editMessage(messageId: String, newContent: String) {
+        val character = _uiState.value.character ?: return
+        val threadId = activeThreadId ?: return
+        val originalMessage = _uiState.value.messages.find { it.id == messageId } ?: return
+
+        viewModelScope.launch {
+            val versionGroupId = originalMessage.versionGroupId ?: originalMessage.id
+            val nextVersionIndex = (_uiState.value.versionCounts[versionGroupId] ?: 1)
+
+            val updatedMessage = originalMessage.copy(
+                id = java.util.UUID.randomUUID().toString(),
+                content = newContent,
+                timestamp = System.currentTimeMillis(),
+                versionIndex = nextVersionIndex,
+                versionGroupId = versionGroupId
+            )
+
+            chatMessageDao.insertMessage(updatedMessage.toEntity(character.id, threadId))
+
+            _uiState.update { state ->
+                val newMessages = state.messages.map { 
+                    if ((it.versionGroupId ?: it.id) == versionGroupId) updatedMessage else it 
+                }
+                state.copy(
+                    messages = newMessages,
+                    tokenCount = newMessages.sumOf { (it.content.length / 4).coerceAtLeast(0) },
+                    versionCounts = state.versionCounts + (versionGroupId to nextVersionIndex + 1),
+                    displayedVersions = state.displayedVersions + (versionGroupId to nextVersionIndex)
+                )
+            }
+        }
+    }
+
+    fun forkThread(messageId: String) {
+        val character = _uiState.value.character ?: return
+        val threadId = activeThreadId ?: return
+        
+        viewModelScope.launch {
+            val allMessages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
+            val index = allMessages.indexOfFirst { it.id == messageId }
+            if (index == -1) return@launch
+            
+            val messagesToCopy = allMessages.take(index + 1)
+            val newThreadId = java.util.UUID.randomUUID().toString()
+            val startTime = System.currentTimeMillis()
+            
+            val newThread = ChatThread(
+                id = newThreadId,
+                characterId = character.id,
+                title = "Fork of ${_uiState.value.threadTitle}",
+                createdAt = startTime,
+                lastMessageAt = startTime,
+                sequenceId = chatThreadDao.getThreadCountForCharacter(character.id) + 1
+            )
+            
+            chatThreadDao.insertThread(newThread.toEntity())
+            
+            for (msg in messagesToCopy) {
+                chatMessageDao.insertMessage(msg.toEntity(character.id, newThreadId))
+            }
+            
+            // Navigate to new thread (handled by UI via a state change or callback)
+            // For now, we'll just update the activeThreadId and reload
+            loadConversation(newThreadId)
+        }
+    }
+
+    fun renameThread(newTitle: String) {
+        val threadId = activeThreadId ?: return
+        viewModelScope.launch {
+            chatThreadDao.updateThreadTitle(threadId, newTitle)
+            _uiState.update { it.copy(threadTitle = newTitle) }
+        }
+    }
+
+    fun deleteMessage(messageId: String, mode: DeletionMode) {
+        val threadId = activeThreadId ?: return
+        viewModelScope.launch {
+            val message = chatMessageDao.getMessageById(messageId) ?: return@launch
+            
+            if (mode == DeletionMode.ONLY_THIS) {
+                chatMessageDao.deleteMessageById(messageId)
+            } else {
+                chatMessageDao.deleteMessagesAfter(threadId, message.timestamp)
+            }
+            
+            loadConversation(threadId)
         }
     }
 

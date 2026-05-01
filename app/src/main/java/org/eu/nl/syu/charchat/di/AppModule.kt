@@ -40,7 +40,7 @@ object AppModule {
             "charchat_db"
         )
             .setDriver(driver)
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
@@ -244,5 +244,13 @@ private val MIGRATION_6_7 = object : Migration(6, 7) {
                 AND (t2.createdAt < chat_threads.createdAt OR (t2.createdAt = chat_threads.createdAt AND t2.id <= chat_threads.id))
             )
         """.trimIndent()).use { it.step() }
+    }
+}
+
+private val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.prepare("ALTER TABLE chat_messages ADD COLUMN parentId TEXT").use { it.step() }
+        connection.prepare("ALTER TABLE chat_messages ADD COLUMN versionGroupId TEXT").use { it.step() }
+        connection.prepare("ALTER TABLE chat_messages ADD COLUMN versionIndex INTEGER NOT NULL DEFAULT 0").use { it.step() }
     }
 }

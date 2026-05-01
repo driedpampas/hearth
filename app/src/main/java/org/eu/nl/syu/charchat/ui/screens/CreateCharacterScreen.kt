@@ -51,6 +51,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -67,6 +69,7 @@ import org.eu.nl.syu.charchat.data.ModelManager
 import org.eu.nl.syu.charchat.data.Character
 import org.eu.nl.syu.charchat.data.local.CharacterDao
 import org.eu.nl.syu.charchat.data.local.toEntity
+import org.eu.nl.syu.charchat.data.local.toDomain
 import org.eu.nl.syu.charchat.domain.ScraperUseCase
 import java.io.File
 import java.util.UUID
@@ -87,7 +90,8 @@ data class CreateCharacterState(
     val isAdvancedExpanded: Boolean = false,
     val urlToScrape: String = "",
     val isScraping: Boolean = false,
-    val isSaved: Boolean = false
+    val isSaved: Boolean = false,
+    val characterId: String? = null
 )
 
 @HiltViewModel
@@ -101,6 +105,26 @@ class CreateCharacterViewModel @Inject constructor(
 
     init {
         refreshModels()
+    }
+
+    fun loadCharacter(characterId: String) {
+        viewModelScope.launch {
+            val character = characterDao.getCharacterById(characterId)?.toDomain() ?: return@launch
+            _uiState.update {
+                it.copy(
+                    characterId = characterId,
+                    name = character.name,
+                    tagline = character.tagline,
+                    lore = character.systemPromptLore,
+                    reminderMessage = character.reminderMessage,
+                    modelPath = character.modelReference,
+                    temp = character.temp,
+                    topP = character.topP,
+                    topK = character.topK,
+                    enableThinking = character.enableThinking
+                )
+            }
+        }
     }
 
     fun updateName(name: String) = _uiState.update { it.copy(name = name) }
@@ -178,8 +202,9 @@ class CreateCharacterViewModel @Inject constructor(
         viewModelScope.launch {
             val state = _uiState.value
             if (state.modelPath.isBlank()) return@launch
+            val characterId = state.characterId ?: UUID.randomUUID().toString()
             val character = Character(
-                id = UUID.randomUUID().toString(),
+                id = characterId,
                 name = state.name,
                 tagline = state.tagline,
                 avatarUrl = null,
@@ -203,10 +228,17 @@ class CreateCharacterViewModel @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateCharacterScreen(
+    characterId: String? = null,
     onNavigateBack: () -> Unit,
     viewModel: CreateCharacterViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    
+    LaunchedEffect(characterId) {
+        if (characterId != null) {
+            viewModel.loadCharacter(characterId)
+        }
+    }
     var showModelPicker by rememberSaveable { mutableStateOf(false) }
     var showModelSettings by rememberSaveable { mutableStateOf(false) }
 
@@ -249,7 +281,7 @@ fun CreateCharacterScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Character Creator") },
+                title = { Text(if (uiState.characterId != null) "Edit Character" else "Character Creator") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -427,7 +459,7 @@ fun CreateCharacterScreen(
                     modifier = Modifier.fillMaxWidth()
                         .padding(bottom = 32.dp)
                 ) {
-                    Text("Create Character")
+                    Text(if (uiState.characterId != null) "Save Changes" else "Create Character")
                 }
             }
         }

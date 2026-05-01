@@ -93,7 +93,7 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 fun HomeScreen(
     onNavigateToChat: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToCreateCharacter: () -> Unit,
+    onNavigateToCreateCharacter: (String?) -> Unit,
     onNavigateToModelSettings: () -> Unit,
     onNavigateToModelPicker: () -> Unit,
     onNavigateToCharacterPicker: () -> Unit,
@@ -216,7 +216,7 @@ fun HomeScreen(
                     FloatingActionButtonMenuItem(
                         onClick = {
                             fabMenuExpanded = false
-                            onNavigateToCreateCharacter()
+                            onNavigateToCreateCharacter(null)
                         },
                         icon = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
                         text = { Text("Create Character") }

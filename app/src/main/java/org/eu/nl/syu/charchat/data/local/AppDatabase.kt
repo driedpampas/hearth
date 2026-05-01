@@ -82,7 +82,10 @@ data class ChatMessageEntity(
     val isHiddenFromAi: Boolean,
     val modelReference: String? = null,
     val generationTimeMs: Long? = null,
-    val tokensPerSecond: Float? = null
+    val tokensPerSecond: Float? = null,
+    val parentId: String? = null,
+    val versionGroupId: String? = null,
+    val versionIndex: Int = 0
 )
 
 @Dao
@@ -151,6 +154,24 @@ interface ChatMessageDao {
 
     @Query("UPDATE chat_messages SET isHiddenFromAi = 1 WHERE threadId = :threadId AND id IN (:messageIds)")
     suspend fun hideMessages(threadId: String, messageIds: List<String>)
+
+    @Query("SELECT * FROM chat_messages WHERE versionGroupId = :versionGroupId ORDER BY versionIndex ASC")
+    suspend fun getVersionsForGroup(versionGroupId: String): List<ChatMessageEntity>
+
+    @Query("SELECT * FROM chat_messages WHERE id = :id")
+    suspend fun getMessageById(id: String): ChatMessageEntity?
+
+    @Query("DELETE FROM chat_messages WHERE id = :id")
+    suspend fun deleteMessageById(id: String)
+
+    @Query("DELETE FROM chat_messages WHERE threadId = :threadId AND timestamp >= :timestamp")
+    suspend fun deleteMessagesAfter(threadId: String, timestamp: Long)
+
+    @Query("UPDATE chat_messages SET content = :newContent WHERE id = :id")
+    suspend fun updateMessageContent(id: String, newContent: String)
+
+    @Query("UPDATE chat_threads SET title = :newTitle WHERE id = :id")
+    suspend fun updateThreadTitle(id: String, newTitle: String)
 }
 
 @Database(
@@ -161,7 +182,7 @@ interface ChatMessageDao {
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 7, 
+    version = 8, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -231,7 +252,10 @@ fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(
     isHiddenFromAi = isHiddenFromAi,
     modelReference = modelReference,
     generationTimeMs = generationTimeMs,
-    tokensPerSecond = tokensPerSecond
+    tokensPerSecond = tokensPerSecond,
+    parentId = parentId,
+    versionGroupId = versionGroupId,
+    versionIndex = versionIndex
 )
 
 fun ChatMessage.toEntity(characterId: String, threadId: String?): ChatMessageEntity = ChatMessageEntity(
@@ -244,5 +268,8 @@ fun ChatMessage.toEntity(characterId: String, threadId: String?): ChatMessageEnt
     isHiddenFromAi = isHiddenFromAi,
     modelReference = modelReference,
     generationTimeMs = generationTimeMs,
-    tokensPerSecond = tokensPerSecond
+    tokensPerSecond = tokensPerSecond,
+    parentId = parentId,
+    versionGroupId = versionGroupId,
+    versionIndex = versionIndex
 )
