@@ -353,16 +353,22 @@ fun HomeScreen(
                     }
                 }
 
-                if (newChatCharacters.isNotEmpty()) {
+                // Use the full list if there are no threads, otherwise use the filtered subset
+                val charactersToDisplay = if (filteredThreads.isEmpty()) visibleCharacters else newChatCharacters
+
+                if (charactersToDisplay.isNotEmpty()) {
                     item {
                         Text(
                             text = if (filteredThreads.isEmpty()) "Characters" else "Start a new chat",
                             style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = if (filteredThreads.isNotEmpty() || (filteredThreads.isNotEmpty() && recentCharacters.isNotEmpty())) 4.dp else 0.dp, bottom = 4.dp)
+                            modifier = Modifier.padding(
+                                top = if (filteredThreads.isNotEmpty() || recentCharacters.isNotEmpty()) 4.dp else 0.dp, 
+                                bottom = 4.dp
+                            )
                         )
                     }
 
-                    items(newChatCharacters, key = { "visible-${it.id}" }) { character ->
+                    items(charactersToDisplay, key = { "visible-${it.id}" }) { character ->
                         CharacterCard(
                             character = character,
                             onClick = { openCharacter(character) }

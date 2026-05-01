@@ -252,7 +252,7 @@ fun CharChatApp() {
             composable(route = "model_picker") {
                 ModelPickerScreen(
                     onDismiss = { safeNavigateBack() },
-                    onOpenSettings = { navController.navigate("settings/models/litert") },
+                    onOpenSettings = { navController.navigate("settings/models") },
                     onNavigateToModelSettings = { navController.navigate("model_settings") }
                 )
             }
