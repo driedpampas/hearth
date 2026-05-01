@@ -44,7 +44,7 @@ fun GlassySurface(
     blurRadius: Dp = 4.dp, // Controls how far the color bleeds outward
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
-    enabled: Boolean = true,
+    enabled: Boolean = true, border: androidx.compose.foundation.BorderStroke? = null,
     content: @Composable () -> Unit
 ) {
     Box(
@@ -71,7 +71,7 @@ fun GlassySurface(
             modifier = Modifier
                 .clip(shape),
             color = Color.Transparent,
-            contentColor = contentColor,
+            contentColor = contentColor, border = border,
         ) {
             content()
         }

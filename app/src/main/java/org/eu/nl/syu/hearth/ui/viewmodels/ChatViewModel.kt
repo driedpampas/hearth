@@ -782,7 +782,7 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun calculateTokenEstimate(messages: List<ChatMessage>, includeThinking: Boolean): Int {
-        return messages.sumOf { msg ->
+        return messages.filter { !it.isHiddenFromAi }.sumOf { msg ->
             val content = if (!includeThinking && msg.role == MessageRole.MODEL) {
                 msg.content.stripThinking()
             } else {

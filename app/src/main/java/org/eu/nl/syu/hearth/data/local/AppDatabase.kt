@@ -34,6 +34,8 @@ import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ChatMessage
 import org.eu.nl.syu.hearth.data.ChatThread
 import org.eu.nl.syu.hearth.data.MessageRole
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 @Entity(tableName = "lore_chunks")
 data class LoreChunkEntity(
@@ -81,8 +83,10 @@ data class CharacterEntity(
     val enableThinkingCompatibility: Boolean,
     val thinkingCompatibilityToken: String,
     val includeThinkingInContext: Boolean,
+    val knowledgeBase: String,
     val sceneBackgroundUrl: String?,
     val isPredefined: Boolean,
+    val initialMessagesJson: String = "[]",
     val lastUsedAt: Long
 )
 
@@ -106,6 +110,7 @@ data class ChatMessageEntity(
     val content: String,
     val timestamp: Long,
     val isHiddenFromAi: Boolean,
+    val isHiddenFromUser: Boolean = false,
     val modelReference: String? = null,
     val generationTimeMs: Long? = null,
     val tokensPerSecond: Float? = null,
@@ -253,7 +258,7 @@ interface LoreChunkDao {
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 12, 
+    version = 14, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -263,6 +268,18 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
     abstract fun loreChunkDao(): LoreChunkDao
     abstract fun vectorDao(): VectorDao
+
+    companion object {
+        private val gson = Gson()
+        private val messageListType = object : TypeToken<List<ChatMessage>>() {}.type
+
+        fun messageListToJson(messages: List<ChatMessage>): String = gson.toJson(messages)
+        fun jsonToMessageList(json: String): List<ChatMessage> = try {
+            gson.fromJson(json, messageListType) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 }
 
 fun CharacterEntity.toDomain(): Character = Character(
@@ -280,8 +297,9 @@ fun CharacterEntity.toDomain(): Character = Character(
     enableThinkingCompatibility = enableThinkingCompatibility,
     thinkingCompatibilityToken = thinkingCompatibilityToken,
     includeThinkingInContext = includeThinkingInContext,
+    knowledgeBase = knowledgeBase,
     sceneBackgroundUrl = sceneBackgroundUrl,
-    isPredefined = isPredefined,
+    isPredefined = isPredefined, initialMessages = AppDatabase.jsonToMessageList(initialMessagesJson),
     lastUsedAt = lastUsedAt
 )
 
@@ -300,8 +318,9 @@ fun Character.toEntity(): CharacterEntity = CharacterEntity(
     enableThinkingCompatibility = enableThinkingCompatibility,
     thinkingCompatibilityToken = thinkingCompatibilityToken,
     includeThinkingInContext = includeThinkingInContext,
+    knowledgeBase = knowledgeBase,
     sceneBackgroundUrl = sceneBackgroundUrl,
-    isPredefined = isPredefined,
+    isPredefined = isPredefined, initialMessagesJson = AppDatabase.messageListToJson(initialMessages),
     lastUsedAt = lastUsedAt
 )
 
@@ -332,7 +351,7 @@ fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(
     role = MessageRole.valueOf(role),
     content = content,
     timestamp = timestamp,
-    isHiddenFromAi = isHiddenFromAi,
+    isHiddenFromAi = isHiddenFromAi, isHiddenFromUser = isHiddenFromUser,
     modelReference = modelReference,
     generationTimeMs = generationTimeMs,
     tokensPerSecond = tokensPerSecond,
@@ -348,7 +367,7 @@ fun ChatMessage.toEntity(characterId: String, threadId: String?): ChatMessageEnt
     role = role.name,
     content = content,
     timestamp = timestamp,
-    isHiddenFromAi = isHiddenFromAi,
+    isHiddenFromAi = isHiddenFromAi, isHiddenFromUser = isHiddenFromUser,
     modelReference = modelReference,
     generationTimeMs = generationTimeMs,
     tokensPerSecond = tokensPerSecond,

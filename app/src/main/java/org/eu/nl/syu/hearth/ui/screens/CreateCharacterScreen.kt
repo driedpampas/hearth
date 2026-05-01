@@ -20,59 +20,33 @@ package org.eu.nl.syu.hearth.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
-import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -90,22 +64,34 @@ import org.eu.nl.syu.hearth.data.local.CharacterDao
 import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.data.local.toEntity
 import org.eu.nl.syu.hearth.domain.ScraperUseCase
+import org.eu.nl.syu.hearth.runtime.LoreSyncManager
+import org.eu.nl.syu.hearth.ui.components.*
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
+import org.eu.nl.syu.hearth.data.ChatMessage
+import org.eu.nl.syu.hearth.data.MessageRole
+
+data class StarterMessage(
+    val content: String = "",
+    val author: MessageRole = MessageRole.MODEL,
+    val isHiddenFromUser: Boolean = false,
+    val isHiddenFromAi: Boolean = false
+)
 
 data class CreateCharacterState(
     val name: String = "",
     val tagline: String = "",
     val lore: String = "",
     val reminderMessage: String = "",
+    val knowledgeBase: String = "",
     val modelPath: String = "",
     val temp: Float = 0.8f,
     val topP: Float = 0.95f,
     val topK: Int = 40,
     val enableThinking: Boolean = false,
     val availableModels: List<File> = emptyList(),
-    val initialMessages: List<String> = listOf("Greetings! I am ready for our story."),
+    val initialMessages: List<StarterMessage> = listOf(StarterMessage("Greetings! I am ready for our story.")),
     val isAdvancedExpanded: Boolean = false,
     val urlToScrape: String = "",
     val isScraping: Boolean = false,
@@ -118,7 +104,7 @@ class CreateCharacterViewModel @Inject constructor(
     private val scraperUseCase: ScraperUseCase,
     private val characterDao: CharacterDao,
     private val modelManager: ModelManager,
-    private val loreSyncManager: org.eu.nl.syu.hearth.runtime.LoreSyncManager
+    private val loreSyncManager: LoreSyncManager
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CreateCharacterState())
     val uiState: StateFlow<CreateCharacterState> = _uiState.asStateFlow()
@@ -142,7 +128,16 @@ class CreateCharacterViewModel @Inject constructor(
                     temp = character.temp,
                     topP = character.topP,
                     topK = character.topK,
-                    enableThinking = character.enableThinking
+                    enableThinking = character.enableThinking,
+                    knowledgeBase = character.knowledgeBase,
+                    initialMessages = character.initialMessages.map { msg ->
+                        StarterMessage(
+                            content = msg.content,
+                            author = msg.role,
+                            isHiddenFromUser = msg.isHiddenFromUser,
+                            isHiddenFromAi = msg.isHiddenFromAi
+                        )
+                    }
                 )
             }
         }
@@ -152,6 +147,7 @@ class CreateCharacterViewModel @Inject constructor(
     fun updateTagline(tagline: String) = _uiState.update { it.copy(tagline = tagline) }
     fun updateLore(lore: String) = _uiState.update { it.copy(lore = lore) }
     fun updateReminder(reminder: String) = _uiState.update { it.copy(reminderMessage = reminder) }
+    fun updateKnowledgeBase(kb: String) = _uiState.update { it.copy(knowledgeBase = kb) }
     fun updateModel(model: String) = _uiState.update { it.copy(modelPath = model) }
     fun toggleAdvanced() = _uiState.update { it.copy(isAdvancedExpanded = !it.isAdvancedExpanded) }
     fun updateUrl(url: String) = _uiState.update { it.copy(urlToScrape = url) }
@@ -179,13 +175,37 @@ class CreateCharacterViewModel @Inject constructor(
     }
 
     fun addInitialMessage() = _uiState.update { 
-        it.copy(initialMessages = it.initialMessages + "") 
+        it.copy(initialMessages = it.initialMessages + StarterMessage()) 
     }
     
     fun updateInitialMessage(index: Int, text: String) = _uiState.update { state ->
         val newList = state.initialMessages.toMutableList()
         if (index in newList.indices) {
-            newList[index] = text
+            newList[index] = newList[index].copy(content = text)
+        }
+        state.copy(initialMessages = newList)
+    }
+
+    fun updateInitialMessageAuthor(index: Int, author: MessageRole) = _uiState.update { state ->
+        val newList = state.initialMessages.toMutableList()
+        if (index in newList.indices) {
+            newList[index] = newList[index].copy(author = author)
+        }
+        state.copy(initialMessages = newList)
+    }
+
+    fun toggleInitialMessageUserVisibility(index: Int) = _uiState.update { state ->
+        val newList = state.initialMessages.toMutableList()
+        if (index in newList.indices) {
+            newList[index] = newList[index].copy(isHiddenFromUser = !newList[index].isHiddenFromUser)
+        }
+        state.copy(initialMessages = newList)
+    }
+
+    fun toggleInitialMessageAiVisibility(index: Int) = _uiState.update { state ->
+        val newList = state.initialMessages.toMutableList()
+        if (index in newList.indices) {
+            newList[index] = newList[index].copy(isHiddenFromAi = !newList[index].isHiddenFromAi)
         }
         state.copy(initialMessages = newList)
     }
@@ -210,7 +230,7 @@ class CreateCharacterViewModel @Inject constructor(
                         isScraping = false,
                         name = scraped["name"] ?: it.name,
                         tagline = scraped["tagline"] ?: it.tagline,
-                        lore = scraped["roleInstruction"] ?: it.lore
+                        knowledgeBase = scraped["roleInstruction"] ?: it.knowledgeBase
                     )
                 }
             } else {
@@ -236,11 +256,26 @@ class CreateCharacterViewModel @Inject constructor(
                 topP = state.topP,
                 topK = state.topK,
                 enableThinking = state.enableThinking,
+                knowledgeBase = state.knowledgeBase,
                 sceneBackgroundUrl = null,
-                isPredefined = false
+                isPredefined = false,
+                initialMessages = state.initialMessages.map { sm ->
+                    ChatMessage(
+                        role = sm.author,
+                        content = sm.content,
+                        isHiddenFromUser = sm.isHiddenFromUser,
+                        isHiddenFromAi = sm.isHiddenFromAi
+                    )
+                }
             )
             characterDao.insertCharacter(character.toEntity())
-            loreSyncManager.syncLore(character, state.lore)
+            
+            // Sync BOTH core identity and deep lore to RAG layer
+            val combinedLore = listOf(state.lore, state.knowledgeBase)
+                .filter { it.isNotBlank() }
+                .joinToString("\n\n---\n\n")
+            
+            loreSyncManager.syncLore(character, combinedLore)
             onSuccess()
         }
     }
@@ -301,195 +336,560 @@ fun CreateCharacterScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (uiState.characterId != null) "Edit Character" else "Character Creator") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showModelSettings = true }) {
-                        Icon(Icons.Filled.Tune, contentDescription = "Model settings")
-                    }
-                    IconButton(onClick = { viewModel.saveCharacter(onNavigateBack) }) {
-                        Icon(Icons.Filled.Save, contentDescription = "Save")
-                    }
-                }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f),
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.surface
+                    )
+                )
             )
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+        topBar = {
+            GlassySurface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,
+                blurRadius = 8.dp,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f)
+            ) {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    ),
+                    title = { Text(if (uiState.characterId != null) "Edit Character" else "Character Creator", fontWeight = FontWeight.SemiBold) },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { viewModel.saveCharacter(onNavigateBack) }) {
+                            Icon(Icons.Filled.Save, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                )
+            }
         }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // URL Scraping Feature
-            ElevatedCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
+            // 1. Identity Section (Hero)
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                GlassySurface(
+                    modifier = Modifier.fillMaxWidth(),
+                    blurRadius = 1.dp,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    //border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        // Avatar Placeholder with Camera Overlay
+                        Box(contentAlignment = Alignment.BottomEnd) {
+                            Box(
+                                modifier = Modifier
+                                    .size(96.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
+                                    .clickable { /* Trigger image picker */ },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                            // Camera Icon Badge
+                            Surface(
+                                modifier = Modifier.size(28.dp),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                                shadowElevation = 4.dp
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.PhotoCamera,
+                                        contentDescription = "Edit Image",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(20.dp))
+                        
+                        // Name Input with better affordance
+                        BasicTextField(
+                            value = uiState.name,
+                            onValueChange = viewModel::updateName,
+                            textStyle = MaterialTheme.typography.headlineMedium.copy(
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { innerTextField ->
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        if (uiState.name.isEmpty()) {
+                                            Text(
+                                                "Character Name",
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(120.dp)
+                                            .height(2.dp)
+                                            .background(
+                                                if (uiState.name.isEmpty()) MaterialTheme.colorScheme.outlineVariant 
+                                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                                CircleShape
+                                            )
+                                    )
+                                }
+                            }
+                        )
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // Tagline Input with better affordance
+                        BasicTextField(
+                            value = uiState.tagline,
+                            onValueChange = viewModel::updateTagline,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { innerTextField ->
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        if (uiState.tagline.isEmpty()) {
+                                            Text(
+                                                "Tagline (Short description)",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(200.dp)
+                                            .height(1.dp)
+                                            .background(
+                                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                                CircleShape
+                                            )
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // 2. The Brain (Instructions vs Reminder)
+            org.eu.nl.syu.hearth.ui.components.GlassySurface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        "Generate from URL",
-                        style = MaterialTheme.typography.titleMedium,
+                        "CORE IDENTITY",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = uiState.urlToScrape,
-                        onValueChange = viewModel::updateUrl,
-                        placeholder = { Text("Fandom wiki, bio, etc.") },
+                        value = uiState.lore,
+                        onValueChange = viewModel::updateLore,
                         modifier = Modifier.fillMaxWidth(),
-                        trailingIcon = {
-                            if (uiState.isScraping) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                            } else {
-                                IconButton(onClick = viewModel::generateFromUrl) {
-                                    Icon(Icons.Filled.AutoAwesome, contentDescription = "Generate")
-                                }
-                            }
-                        }
+                        placeholder = { Text("System Instructions (~500 words)") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                        ),
+                        minLines = 6
                     )
+                    
+                    WavyHorizontalDivider(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(32.dp)
+                            .padding(vertical = 8.dp),
+                        waveColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                    )
+                    
                     Text(
-                        "Uses LLM to parse character lore automatically.",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 4.dp)
+                        "BEHAVIORAL NUDGE",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = uiState.reminderMessage,
+                        onValueChange = viewModel::updateReminder,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Reminder Message (~100 words)") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                        ),
+                        minLines = 3
                     )
                 }
             }
 
-            Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedTextField(
-                    value = uiState.name,
-                    onValueChange = viewModel::updateName,
-                    label = { Text("Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = uiState.tagline,
-                    onValueChange = viewModel::updateTagline,
-                    label = { Text("Tagline") },
-                    placeholder = { Text("Short, punchy description") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = uiState.lore,
-                    onValueChange = viewModel::updateLore,
-                    label = { Text("Roleplay Instructions / Lore") },
-                    placeholder = { Text("Define personality, background, and knowledge...") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 160.dp),
-                    minLines = 4
-                )
-
-                // Advanced Options (Progressive Disclosure)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.toggleAdvanced() }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Advanced Options",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.weight(1f)
-                    )
+            // 3. Knowledge Base (Lore & Scraper)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        if (uiState.isAdvancedExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                        contentDescription = null
+                        Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.tertiary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "KNOWLEDGE BASE",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.tertiary
                     )
                 }
-
-                AnimatedVisibility(visible = uiState.isAdvancedExpanded) {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        OutlinedTextField(
-                            value = uiState.reminderMessage,
-                            onValueChange = viewModel::updateReminder,
-                            label = { Text("Reminder Message") },
-                            placeholder = { Text("Injected late in context window...") },
+                
+            GlassySurface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            supportingText = { Text("Helps prevent personality drift.") }
-                        )
-
-                        ElevatedCard(
-                            onClick = { showModelPicker = true },
-                            modifier = Modifier.fillMaxWidth()
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text("Model Selection", style = MaterialTheme.typography.titleSmall)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = uiState.modelPath.takeIf { it.isNotBlank() }?.let { File(it).name }
-                                        ?: if (uiState.availableModels.isEmpty()) "No local models downloaded" else "Select a model",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            OutlinedTextField(
+                                value = uiState.urlToScrape,
+                                onValueChange = viewModel::updateUrl,
+                                placeholder = { Text("Scrape from URL (Wiki, Bio...)") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                shape = MaterialTheme.shapes.medium
+                            )
+                            IconButton(
+                                onClick = viewModel::generateFromUrl,
+                                enabled = !uiState.isScraping && uiState.urlToScrape.isNotBlank(),
+                                modifier = Modifier.background(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.shapes.medium
                                 )
+                            ) {
+                                if (uiState.isScraping) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                                } else {
+                                    Icon(Icons.Filled.AutoAwesome, contentDescription = "Scrape", tint = MaterialTheme.colorScheme.onPrimary)
+                                }
                             }
                         }
-
-                        if (uiState.availableModels.isEmpty()) {
-                            Text(
-                                text = "Download a model in Settings first.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        
+                        if (uiState.isScraping) {
+                            FadeTextAnimation(
+                                text = "Extracting knowledge...",
+                                modifier = Modifier.padding(top = 8.dp)
                             )
                         }
 
-                        // Scenario Editor
-                        Text("Scenario Editor (Greeting Messages)", style = MaterialTheme.typography.titleSmall)
-                        uiState.initialMessages.forEachIndexed { index, message ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedTextField(
-                                    value = message,
-                                    onValueChange = { viewModel.updateInitialMessage(index, it) },
-                                    modifier = Modifier.weight(1f),
-                                    placeholder = { Text("Message ${index + 1}") }
-                                )
-                                IconButton(onClick = { viewModel.removeInitialMessage(index) }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "Remove")
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        OutlinedTextField(
+                            value = uiState.knowledgeBase,
+                            onValueChange = viewModel::updateKnowledgeBase,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Extended lore for RAG retrieval...") },
+                            minLines = 8,
+                            shape = MaterialTheme.shapes.medium
+                        )
+                    }
+                }
+            }
+
+            // 4. Creative: Initial Messages (Full Width)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.ChatBubbleOutline, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.secondary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "GREETINGS",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                uiState.initialMessages.forEachIndexed { index, starterMessage ->
+                    val isHiddenFromAi = starterMessage.isHiddenFromAi
+                    val isHiddenFromUser = starterMessage.isHiddenFromUser
+                    
+                    GlassySurface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .alpha(if (isHiddenFromUser) 0.6f else 1f),
+                        color = when (starterMessage.author) {
+                            MessageRole.USER -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                            MessageRole.MODEL -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f)
+                            MessageRole.SYSTEM -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f)
+                        },
+                        shape = MaterialTheme.shapes.medium,
+                        border = if (isHiddenFromAi) 
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)) 
+                            else null
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            // Header: Author Toggle and Visibility Icons
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Author Pill Selector
+                                Row(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.3f))
+                                        .padding(4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    MessageRole.values().forEach { role ->
+                                        val isSelected = starterMessage.author == role
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(CircleShape)
+                                                .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                                .clickable { viewModel.updateInitialMessageAuthor(index, role) }
+                                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = role.name,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Visibility Controls
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    IconButton(
+                                        onClick = { viewModel.toggleInitialMessageUserVisibility(index) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Visibility,
+                                            contentDescription = "Hidden from User",
+                                            modifier = Modifier.size(16.dp).alpha(if (isHiddenFromUser) 0.3f else 1f),
+                                            tint = if (isHiddenFromUser) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.toggleInitialMessageAiVisibility(index) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Psychology,
+                                            contentDescription = "Hidden from AI",
+                                            modifier = Modifier.size(16.dp).alpha(if (isHiddenFromAi) 0.3f else 1f),
+                                            tint = if (isHiddenFromAi) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.removeInitialMessage(index) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete, 
+                                            contentDescription = null, 
+                                            modifier = Modifier.size(16.dp), 
+                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        TextButton(
-                            onClick = viewModel::addInitialMessage,
-                            enabled = uiState.initialMessages.size < 3
-                        ) {
-                            Icon(Icons.Filled.Add, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Add Scenario Message")
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            BasicTextField(
+                                value = starterMessage.content,
+                                onValueChange = { viewModel.updateInitialMessage(index, it) },
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontStyle = if (starterMessage.author == MessageRole.SYSTEM) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal
+                                ),
+                                decorationBox = { inner ->
+                                    if (starterMessage.content.isEmpty()) {
+                                        Text(
+                                            "Message content...", 
+                                            style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                        )
+                                    }
+                                    inner()
+                                }
+                            )
                         }
                     }
                 }
-
-                Button(
-                    onClick = { viewModel.saveCharacter(onNavigateBack) },
-                    enabled = uiState.modelPath.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                        .padding(bottom = 32.dp)
-                ) {
-                    Text(if (uiState.characterId != null) "Save Changes" else "Create Character")
+                if (uiState.initialMessages.size < 5) {
+                    TextButton(
+                        onClick = viewModel::addInitialMessage,
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Add Greeting", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
+
+            // 5. Model & Technical Section
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Memory, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "MODEL & SAMPLING",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                GlassySurface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        // Model Selection
+                        GlassySurface(
+                            onClick = { showModelPicker = true },
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("AI MODEL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                    Text(
+                                        text = uiState.modelPath.takeIf { it.isNotBlank() }?.let { java.io.File(it).name } ?: "Select Model",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                Icon(Icons.Filled.SwapHoriz, contentDescription = null)
+                            }
+                        }
+
+                        // Sampling Sliders
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                TechnicalSlider(
+                                    label = "Temperature",
+                                    value = uiState.temp,
+                                    onValueChange = viewModel::updateTemp,
+                                    range = 0f..2f
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                TechnicalSlider(
+                                    label = "Top-P",
+                                    value = uiState.topP,
+                                    onValueChange = viewModel::updateTopP,
+                                    range = 0f..1f
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Reasoning (Thinking)", style = MaterialTheme.typography.bodyMedium)
+                                Text("Enables internal chain-of-thought", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Switch(
+                                checked = uiState.enableThinking,
+                                onCheckedChange = viewModel::updateEnableThinking,
+                                modifier = Modifier.scale(0.8f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
         }
 
-        if (syncState is org.eu.nl.syu.hearth.runtime.LoreSyncManager.SyncState.Syncing) {
+        if (syncState is LoreSyncManager.SyncState.Syncing) {
             LoreSyncOverlay()
         }
+    }
+}
+}
+
+@Composable
+private fun TechnicalSlider(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    range: ClosedFloatingPointRange<Float>
+) {
+    Column {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.labelSmall)
+            Text(String.format("%.2f", value), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = range,
+            modifier = Modifier.height(24.dp)
+        )
     }
 }
 
@@ -504,7 +904,7 @@ private fun CreateCharacterModelPickerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Select Model") },
+                title = { Text("Select Character Model", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -520,7 +920,11 @@ private fun CreateCharacterModelPickerScreen(
                     .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No local models downloaded. Download one in Settings.")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(64.dp).alpha(0.3f))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("No local models found", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         } else {
             LazyColumn(
@@ -528,28 +932,65 @@ private fun CreateCharacterModelPickerScreen(
                     .fillMaxSize()
                     .padding(paddingValues),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)
+                contentPadding = PaddingValues(16.dp)
             ) {
                 items(availableModels) { model ->
-                    ElevatedCard(
+                    val isSelected = model.absolutePath == selectedModelPath
+                    val isEmbedding = model.name.contains("embedding", ignoreCase = true)
+                    
+                    GlassySurface(
                         onClick = { onSelectModel(model) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f) 
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                        blurRadius = if (isSelected) 12.dp else 4.dp
                     ) {
                         Row(
                             modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(model.name, fontWeight = FontWeight.Medium)
-                                Text(
-                                    if (model.name.contains("embedding", ignoreCase = true)) "Embedding model" else "Chat model",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isEmbedding) MaterialTheme.colorScheme.secondaryContainer 
+                                        else MaterialTheme.colorScheme.primaryContainer
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isEmbedding) Icons.Default.Dataset else Icons.Default.Chat,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = if (isEmbedding) MaterialTheme.colorScheme.onSecondaryContainer 
+                                           else MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }
-                            if (model.absolutePath == selectedModelPath) {
-                                Icon(Icons.Filled.Save, contentDescription = null)
+                            
+                            Spacer(modifier = Modifier.width(16.dp))
+                            
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = model.name, 
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (isEmbedding) "Vector Embedding Model" else "LLM Chat Model",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                            }
+                            
+                            if (isSelected) {
+                                Icon(
+                                    Icons.Default.CheckCircle, 
+                                    contentDescription = "Selected",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                     }
@@ -561,13 +1002,13 @@ private fun CreateCharacterModelPickerScreen(
 
 @Composable
 fun LoreSyncOverlay() {
-    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "loreSync")
+    val infiniteTransition = rememberInfiniteTransition(label = "loreSync")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.3f,
         targetValue = 1f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(1000, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
         ),
         label = "alpha"
     )
@@ -575,7 +1016,7 @@ fun LoreSyncOverlay() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.8f))
+            .background(Color.Black.copy(alpha = 0.8f))
             .clickable(enabled = false) {},
         contentAlignment = Alignment.Center
     ) {
@@ -585,7 +1026,7 @@ fun LoreSyncOverlay() {
             Text(
                 "Recalculating embeddings...",
                 style = MaterialTheme.typography.titleMedium,
-                color = androidx.compose.ui.graphics.Color.White,
+                color = Color.White,
                 modifier = Modifier.alpha(alpha)
             )
         }

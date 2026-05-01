@@ -299,7 +299,7 @@ fun ChatScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(uiState.messages, key = { it.id }) { message ->
+                    items(uiState.messages.filter { !it.isHiddenFromUser }, key = { it.id }) { message ->
                         val isRegenerating = uiState.regeneratingMessageId != null && 
                                            (message.versionGroupId ?: message.id) == uiState.regeneratingMessageId
                         

@@ -39,6 +39,7 @@ data class Character(
     val enableThinkingCompatibility: Boolean = false,
     val thinkingCompatibilityToken: String = "",
     val includeThinkingInContext: Boolean = false,
+    val knowledgeBase: String = "",
     val sceneBackgroundUrl: String? = null,
     val isPredefined: Boolean = false,
     val lastUsedAt: Long = 0L

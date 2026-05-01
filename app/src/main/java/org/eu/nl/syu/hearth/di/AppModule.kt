@@ -60,7 +60,7 @@ object AppModule {
             "charchat_db"
         )
             .setDriver(driver)
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
@@ -127,8 +127,8 @@ object AppModule {
             """
                 INSERT INTO characters (
                     id, name, tagline, avatarUrl, roleInstruction, reminderMessage,
-                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, sceneBackgroundUrl, isPredefined, lastUsedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, sceneBackgroundUrl, isPredefined, initialMessagesJson, lastUsedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
             arrayOf<Any?>(
                 character.id,
@@ -146,7 +146,7 @@ object AppModule {
                 character.thinkingCompatibilityToken,
                 character.includeThinkingInContext,
                 character.sceneBackgroundUrl,
-                if (character.isPredefined) 1 else 0,
+                if (character.isPredefined) 1 else 0, "[]",
                 character.lastUsedAt
             )
         )
@@ -160,8 +160,8 @@ object AppModule {
             """
                 INSERT INTO characters (
                     id, name, tagline, avatarUrl, roleInstruction, reminderMessage,
-                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, sceneBackgroundUrl, isPredefined, lastUsedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, sceneBackgroundUrl, isPredefined, initialMessagesJson, lastUsedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
         ).use { statement ->
             statement.bindText(1, character.id)
@@ -180,7 +180,8 @@ object AppModule {
             statement.bindBoolean(14, character.includeThinkingInContext)
             if (character.sceneBackgroundUrl == null) statement.bindNull(15) else statement.bindText(15, character.sceneBackgroundUrl)
             statement.bindBoolean(16, character.isPredefined)
-            statement.bindLong(17, character.lastUsedAt)
+            statement.bindText(17, "[]")
+            statement.bindLong(18, character.lastUsedAt)
             statement.step()
         }
     }
@@ -324,5 +325,17 @@ private val MIGRATION_11_12 = object : Migration(11, 12) {
         
         // ChatThreadEntity: add threadLore
         connection.prepare("ALTER TABLE chat_threads ADD COLUMN threadLore TEXT").use { it.step() }
+    }
+}
+private val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.prepare("ALTER TABLE characters ADD COLUMN knowledgeBase TEXT NOT NULL DEFAULT ''").use { it.step() }
+    }
+}
+
+private val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.prepare("ALTER TABLE characters ADD COLUMN initialMessagesJson TEXT NOT NULL DEFAULT '[]'").use { it.step() }
+        connection.prepare("ALTER TABLE chat_messages ADD COLUMN isHiddenFromUser INTEGER NOT NULL DEFAULT 0").use { it.step() }
     }
 }

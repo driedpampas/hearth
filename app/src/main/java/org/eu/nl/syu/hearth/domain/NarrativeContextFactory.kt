@@ -63,7 +63,7 @@ class NarrativeContextFactory @Inject constructor(
         // 4. Conversation History
         if (history.isNotEmpty()) {
             promptBuilder.append("[Recent Conversation:]\n")
-            history.forEach { msg ->
+            history.filter { !it.isHiddenFromAi }.forEach { msg ->
                 val roleName = if (msg.role == MessageRole.USER) userName else character.name
                 val content = if (character.includeThinkingInContext) {
                     msg.content

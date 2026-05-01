@@ -29,6 +29,7 @@ data class ChatMessage(
     val content: String,
     val timestamp: Long = System.currentTimeMillis(),
     val isHiddenFromAi: Boolean = false,
+    val isHiddenFromUser: Boolean = false,
     val modelReference: String? = null,
     val generationTimeMs: Long? = null,
     val tokensPerSecond: Float? = null,
