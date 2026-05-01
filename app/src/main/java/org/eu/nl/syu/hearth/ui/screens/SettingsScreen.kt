@@ -53,8 +53,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.ModelTraining
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -111,10 +114,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.openid.appauth.AuthorizationException
@@ -122,6 +125,7 @@ import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
 import net.openid.appauth.ResponseTypeValues
+import org.eu.nl.syu.hearth.common.ModelSizeUtils
 import org.eu.nl.syu.hearth.common.ProjectConfig
 import org.eu.nl.syu.hearth.data.AllowedModel
 import org.eu.nl.syu.hearth.data.AuthRepository
@@ -130,10 +134,6 @@ import org.eu.nl.syu.hearth.data.HuggingFaceApiService
 import org.eu.nl.syu.hearth.data.HuggingFaceApiService.AccessResult
 import org.eu.nl.syu.hearth.data.ModelManager
 import org.eu.nl.syu.hearth.data.ModelRepository
-import org.eu.nl.syu.hearth.common.ModelSizeUtils
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Report
-import androidx.compose.material.icons.filled.Warning
 import java.util.Locale
 import javax.inject.Inject
 

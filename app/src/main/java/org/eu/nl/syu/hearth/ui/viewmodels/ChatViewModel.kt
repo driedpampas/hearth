@@ -38,7 +38,6 @@ import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ChatMessage
 import org.eu.nl.syu.hearth.data.ChatThread
 import org.eu.nl.syu.hearth.data.MessageRole
-import org.eu.nl.syu.hearth.data.stripThinking
 import org.eu.nl.syu.hearth.data.ModelManager
 import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.local.CharacterDao
@@ -46,6 +45,7 @@ import org.eu.nl.syu.hearth.data.local.ChatMessageDao
 import org.eu.nl.syu.hearth.data.local.ChatThreadDao
 import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.data.local.toEntity
+import org.eu.nl.syu.hearth.data.stripThinking
 import org.eu.nl.syu.hearth.runtime.EmbeddingEngine
 import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
 import java.io.File

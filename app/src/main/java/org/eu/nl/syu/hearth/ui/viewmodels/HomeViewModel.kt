@@ -20,26 +20,26 @@ package org.eu.nl.syu.hearth.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.ai.edge.litertlm.Backend
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.eu.nl.syu.hearth.data.AllowedModel
+import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ChatThread
 import org.eu.nl.syu.hearth.data.ModelManager
 import org.eu.nl.syu.hearth.data.ModelRepository
-import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
-import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.local.CharacterDao
 import org.eu.nl.syu.hearth.data.local.ChatThreadDao
 import org.eu.nl.syu.hearth.data.local.toDomain
-import com.google.ai.edge.litertlm.Backend
+import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
 import java.io.File
 import javax.inject.Inject
 

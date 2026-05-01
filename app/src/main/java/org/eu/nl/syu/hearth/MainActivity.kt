@@ -24,10 +24,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,14 +48,13 @@ import androidx.navigation.navArgument
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import org.eu.nl.syu.hearth.data.AuthRepository
+import org.eu.nl.syu.hearth.ui.screens.CharacterPickerScreen
 import org.eu.nl.syu.hearth.ui.screens.ChatScreen
 import org.eu.nl.syu.hearth.ui.screens.CreateCharacterScreen
-import org.eu.nl.syu.hearth.ui.screens.HomeScreen
-import org.eu.nl.syu.hearth.ui.screens.ModelSettingsScreen
 import org.eu.nl.syu.hearth.ui.screens.DebugThemeScreen
-import org.eu.nl.syu.hearth.ui.screens.CharacterPickerScreen
+import org.eu.nl.syu.hearth.ui.screens.HomeScreen
 import org.eu.nl.syu.hearth.ui.screens.ModelPickerScreen
-
+import org.eu.nl.syu.hearth.ui.screens.ModelSettingsScreen
 import org.eu.nl.syu.hearth.ui.screens.SettingsEmbeddingModelsScreen
 import org.eu.nl.syu.hearth.ui.screens.SettingsGeneralScreen
 import org.eu.nl.syu.hearth.ui.screens.SettingsHuggingFaceAccountScreen
