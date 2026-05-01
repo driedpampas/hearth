@@ -128,6 +128,7 @@ dependencies {
     implementation(libs.litertlm)
     implementation(libs.localagents.rag)
     implementation(libs.litert)
+    implementation(libs.protobuf.javalite)
     implementation(libs.tflite) {
         exclude(group = "com.google.ai.edge.litert", module = "litert-api")
     }

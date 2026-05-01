@@ -191,7 +191,7 @@ class ModelRepository @Inject constructor(
     }
 
     private fun mergeModels(models: List<AllowedModel>): List<AllowedModel> {
-        return (models + getEmbeddingGemmaModel())
+        return (listOf(getEmbeddingGemmaModel()) + models)
             .distinctBy { it.modelId }
             .sortedWith(
                 compareBy<AllowedModel> { it.taskTypes.contains("embedding") }
@@ -445,7 +445,7 @@ class ModelRepository @Inject constructor(
             commitHash = commitHash,
             description = "High-performance text embedding model based on Gemma architecture.",
             sizeInBytes = 183L * 1024 * 1024,
-            socToModelFiles = socToModelFiles,
+            socToModelFiles = emptyMap(), // Temporarily disabled SOC-optimized files
             taskTypes = listOf("embedding")
         )
     }
@@ -469,6 +469,16 @@ class ModelRepository @Inject constructor(
         val url = socFile?.url ?: "https://huggingface.co/${model.modelId}/resolve/$hash/$fileName?download=true"
         Log.d("ModelRepository", "Final download URL: $url")
         return url
+    }
+
+    fun getTokenizerUrl(model: AllowedModel): String? {
+        if (!model.taskTypes.contains("embedding")) return null
+        val hash = model.commitHash
+        return "https://huggingface.co/${model.modelId}/resolve/$hash/sentencepiece.model?download=true"
+    }
+
+    fun getTokenizerFileName(model: AllowedModel): String {
+        return "tokenizer_${model.modelId.replace("/", "_")}.model"
     }
 
     fun getDownloadFileName(model: AllowedModel): String {

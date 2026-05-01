@@ -37,51 +37,72 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 
-@Composable
+/**
+ * A composable that displays text with a moving fade animation, creating a "stealthy" shimmer effect.
+ * @param modifier Modifier for styling and layout.
+ * @param text The text to display with the fade animation.
+ * @param style The TextStyle to apply to the text.
+ * @param fontWeight Optional FontWeight to apply to the text.
+ * @param textColor The base color of the text, which will be used in the gradient.
+ * @param mixinColor The color used for the fading wave, typically a transparent or lighter version of textColor.
+ * @param waveWidth The thickness/softness of the fading wave (in pixels).
+ * @param slant The vertical slant of the wave, controlling the angle of the fade (in pixels).
+ * @param durationMillis The duration of one full animation cycle in milliseconds.
+ */
 @Preview
+@Composable
 fun FadeTextAnimation(
     modifier: Modifier = Modifier,
-    text: String = "Loading...",
+    text: String = "Recalculating Embeddings...",
     style: TextStyle = MaterialTheme.typography.titleLarge,
     fontWeight: FontWeight? = FontWeight.Bold,
-    color: Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-    mixinColor: Color = MaterialTheme.colorScheme.primary,
-    ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "FadeTextAnimation")
+    textColor: Color = MaterialTheme.colorScheme.primary,
+    mixinColor: Color = Color.Transparent,
+    waveWidth: Float = 4000f, // Thickness/Softness of the fading wave
+    slant: Float = 750f,
+    durationMillis: Int = 2000
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "StealthFade")
+
     val translateAnim by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1500f,
+        initialValue = -waveWidth - slant,
+        targetValue = 750f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1000, easing = LinearEasing),
+            animation = tween(durationMillis = durationMillis, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "DiagonalFadeTextAnimation"
+        label = "WaveOffset"
     )
 
+//    val brush = Brush.linearGradient(
+//        colors = listOf(
+//            textColor,
+//            textColor.copy(alpha = 0f),
+//            textColor
+//        ),
+//        start = androidx.compose.ui.geometry.Offset(translateAnim, translateAnim),
+//        end = androidx.compose.ui.geometry.Offset(translateAnim + 500f, translateAnim + 500f)
+//    )
+
     val brush = Brush.linearGradient(
-        colors = listOf(
-            color,
-            mixinColor,
-            color
-        ),
-        start = androidx.compose.ui.geometry.Offset(translateAnim - 500f, translateAnim - 500f),
-        end = androidx.compose.ui.geometry.Offset(translateAnim, translateAnim)
+        0.0f to textColor,
+        0.45f to textColor,
+        0.5f to mixinColor,
+        0.55f to textColor,
+        1.0f to textColor,
+
+        // 'start' is the top-left of the wave
+        start = androidx.compose.ui.geometry.Offset(translateAnim, 0f),
+        // 'end' is shifted by waveWidth (thickness) and slant (angle)
+        end = androidx.compose.ui.geometry.Offset(translateAnim + waveWidth, slant)
     )
 
     Text(
         text = text,
-        style = style,
-        fontWeight = fontWeight,
+        style = style.copy(
+            brush = brush,
+            fontWeight = fontWeight
+        ),
         modifier = modifier
-            .graphicsLayer(alpha = 0.99f)
-            .drawWithCache {
-                onDrawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = brush,
-                        blendMode = androidx.compose.ui.graphics.BlendMode.DstOut
-                    )
-                }
-            }
     )
 }

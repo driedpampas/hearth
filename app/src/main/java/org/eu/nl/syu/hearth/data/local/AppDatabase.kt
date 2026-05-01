@@ -152,6 +152,9 @@ interface CharacterDao {
 
     @Delete
     suspend fun deleteCharacter(character: CharacterEntity)
+
+    @Query("DELETE FROM characters WHERE id = :id")
+    suspend fun deleteCharacterById(id: String)
 }
 
 @Dao
@@ -176,6 +179,9 @@ interface ChatThreadDao {
 
     @Query("DELETE FROM chat_threads WHERE id = :id")
     suspend fun deleteThreadById(id: String)
+
+    @Query("DELETE FROM chat_threads WHERE characterId = :characterId")
+    suspend fun deleteThreadsByCharacterId(characterId: String)
 
     @Query("UPDATE chat_threads SET title = :title WHERE id = :id")
     suspend fun updateThreadTitle(id: String, title: String)

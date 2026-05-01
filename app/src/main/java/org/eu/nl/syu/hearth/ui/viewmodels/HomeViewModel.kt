@@ -38,6 +38,9 @@ import org.eu.nl.syu.hearth.data.ModelManager
 import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.local.CharacterDao
 import org.eu.nl.syu.hearth.data.local.ChatThreadDao
+import org.eu.nl.syu.hearth.data.local.LoreChunkDao
+import org.eu.nl.syu.hearth.data.local.MemoryDao
+import org.eu.nl.syu.hearth.data.local.VectorDao
 import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
 import java.io.File
@@ -65,6 +68,9 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val characterDao: CharacterDao,
     private val chatThreadDao: ChatThreadDao,
+    private val memoryDao: MemoryDao,
+    private val loreChunkDao: LoreChunkDao,
+    private val vectorDao: VectorDao,
     private val modelRepository: ModelRepository,
     private val modelManager: ModelManager,
     private val engineWrapper: LiteRtEngineWrapper
@@ -385,6 +391,30 @@ class HomeViewModel @Inject constructor(
     fun deleteThread(threadId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             chatThreadDao.deleteThreadById(threadId)
+        }
+    }
+
+    fun deleteCharacter(characterId: String, deleteThreads: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // 1. Delete character
+            characterDao.deleteCharacterById(characterId)
+            
+            // 2. Cleanup vectors
+            vectorDao.deleteLoreVectorsForCharacter(characterId)
+            vectorDao.deleteMemoryVectorsForCharacter(characterId)
+            
+            // 3. Cleanup lore chunks and memories
+            loreChunkDao.deleteGlobalChunksForCharacter(characterId)
+            memoryDao.deleteMemoriesForCharacter(characterId)
+            
+            // 4. Optionally delete threads
+            if (deleteThreads) {
+                // This will also cascade to messages due to Foreign Key on threadId
+                chatThreadDao.deleteThreadsByCharacterId(characterId)
+            }
+            
+            // Refresh character list
+            loadCharacters()
         }
     }
 

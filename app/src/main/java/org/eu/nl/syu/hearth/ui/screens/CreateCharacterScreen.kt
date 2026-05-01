@@ -18,6 +18,7 @@
 
 package org.eu.nl.syu.hearth.ui.screens
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -239,6 +240,10 @@ class CreateCharacterViewModel @Inject constructor(
         }
     }
 
+    fun clearSyncError() {
+        loreSyncManager.clearError()
+    }
+
     fun saveCharacter(onSuccess: () -> Unit) {
         viewModelScope.launch {
             val state = _uiState.value
@@ -275,8 +280,12 @@ class CreateCharacterViewModel @Inject constructor(
                 .filter { it.isNotBlank() }
                 .joinToString("\n\n---\n\n")
             
+            Log.d("CreateCharacterViewModel", "Saving character ${character.name}, starting lore sync...")
             loreSyncManager.syncLore(character, combinedLore)
-            onSuccess()
+            
+            if (loreSyncManager.syncState.value !is LoreSyncManager.SyncState.Error) {
+                onSuccess()
+            }
         }
     }
 }
@@ -868,6 +877,24 @@ fun CreateCharacterScreen(
         if (syncState is LoreSyncManager.SyncState.Syncing) {
             LoreSyncOverlay()
         }
+
+        if (syncState is LoreSyncManager.SyncState.Error) {
+            AlertDialog(
+                onDismissRequest = { viewModel.clearSyncError() },
+                title = { 
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Text("Embedding Failed") 
+                    }
+                },
+                text = { Text((syncState as LoreSyncManager.SyncState.Error).message) },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.clearSyncError() }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
     }
 }
 }
@@ -1002,32 +1029,17 @@ private fun CreateCharacterModelPickerScreen(
 
 @Composable
 fun LoreSyncOverlay() {
-    val infiniteTransition = rememberInfiniteTransition(label = "loreSync")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "alpha"
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.8f))
+            .background(Color.Black.copy(alpha = 0.85f))
             .clickable(enabled = false) {},
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                "Recalculating embeddings...",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
-                modifier = Modifier.alpha(alpha)
+            FadeTextAnimation(
+                text = "Recalculating embeddings...",
+                style = MaterialTheme.typography.headlineSmall
             )
         }
     }

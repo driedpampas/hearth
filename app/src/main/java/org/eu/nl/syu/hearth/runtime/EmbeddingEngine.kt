@@ -19,6 +19,7 @@
 package org.eu.nl.syu.hearth.runtime
 
 import android.content.Context
+import android.util.Log
 import com.google.ai.edge.localagents.rag.models.EmbedData
 import com.google.ai.edge.localagents.rag.models.Embedder
 import com.google.ai.edge.localagents.rag.models.EmbeddingRequest
@@ -29,9 +30,11 @@ import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.eu.nl.syu.hearth.data.AllowedModel
 import org.eu.nl.syu.hearth.data.ModelManager
 import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.local.VectorDao
@@ -52,42 +55,69 @@ class EmbeddingEngine @Inject constructor(
 ) {
     private var embedder: Embedder<String>? = null
     private var currentModelPath: String? = null
+    private var currentModelName: String? = null
     private val mutex = Mutex()
     private val callbackExecutor = Executors.newSingleThreadExecutor()
 
     /**
      * Ensures the embedder is initialized with the currently selected embedding model.
      */
-    suspend fun ensureInitialized() = mutex.withLock {
+    suspend fun ensureInitialized() {
         val selectedModelName = modelRepository.selectedEmbeddingModel.first() ?: "EmbeddingGemma-300m"
-        val availableModels = modelRepository.getAvailableModels()
-        val model = availableModels.find { it.name == selectedModelName } ?: return@withLock
-        val fileName = modelRepository.getDownloadFileName(model)
         
-        val file = File(context.filesDir, "models/$fileName")
-        if (file.exists() && file.absolutePath != currentModelPath) {
-            initialize(file.absolutePath)
+        // Quick check outside lock to avoid overhead for every chunk
+        if (embedder != null && selectedModelName == currentModelName) {
+            return
+        }
+
+        mutex.withLock {
+            // Re-check after acquiring lock
+            if (embedder != null && selectedModelName == currentModelName) {
+                return@withLock
+            }
+
+            Log.d("EmbeddingEngine", "Ensuring embedder initialized with model: $selectedModelName")
+            val availableModels = modelRepository.getAvailableModels()
+            val model = availableModels.find { it.name == selectedModelName } ?: return@withLock
+            val fileName = modelRepository.getDownloadFileName(model)
+            Log.d("EmbeddingEngine", "Expected model file name: $fileName")
+            
+            val file = File(context.filesDir, "models/$fileName")
+            if (file.exists()) {
+                initialize(model, file.absolutePath)
+                currentModelName = selectedModelName
+            }
         }
     }
 
-    private suspend fun initialize(modelPath: String) {
+    private suspend fun initialize(model: AllowedModel, modelPath: String) {
         withContext(Dispatchers.IO) {
-            val useNpu = modelRepository.experimentalNpuEnabled.first()
+            val spFile = File(context.filesDir, "models/${modelRepository.getTokenizerFileName(model)}")
+            val spPath = spFile.absolutePath
+            Log.d("EmbeddingEngine", "Initializing GemmaEmbeddingModel")
+            Log.d("EmbeddingEngine", "Model path: $modelPath (exists: ${File(modelPath).exists()})")
+            Log.d("EmbeddingEngine", "Tokenizer path: $spPath (exists: ${spFile.exists()})")
+            
             try {
                 embedder = GemmaEmbeddingModel(
-                    modelPath,
-                    context.cacheDir.path,
-                    useNpu
+                    modelPath, // embeddingModelPath
+                    spPath, // sentencePieceModelPath
+                    true // useGpu
                 )
                 currentModelPath = modelPath
-            } catch (e: Exception) {
-                // Fallback to CPU if NPU fails or if was already using CPU and failed (unlikely)
-                embedder = GemmaEmbeddingModel(
-                    modelPath,
-                    context.cacheDir.path,
-                    false // isNpu
-                )
-                currentModelPath = modelPath
+            } catch (e: Throwable) {
+                Log.w("EmbeddingEngine", "Failed to initialize embedder with GPU, falling back to CPU: ${e.message}")
+                embedder = try {
+                    GemmaEmbeddingModel(
+                        modelPath,
+                        spPath,
+                        false // isNpu
+                    )
+                } catch (e2: Throwable) {
+                    Log.e("EmbeddingEngine", "Failed to initialize embedder even on CPU: ${e2.message}")
+                    null
+                }
+                currentModelPath = if (embedder != null) modelPath else null
             }
         }
     }
@@ -98,7 +128,7 @@ class EmbeddingEngine @Inject constructor(
      */
     suspend fun getVector(text: String, isQuery: Boolean): ByteArray = withContext(Dispatchers.Default) {
         ensureInitialized()
-        val currentEmbedder = embedder ?: return@withContext ByteArray(256 * 4)
+        val currentEmbedder = embedder ?: throw IllegalStateException("Embedding engine not initialized. Ensure model and tokenizer files are downloaded in Settings.")
 
         // GEMMA Embedding expects TaskType
         val taskType = if (isQuery) EmbedData.TaskType.RETRIEVAL_QUERY else EmbedData.TaskType.RETRIEVAL_DOCUMENT
@@ -112,8 +142,6 @@ class EmbeddingEngine @Inject constructor(
         VectorUtils.processEmbedding(rawArray)
     }
 
-
-
     /**
      * Cleans up the embedder resources.
      */
@@ -126,11 +154,12 @@ class EmbeddingEngine @Inject constructor(
     }
 
     // Helper to await ListenableFuture
-    private suspend fun <T> ListenableFuture<T>.await(): T = suspendCoroutine { cont ->
+    private suspend fun <T> ListenableFuture<T>.await(): T = suspendCancellableCoroutine { cont ->
         Futures.addCallback(this, object : FutureCallback<T> {
             override fun onSuccess(result: T) {
                 cont.resume(result)
             }
+
             override fun onFailure(t: Throwable) {
                 cont.resumeWithException(t)
             }

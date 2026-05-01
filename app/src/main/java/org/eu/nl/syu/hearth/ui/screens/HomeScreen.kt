@@ -23,6 +23,7 @@ import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,10 +36,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -123,9 +123,13 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var contextMenuThread by remember { mutableStateOf<ChatThread?>(null) }
+    var contextMenuCharacter by remember { mutableStateOf<Character?>(null) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showCharacterDeleteConfirm by remember { mutableStateOf(false) }
     var renameTitle by remember { mutableStateOf("") }
+    
+    val fabProgress by animateFloatAsState(if (fabMenuExpanded) 1f else 0f, label = "fabProgress")
 
     LaunchedEffect(uiState.notification) {
         uiState.notification?.let {
@@ -198,49 +202,67 @@ fun HomeScreen(
         Scaffold(
             containerColor = Color.Transparent,
             snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            Box {
-                FloatingActionButtonMenu(
-                    expanded = fabMenuExpanded,
-                    button = {
-                        ToggleFloatingActionButton(
-                            checked = fabMenuExpanded,
-                            onCheckedChange = { fabMenuExpanded = it },
-                            modifier = Modifier.semantics {
-                                contentDescription = if (fabMenuExpanded) "Close menu" else "Open menu"
-                            }
-                        ) {
-                            val progress by animateFloatAsState(if (fabMenuExpanded) 1f else 0f)
-                            Icon(
-                                imageVector = Icons.Filled.Add,
-                                contentDescription = null,
-                                modifier = Modifier.graphicsLayer {
-                                    rotationZ = progress * 45f
-                                }
-                            )
-                        }
+            floatingActionButton = {
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = fabMenuExpanded,
+                        enter = androidx.compose.animation.fadeIn(),
+                        exit = androidx.compose.animation.fadeOut(),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.4f))
+                                .blur(8.dp)
+                                .combinedClickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = { fabMenuExpanded = false }
+                                )
+                        )
                     }
-                ) {
-                    FloatingActionButtonMenuItem(
-                        onClick = {
-                            fabMenuExpanded = false
-                            onNavigateToCharacterPicker()
-                        },
-                        icon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) },
-                        text = { Text("New Chat") }
-                    )
-                    FloatingActionButtonMenuItem(
-                        onClick = {
-                            fabMenuExpanded = false
-                            onNavigateToCreateCharacter(null)
-                        },
-                        icon = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
-                        text = { Text("Create Character") }
-                    )
+                    
+                    FloatingActionButtonMenu(
+                        expanded = fabMenuExpanded,
+                        button = {
+                            ToggleFloatingActionButton(
+                                checked = fabMenuExpanded,
+                                onCheckedChange = { fabMenuExpanded = it },
+                                modifier = Modifier.semantics {
+                                    contentDescription = if (fabMenuExpanded) "Close menu" else "Open menu"
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.graphicsLayer {
+                                        rotationZ = fabProgress * 45f
+                                    }
+                                )
+                            }
+                        }
+                    ) {
+                        FloatingActionButtonMenuItem(
+                            onClick = {
+                                fabMenuExpanded = false
+                                onNavigateToCharacterPicker()
+                            },
+                            icon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) },
+                            text = { Text("New Chat") }
+                        )
+                        FloatingActionButtonMenuItem(
+                            onClick = {
+                                fabMenuExpanded = false
+                                onNavigateToCreateCharacter(null)
+                            },
+                            icon = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
+                            text = { Text("Create Character") }
+                        )
+                    }
                 }
             }
-        }
-    ) {
+        ) { paddingValues ->
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -300,15 +322,16 @@ fun HomeScreen(
                 )
             }
 
-            LazyColumn(
-                state = scrollState,
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+            ) {
                 // Show Recent Characters only if there are existing threads to justify a shortcut section
                 if (filteredThreads.isNotEmpty() && recentCharacters.isNotEmpty()) {
-                    item {
+                    item(span = { GridItemSpan(2) }) {
                         Text(
                             text = "Recent Characters",
                             style = MaterialTheme.typography.titleMedium,
@@ -317,16 +340,21 @@ fun HomeScreen(
                         )
                     }
 
-                    items(recentCharacters, key = { "recent-${it.id}" }) { character ->
+                    gridItems(recentCharacters, key = { "recent-${it.id}" }) { character ->
                         CharacterCard(
                             character = character,
-                            onClick = { openCharacter(character) }
+                            onClick = { openCharacter(character) },
+                            onEdit = { onNavigateToCreateCharacter(character.id) },
+                            onDelete = {
+                                contextMenuCharacter = character
+                                showCharacterDeleteConfirm = true
+                            }
                         )
                     }
                 }
 
                 if (filteredThreads.isNotEmpty()) {
-                    item {
+                    item(span = { GridItemSpan(2) }) {
                         Text(
                             text = "Chats",
                             style = MaterialTheme.typography.titleMedium,
@@ -335,7 +363,7 @@ fun HomeScreen(
                         )
                     }
 
-                    items(filteredThreads, key = { "thread-${it.id}" }) { thread ->
+                    gridItems(filteredThreads, key = { "thread-${it.id}" }, span = { GridItemSpan(2) }) { thread ->
                         ThreadCard(
                             thread = thread,
                             character = uiState.characters.firstOrNull { it.id == thread.characterId },
@@ -357,10 +385,11 @@ fun HomeScreen(
                 val charactersToDisplay = if (filteredThreads.isEmpty()) visibleCharacters else newChatCharacters
 
                 if (charactersToDisplay.isNotEmpty()) {
-                    item {
+                    item(span = { GridItemSpan(2) }) {
                         Text(
                             text = if (filteredThreads.isEmpty()) "Characters" else "Start a new chat",
                             style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(
                                 top = if (filteredThreads.isNotEmpty() || recentCharacters.isNotEmpty()) 4.dp else 0.dp, 
                                 bottom = 4.dp
@@ -368,10 +397,15 @@ fun HomeScreen(
                         )
                     }
 
-                    items(charactersToDisplay, key = { "visible-${it.id}" }) { character ->
+                    gridItems(charactersToDisplay, key = { "visible-${it.id}" }) { character ->
                         CharacterCard(
                             character = character,
-                            onClick = { openCharacter(character) }
+                            onClick = { openCharacter(character) },
+                            onEdit = { onNavigateToCreateCharacter(character.id) },
+                            onDelete = {
+                                contextMenuCharacter = character
+                                showCharacterDeleteConfirm = true
+                            }
                         )
                     }
                 }
@@ -431,6 +465,52 @@ fun HomeScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showCharacterDeleteConfirm && contextMenuCharacter != null) {
+        AlertDialog(
+            onDismissRequest = { showCharacterDeleteConfirm = false },
+            title = { Text("Delete Character") },
+            text = { 
+                Column {
+                    Text("Are you sure you want to delete \"${contextMenuCharacter!!.name}\"?")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Deleting a character will remove their profile and lore. You can choose to keep your chats as read-only archives or delete everything.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteCharacter(contextMenuCharacter!!.id, deleteThreads = true)
+                            showCharacterDeleteConfirm = false
+                        },
+                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Delete Everything")
+                    }
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteCharacter(contextMenuCharacter!!.id, deleteThreads = false)
+                            showCharacterDeleteConfirm = false
+                        }
+                    ) {
+                        Text("Keep Chats (Archive)")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCharacterDeleteConfirm = false }) {
                     Text("Cancel")
                 }
             }
@@ -644,7 +724,9 @@ fun CharacterPickerScreen(
                     gridItems(characters) { character ->
                         CharacterCard(
                             character = character,
-                            onClick = { onCharacterSelected(character.id) }
+                            onClick = { onCharacterSelected(character.id) },
+                            onEdit = {}, // Not needed in picker
+                            onDelete = {} // Not needed in picker
                         )
                     }
                 }
@@ -656,76 +738,117 @@ fun CharacterPickerScreen(
 @Composable
 fun CharacterCard(
     character: Character,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
 ) {
-    GlassySurface(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            if (character.sceneBackgroundUrl != null) {
-                AsyncImage(
-                    model = character.sceneBackgroundUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.matchParentSize().blur(8.dp).alpha(0.3f)
-                )
-            }
-            
-            Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                GlassySurface(
-                    modifier = Modifier.size(100.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                    shape = MaterialTheme.shapes.large
-                ) {
-                if (character.avatarUrl != null) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Box {
+        GlassySurface(
+            onClick = onClick,
+            onLongClick = { menuExpanded = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (character.sceneBackgroundUrl != null) {
                     AsyncImage(
-                        model = character.avatarUrl,
-                        contentDescription = character.name,
+                        model = character.sceneBackgroundUrl,
+                        contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.matchParentSize().blur(8.dp).alpha(0.3f)
                     )
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                }
+                
+                Column(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    GlassySurface(
+                        modifier = Modifier.size(60.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        shape = MaterialTheme.shapes.large
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Person,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (character.avatarUrl != null) {
+                            AsyncImage(
+                                model = character.avatarUrl,
+                                contentDescription = character.name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Person,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(32.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = character.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    
+                    Text(
+                        text = character.tagline,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
                 }
             }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Text(
-                text = character.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            
-            Text(
-                text = character.tagline,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp)
-            )
         }
+
+        GlassyDropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Edit", fontWeight = FontWeight.Medium) },
+                onClick = {
+                    menuExpanded = false
+                    onEdit()
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Delete", fontWeight = FontWeight.Medium) },
+                onClick = {
+                    menuExpanded = false
+                    onDelete()
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            )
         }
     }
 }

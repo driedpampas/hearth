@@ -1505,7 +1505,17 @@ class ModelsViewModel @Inject constructor(
 
     fun isDownloaded(model: AllowedModel): Boolean {
         val fileName = modelRepository.getDownloadFileName(model)
-        return _uiState.value.downloadedModelFiles.contains(fileName)
+        val isModelDownloaded = _uiState.value.downloadedModelFiles.contains(fileName)
+        
+        if (!isModelDownloaded) return false
+        
+        // For embedding models, also check for tokenizer
+        if (model.taskTypes.contains("embedding")) {
+            val tokenizerName = modelRepository.getTokenizerFileName(model)
+            return _uiState.value.downloadedModelFiles.contains(tokenizerName)
+        }
+        
+        return true
     }
 
     fun downloadModel(model: AllowedModel) {
@@ -1552,6 +1562,13 @@ class ModelsViewModel @Inject constructor(
 
             val url = modelRepository.getDownloadUrl(model)
             modelManager.downloadModel(url, fileName, modelRepository.serializeModel(model))
+
+            // For embedding models, also download the tokenizer (sentencepiece.model)
+            if (model.taskTypes.contains("embedding")) {
+                modelRepository.getTokenizerUrl(model)?.let { tokenizerUrl ->
+                    modelManager.downloadModel(tokenizerUrl, modelRepository.getTokenizerFileName(model))
+                }
+            }
         }
     }
 

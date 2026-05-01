@@ -80,4 +80,10 @@ class LoreSyncManager @Inject constructor(
             _syncState.value = SyncState.Error(e.message ?: "Unknown error during lore sync")
         }
     }
+
+    fun clearError() {
+        if (_syncState.value is SyncState.Error) {
+            _syncState.value = SyncState.Idle
+        }
+    }
 }

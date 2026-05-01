@@ -77,7 +77,9 @@ fun ThinkingProcess(
                     text = "Thinking Process",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = null,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    textColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                    durationMillis = 4000,
+                    waveWidth = 6000f,
                 )
             } else {
                 Text(
