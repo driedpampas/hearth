@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ModelRepository
+import org.eu.nl.syu.hearth.data.stripThinking
 import java.io.File
 import java.io.FileInputStream
 import java.security.MessageDigest
@@ -193,10 +194,7 @@ class LiteRtEngineWrapper @Inject constructor(
                 // Clean content from thinking tags if not requested to keep them
                 var content = msg.content
                 if (!includeThinking) {
-                    content = content
-                        .replace(Regex("<think>.*?</think>", RegexOption.DOT_MATCHES_ALL), "")
-                        .replace(Regex("<\\|channel>thought\\n.*?<channel\\|>", RegexOption.DOT_MATCHES_ALL), "")
-                        .trim()
+                    content = content.stripThinking()
                 }
                 if (content.isNotEmpty()) {
                     fullPrompt.append("$roleName: $content\n")
@@ -216,18 +214,59 @@ class LiteRtEngineWrapper @Inject constructor(
 
         val messageContent = fullPrompt.toString()
 
+        var inThinkingMode = false
+        var lastThought = ""
+        var lastMain = ""
+
         val callback = object : MessageCallback {
             override fun onMessage(message: Message) {
-                val response = StringBuilder()
-                val thought = message.channels["thought"]
-                if (!thought.isNullOrEmpty()) {
-                    response.append("<think>\n$thought\n</think>\n")
+                val currentThought = message.channels["thought"] ?: ""
+                val currentMain = message.toString()
+                
+                // Calculate deltas because LiteRT-LM provides accumulated messages
+                val thoughtDelta = if (currentThought.startsWith(lastThought)) {
+                    currentThought.substring(lastThought.length)
+                } else {
+                    currentThought
                 }
-                response.append(message.toString())
-                trySend(response.toString())
+                
+                val mainDelta = if (currentMain.startsWith(lastMain)) {
+                    currentMain.substring(lastMain.length)
+                } else {
+                    currentMain
+                }
+                
+                val response = StringBuilder()
+                
+                if (thoughtDelta.isNotEmpty()) {
+                    if (!inThinkingMode) {
+                        response.append("<think>\n")
+                        inThinkingMode = true
+                    }
+                    response.append(thoughtDelta)
+                }
+                
+                if (mainDelta.isNotEmpty()) {
+                    if (inThinkingMode) {
+                        // Close thinking block before sending main content
+                        response.append("\n</think>\n")
+                        inThinkingMode = false
+                    }
+                    response.append(mainDelta)
+                }
+                
+                if (response.isNotEmpty()) {
+                    trySend(response.toString())
+                }
+                
+                lastThought = currentThought
+                lastMain = currentMain
             }
 
             override fun onDone() {
+                if (inThinkingMode) {
+                    trySend("\n</think>")
+                }
                 close()
             }
 

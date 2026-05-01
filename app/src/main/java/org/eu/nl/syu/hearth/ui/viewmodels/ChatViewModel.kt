@@ -38,6 +38,7 @@ import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ChatMessage
 import org.eu.nl.syu.hearth.data.ChatThread
 import org.eu.nl.syu.hearth.data.MessageRole
+import org.eu.nl.syu.hearth.data.stripThinking
 import org.eu.nl.syu.hearth.data.ModelManager
 import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.local.CharacterDao
@@ -140,6 +141,9 @@ class ChatViewModel @Inject constructor(
 
             val initialMaxTokens = modelRepository.defaultMaxTokens.first()
             
+            val includeThinking = character.includeThinkingInContext
+            val estimatedTokens = calculateTokenEstimate(visibleMessages, includeThinking)
+            
             _uiState.update {
                 it.copy(
                     character = character.copy(lastUsedAt = openedAt),
@@ -148,7 +152,7 @@ class ChatViewModel @Inject constructor(
                     isRawModel = false,
                     fallbackReason = null,
                     isLoadingModel = false,
-                    tokenCount = visibleMessages.sumOf { message -> (message.content.length / 4).coerceAtLeast(0) },
+                    tokenCount = estimatedTokens,
                     threadTitle = thread.title,
                     maxTokens = initialMaxTokens,
                     versionCounts = versionCounts,
@@ -320,10 +324,11 @@ class ChatViewModel @Inject constructor(
 
             chatMessageDao.insertMessage(userMessage.toEntity(character.id, threadId))
             _uiState.update {
+                val newMessages = it.messages + userMessage
                 it.copy(
-                    messages = it.messages + userMessage,
+                    messages = newMessages,
                     isGenerating = true,
-                    tokenCount = it.tokenCount + (content.length / 4),
+                    tokenCount = calculateTokenEstimate(newMessages, character.includeThinkingInContext),
                     versionCounts = it.versionCounts + (userMessage.versionGroupId!! to 1),
                     displayedVersions = it.displayedVersions + (userMessage.versionGroupId to 0)
                 )
@@ -391,11 +396,12 @@ class ChatViewModel @Inject constructor(
                             chatMessageDao.insertMessage(modelMessage.toEntity(character.id, threadId))
                             chatThreadDao.updateLastMessageAt(threadId, endTime)
                             _uiState.update {
+                                val newMessages = it.messages + modelMessage
                                 it.copy(
-                                    messages = it.messages + modelMessage,
+                                    messages = newMessages,
                                     isGenerating = false,
                                     currentGeneratingText = "",
-                                    tokenCount = it.tokenCount + responseTokenCount,
+                                    tokenCount = calculateTokenEstimate(newMessages, character.includeThinkingInContext),
                                     versionCounts = it.versionCounts + (modelMessage.versionGroupId!! to 1),
                                     displayedVersions = it.displayedVersions + (modelMessage.versionGroupId to 0)
                                 )
@@ -545,7 +551,7 @@ class ChatViewModel @Inject constructor(
                 val updatedMessages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
                 
                 // Estimate remaining tokens (summary + last 6 messages)
-                val remainingTokens = (summary.length / 4) + (updatedMessages.takeLast(6).sumOf { it.content.length / 4 })
+                val remainingTokens = calculateTokenEstimate(updatedMessages.takeLast(7), character.includeThinkingInContext)
                 _uiState.update { it.copy(messages = updatedMessages, tokenCount = remainingTokens) }
             }
         }
@@ -571,7 +577,7 @@ class ChatViewModel @Inject constructor(
                 state.copy(
                     messages = newMessages,
                     displayedVersions = newDisplayed,
-                    tokenCount = newMessages.sumOf { (it.content.length / 4).coerceAtLeast(0) }
+                    tokenCount = calculateTokenEstimate(newMessages, state.character?.includeThinkingInContext ?: false)
                 )
             }
         }
@@ -655,7 +661,7 @@ class ChatViewModel @Inject constructor(
                             isGenerating = false,
                             currentGeneratingText = "",
                             regeneratingMessageId = null,
-                            tokenCount = newMessages.sumOf { (it.content.length / 4).coerceAtLeast(0) },
+                            tokenCount = calculateTokenEstimate(newMessages, character.includeThinkingInContext),
                             versionCounts = state.versionCounts + (versionGroupId to nextVersionIndex + 1),
                             displayedVersions = state.displayedVersions + (versionGroupId to nextVersionIndex)
                         )
@@ -690,7 +696,7 @@ class ChatViewModel @Inject constructor(
                 }
                 state.copy(
                     messages = newMessages,
-                    tokenCount = newMessages.sumOf { (it.content.length / 4).coerceAtLeast(0) },
+                    tokenCount = calculateTokenEstimate(newMessages, character.includeThinkingInContext),
                     versionCounts = state.versionCounts + (versionGroupId to nextVersionIndex + 1),
                     displayedVersions = state.displayedVersions + (versionGroupId to nextVersionIndex)
                 )
@@ -752,6 +758,17 @@ class ChatViewModel @Inject constructor(
             }
             
             loadConversation(threadId)
+        }
+    }
+
+    private fun calculateTokenEstimate(messages: List<ChatMessage>, includeThinking: Boolean): Int {
+        return messages.sumOf { msg ->
+            val content = if (!includeThinking && msg.role == MessageRole.MODEL) {
+                msg.content.stripThinking()
+            } else {
+                msg.content
+            }
+            (content.length / 4).coerceAtLeast(0)
         }
     }
 

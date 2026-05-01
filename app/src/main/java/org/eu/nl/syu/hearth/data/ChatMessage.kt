@@ -40,3 +40,10 @@ data class ChatMessage(
 enum class MessageRole {
     USER, MODEL, SYSTEM
 }
+
+fun String.stripThinking(): String {
+    return this.replace(Regex("<think>.*?</think>", RegexOption.DOT_MATCHES_ALL), "")
+        .replace(Regex("<\\|channel>thought\\n.*?<channel\\|>", RegexOption.DOT_MATCHES_ALL), "")
+        .replace(Regex("<\\|channel>thought.*?<channel\\|>", RegexOption.DOT_MATCHES_ALL), "")
+        .trim()
+}

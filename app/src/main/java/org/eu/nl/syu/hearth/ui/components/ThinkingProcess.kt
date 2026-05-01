@@ -105,37 +105,58 @@ fun ThinkingProcess(
 
 /**
  * Parses content to extract thinking process wrapped in <think> tags.
+ * Supports multiple blocks and streaming (unclosed tags at the end).
  * Returns Triple(thought, remainingContent, isComplete)
  */
 fun parseThinkingContent(content: String): Triple<String?, String, Boolean> {
     val formats = listOf(
         Pair("<think>", "</think>"),
         Pair("<|channel>thought\n", "<channel|>"),
-        Pair("<|channel>thought", "<channel|>"), // Fallback for missing newline
-        Pair("<|channel>thought\n", "<|endoftext|>"), // Emergency stop
+        Pair("<|channel>thought", "<channel|>"),
+        Pair("<|channel>thought\n", "<|endoftext|>"),
         Pair("<|channel>thought", "<|endoftext|>")
     )
-    
+
+    val thoughts = mutableListOf<String>()
+    var mainContent = content
+    var isComplete = true
+
+    // We process each format. For each format, we extract all occurrences.
+    // To handle interleaving correctly, we'd need a more complex state machine,
+    // but usually only one format is used per message.
     for ((startTag, endTag) in formats) {
-        val startIndex = content.indexOf(startTag)
-        if (startIndex != -1) {
-            val beforeThought = content.substring(0, startIndex)
-            val afterStart = content.substring(startIndex + startTag.length)
-            
-            val endIndex = afterStart.indexOf(endTag)
-            return if (endIndex == -1) {
-                // Tag started but not ended (streaming)
-                Triple(afterStart, beforeThought, false)
+        var searchIndex = 0
+        while (true) {
+            val startIndex = mainContent.indexOf(startTag, searchIndex)
+            if (startIndex == -1) break
+
+            val endIndex = mainContent.indexOf(endTag, startIndex + startTag.length)
+            if (endIndex == -1) {
+                // Unclosed tag - it's streaming at the end
+                val thought = mainContent.substring(startIndex + startTag.length)
+                if (thought.isNotEmpty()) thoughts.add(thought)
+                mainContent = mainContent.substring(0, startIndex)
+                isComplete = false
+                break
             } else {
-                // Tag completed
-                val thought = afterStart.substring(0, endIndex)
-                val afterThought = afterStart.substring(endIndex + endTag.length)
-                // Combine text before and after the thought as the main content
-                val combinedContent = (beforeThought.trim() + "\n" + afterThought.trim()).trim()
-                Triple(thought.trim(), combinedContent, true)
+                // Closed tag
+                val thought = mainContent.substring(startIndex + startTag.length, endIndex)
+                if (thought.isNotEmpty()) thoughts.add(thought)
+                
+                // Remove the block from main content
+                val before = mainContent.substring(0, startIndex)
+                val after = mainContent.substring(endIndex + endTag.length)
+                mainContent = before + after
+                // Don't increment searchIndex, because mainContent has shrunk
+                searchIndex = startIndex
             }
         }
     }
+
+    val combinedThought = if (thoughts.isEmpty()) null else thoughts.joinToString("\n").trim()
     
-    return Triple(null, content, true)
+    // Final cleanup of main content
+    val cleanedMain = mainContent.trim()
+
+    return Triple(combinedThought, cleanedMain, isComplete)
 }
