@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -335,6 +336,16 @@ fun ChatScreen(
                                 modelDisplayName = null,
                                 isChatEnabled = uiState.modelError == null
                             )
+                        }
+                    }
+
+                    if (uiState.messages.filter { !it.isHiddenFromUser }.isEmpty() && 
+                        !uiState.isLoadingModel && 
+                        uiState.modelError == null && 
+                        !uiState.isGenerating && 
+                        uiState.currentGeneratingText.isEmpty()) {
+                        item {
+                            EmptyChatPlaceholder(characterName = uiState.character?.name ?: "Assistant")
                         }
                     }
 
@@ -792,6 +803,35 @@ fun StatusIndicator(text: String) {
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+        )
+    }
+}
+
+@Composable
+private fun EmptyChatPlaceholder(characterName: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 64.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.ChatBubbleOutline,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Conversation with $characterName",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = "Start by sending a message below.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
     }
 }

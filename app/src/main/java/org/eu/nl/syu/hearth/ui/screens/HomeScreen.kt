@@ -22,6 +22,8 @@ import android.annotation.SuppressLint
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -97,7 +99,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.compose.AsyncImage
 import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ChatThread
-import org.eu.nl.syu.hearth.data.DefaultCharacters
 import org.eu.nl.syu.hearth.ui.components.GlassyDropdownMenu
 import org.eu.nl.syu.hearth.ui.components.GlassySurface
 import org.eu.nl.syu.hearth.ui.viewmodels.HomeViewModel
@@ -146,11 +147,6 @@ fun HomeScreen(
         }
     }
 
-    val assistantCharacters = remember(uiState.characters) {
-        uiState.characters
-            .filter { it.id == DefaultCharacters.ASSISTANT_CHARACTER_ID }
-            .sortedWith(compareByDescending<Character> { it.lastUsedAt }.thenBy { it.name.lowercase() })
-    }
 
     val filteredThreads = remember(searchQuery, uiState.chatThreads, visibleCharacters) {
         val characterIds = visibleCharacters.map { it.id }.toSet()
@@ -203,69 +199,52 @@ fun HomeScreen(
             containerColor = Color.Transparent,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             floatingActionButton = {
-                Box(contentAlignment = Alignment.BottomEnd) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = fabMenuExpanded,
-                        enter = androidx.compose.animation.fadeIn(),
-                        exit = androidx.compose.animation.fadeOut(),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.4f))
-                                .blur(8.dp)
-                                .combinedClickable(
-                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = { fabMenuExpanded = false }
-                                )
-                        )
-                    }
-                    
-                    FloatingActionButtonMenu(
-                        expanded = fabMenuExpanded,
-                        button = {
-                            ToggleFloatingActionButton(
-                                checked = fabMenuExpanded,
-                                onCheckedChange = { fabMenuExpanded = it },
-                                modifier = Modifier.semantics {
-                                    contentDescription = if (fabMenuExpanded) "Close menu" else "Open menu"
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Add,
-                                    contentDescription = null,
-                                    modifier = Modifier.graphicsLayer {
-                                        rotationZ = fabProgress * 45f
-                                    }
-                                )
+                FloatingActionButtonMenu(
+                    expanded = fabMenuExpanded,
+                    button = {
+                        ToggleFloatingActionButton(
+                            checked = fabMenuExpanded,
+                            onCheckedChange = { fabMenuExpanded = it },
+                            modifier = Modifier.semantics {
+                                contentDescription = if (fabMenuExpanded) "Close menu" else "Open menu"
                             }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = null,
+                                modifier = Modifier.graphicsLayer {
+                                    rotationZ = fabProgress * 45f
+                                },
+                                tint = MaterialTheme.colorScheme.onSurface //if (!fabMenuExpanded && isSystemInDarkTheme()) MaterialTheme.colorScheme.onPrimary else Color.Unspecified
+                            )
                         }
-                    ) {
-                        FloatingActionButtonMenuItem(
-                            onClick = {
-                                fabMenuExpanded = false
-                                onNavigateToCharacterPicker()
-                            },
-                            icon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) },
-                            text = { Text("New Chat") }
-                        )
-                        FloatingActionButtonMenuItem(
-                            onClick = {
-                                fabMenuExpanded = false
-                                onNavigateToCreateCharacter(null)
-                            },
-                            icon = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
-                            text = { Text("Create Character") }
-                        )
                     }
+                ) {
+                    FloatingActionButtonMenuItem(
+                        onClick = {
+                            fabMenuExpanded = false
+                            onNavigateToCharacterPicker()
+                        },
+                        icon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) },
+                        text = { Text("New Chat") }
+                    )
+                    FloatingActionButtonMenuItem(
+                        onClick = {
+                            fabMenuExpanded = false
+                            onNavigateToCreateCharacter(null)
+                        },
+                        icon = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
+                        text = { Text("Create Character") }
+                    )
                 }
             }
-        ) { paddingValues ->
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
+        ) { _ ->
+            Box(modifier = Modifier.fillMaxSize()) {//.padding(paddingValues)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(if (fabMenuExpanded) 8.dp else 0.dp)
+                ) {
             SearchBar(
                 inputField = {
                     androidx.compose.material3.SearchBarDefaults.InputField(
@@ -411,7 +390,26 @@ fun HomeScreen(
                 }
             }
         }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = fabMenuExpanded,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .combinedClickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        onClick = { fabMenuExpanded = false }
+                    )
+            )
+        }
     }
+}
 
     if (showRenameDialog && contextMenuThread != null) {
         AlertDialog(
@@ -676,7 +674,6 @@ fun CharacterPickerScreen(
     val uiState by viewModel.uiState.collectAsState()
     val characters = remember(uiState.characters) {
         uiState.characters
-            .filter { it.id == DefaultCharacters.ASSISTANT_CHARACTER_ID }
             .sortedWith(compareByDescending<Character> { it.lastUsedAt }.thenBy { it.name.lowercase() })
     }
 
@@ -712,7 +709,7 @@ fun CharacterPickerScreen(
                     modifier = Modifier.fillMaxSize().padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No assistant character available")
+                    Text("No characters available. Create one to start chatting!")
                 }
             } else {
                 LazyVerticalGrid(

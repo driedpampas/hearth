@@ -304,7 +304,6 @@ class HomeViewModel @Inject constructor(
                     }
                 )
             }
-            characterDao.updateModelReference(org.eu.nl.syu.hearth.data.DefaultCharacters.ASSISTANT_CHARACTER_ID, file.absolutePath)
             modelRepository.removeFailedModel(file.name)
             val hash = modelRepository.hashOf(file)
             if (hash.isNotEmpty()) {

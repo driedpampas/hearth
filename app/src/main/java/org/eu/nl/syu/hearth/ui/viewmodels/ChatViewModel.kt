@@ -151,8 +151,6 @@ class ChatViewModel @Inject constructor(
                 versions.find { it.versionIndex == activeIndex }
             }.sortedBy { it.timestamp }
 
-            val initialMaxTokens = modelRepository.defaultMaxTokens.first()
-            
             val includeThinking = character.includeThinkingInContext
             val estimatedTokens = calculateTokenEstimate(visibleMessages, includeThinking)
             
@@ -166,12 +164,16 @@ class ChatViewModel @Inject constructor(
                     tokenCount = estimatedTokens,
                     threadTitle = thread.title,
                     threadLore = thread.threadLore,
-                    maxTokens = initialMaxTokens,
+                    maxTokens = 4096, // Temporary default
                     versionCounts = versionCounts,
                     displayedVersions = displayedVersions,
                     styleJson = thread.styleJson
                 )
             }
+
+            val initialMaxTokens = modelRepository.defaultMaxTokens.first()
+            _uiState.update { it.copy(maxTokens = initialMaxTokens) }
+
 
             // Path resolution
             val modelPath = resolveModelPath(character.modelReference)
