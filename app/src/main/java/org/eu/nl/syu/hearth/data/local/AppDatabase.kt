@@ -33,9 +33,19 @@ import kotlinx.coroutines.flow.Flow
 import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ChatMessage
 import org.eu.nl.syu.hearth.data.ChatThread
+import org.eu.nl.syu.hearth.data.UserPersona
 import org.eu.nl.syu.hearth.data.MessageRole
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+
+@Entity(tableName = "user_personas")
+data class UserPersonaEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val bio: String,
+    val avatarUrl: String?,
+    val lastUsedAt: Long
+)
 
 @Entity(tableName = "lore_chunks")
 data class LoreChunkEntity(
@@ -64,7 +74,10 @@ data class ChatThreadEntity(
     val lastMessageAt: Long,
     val sequenceId: Int,
     val styleJson: String? = null,
-    val threadLore: String? = null
+    val threadLore: String? = null,
+    val userPersonaId: String? = null,
+    val threadUserPersonaBio: String? = null,
+    val threadCharacterOverrideJson: String? = null
 )
 
 @Entity(tableName = "characters")
@@ -87,7 +100,8 @@ data class CharacterEntity(
     val sceneBackgroundUrl: String?,
     val isPredefined: Boolean,
     val initialMessagesJson: String = "[]",
-    val lastUsedAt: Long
+    val lastUsedAt: Long,
+    val defaultUserPersonaId: String? = null
 )
 
 @Entity(
@@ -116,7 +130,8 @@ data class ChatMessageEntity(
     val tokensPerSecond: Float? = null,
     val parentId: String? = null,
     val versionGroupId: String? = null,
-    val versionIndex: Int = 0
+    val versionIndex: Int = 0,
+    val isError: Boolean = false
 )
 
 @Dao
@@ -135,6 +150,9 @@ interface CharacterDao {
 
     @Query("UPDATE characters SET lastUsedAt = :lastUsedAt WHERE id = :id")
     suspend fun updateLastUsedAt(id: String, lastUsedAt: Long)
+
+    @Query("UPDATE characters SET defaultUserPersonaId = :personaId WHERE id = :id")
+    suspend fun updateDefaultPersona(id: String, personaId: String?)
 
     @Query("UPDATE characters SET modelReference = :modelReference WHERE id = :id")
     suspend fun updateModelReference(id: String, modelReference: String)
@@ -158,6 +176,27 @@ interface CharacterDao {
 
     @Query("DELETE FROM characters WHERE id = :id")
     suspend fun deleteCharacterById(id: String)
+}
+
+@Dao
+interface UserPersonaDao {
+    @Query("SELECT * FROM user_personas ORDER BY lastUsedAt DESC")
+    suspend fun getAllPersonas(): List<UserPersonaEntity>
+
+    @Query("SELECT * FROM user_personas ORDER BY lastUsedAt DESC")
+    fun getAllPersonasFlow(): Flow<List<UserPersonaEntity>>
+
+    @Query("SELECT * FROM user_personas WHERE id = :id")
+    suspend fun getPersonaById(id: String): UserPersonaEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPersona(persona: UserPersonaEntity)
+
+    @Delete
+    suspend fun deletePersona(persona: UserPersonaEntity)
+
+    @Query("DELETE FROM user_personas WHERE id = :id")
+    suspend fun deletePersonaById(id: String)
 }
 
 @Dao
@@ -271,9 +310,10 @@ interface LoreChunkDao {
         ChatThreadEntity::class,
         ChatMessageEntity::class, 
         LoreChunkEntity::class, 
-        MemoryEntryEntity::class
+        MemoryEntryEntity::class,
+        UserPersonaEntity::class
     ], 
-    version = 1, 
+    version = 3, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -283,6 +323,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
     abstract fun loreChunkDao(): LoreChunkDao
     abstract fun vectorDao(): VectorDao
+    abstract fun userPersonaDao(): UserPersonaDao
 
     companion object {
         private val gson = Gson()
@@ -315,7 +356,8 @@ fun CharacterEntity.toDomain(): Character = Character(
     knowledgeBase = knowledgeBase,
     sceneBackgroundUrl = sceneBackgroundUrl,
     isPredefined = isPredefined, initialMessages = AppDatabase.jsonToMessageList(initialMessagesJson),
-    lastUsedAt = lastUsedAt
+    lastUsedAt = lastUsedAt,
+    defaultUserPersonaId = defaultUserPersonaId
 )
 
 fun Character.toEntity(): CharacterEntity = CharacterEntity(
@@ -336,7 +378,8 @@ fun Character.toEntity(): CharacterEntity = CharacterEntity(
     knowledgeBase = knowledgeBase,
     sceneBackgroundUrl = sceneBackgroundUrl,
     isPredefined = isPredefined, initialMessagesJson = AppDatabase.messageListToJson(initialMessages),
-    lastUsedAt = lastUsedAt
+    lastUsedAt = lastUsedAt,
+    defaultUserPersonaId = defaultUserPersonaId
 )
 
 fun ChatThreadEntity.toDomain(): ChatThread = ChatThread(
@@ -347,7 +390,10 @@ fun ChatThreadEntity.toDomain(): ChatThread = ChatThread(
     lastMessageAt = lastMessageAt,
     sequenceId = sequenceId,
     styleJson = styleJson,
-    threadLore = threadLore
+    threadLore = threadLore,
+    userPersonaId = userPersonaId,
+    threadUserPersonaBio = threadUserPersonaBio,
+    threadCharacterOverrideJson = threadCharacterOverrideJson
 )
 
 fun ChatThread.toEntity(): ChatThreadEntity = ChatThreadEntity(
@@ -358,7 +404,10 @@ fun ChatThread.toEntity(): ChatThreadEntity = ChatThreadEntity(
     lastMessageAt = lastMessageAt,
     sequenceId = sequenceId,
     styleJson = styleJson,
-    threadLore = threadLore
+    threadLore = threadLore,
+    userPersonaId = userPersonaId,
+    threadUserPersonaBio = threadUserPersonaBio,
+    threadCharacterOverrideJson = threadCharacterOverrideJson
 )
 
 fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(
@@ -372,7 +421,24 @@ fun ChatMessageEntity.toDomain(): ChatMessage = ChatMessage(
     tokensPerSecond = tokensPerSecond,
     parentId = parentId,
     versionGroupId = versionGroupId,
-    versionIndex = versionIndex
+    versionIndex = versionIndex,
+    isError = isError
+)
+
+fun UserPersonaEntity.toDomain(): UserPersona = UserPersona(
+    id = id,
+    name = name,
+    bio = bio,
+    avatarUrl = avatarUrl,
+    lastUsedAt = lastUsedAt
+)
+
+fun UserPersona.toEntity(): UserPersonaEntity = UserPersonaEntity(
+    id = id,
+    name = name,
+    bio = bio,
+    avatarUrl = avatarUrl,
+    lastUsedAt = lastUsedAt
 )
 
 fun ChatMessage.toEntity(characterId: String, threadId: String?): ChatMessageEntity = ChatMessageEntity(
@@ -388,5 +454,6 @@ fun ChatMessage.toEntity(characterId: String, threadId: String?): ChatMessageEnt
     tokensPerSecond = tokensPerSecond,
     parentId = parentId,
     versionGroupId = versionGroupId,
-    versionIndex = versionIndex
+    versionIndex = versionIndex,
+    isError = isError
 )

@@ -62,6 +62,9 @@ import org.eu.nl.syu.hearth.ui.screens.SettingsLiteRtModelsScreen
 import org.eu.nl.syu.hearth.ui.screens.SettingsMainScreen
 import org.eu.nl.syu.hearth.ui.screens.SettingsModelsScreen
 import org.eu.nl.syu.hearth.ui.screens.ThreadSettingsScreen
+import org.eu.nl.syu.hearth.ui.screens.UserPersonaScreen
+import org.eu.nl.syu.hearth.ui.screens.CreatePersonaScreen
+import org.eu.nl.syu.hearth.ui.viewmodels.EditScope
 import org.eu.nl.syu.hearth.ui.theme.ChatTheme
 import org.eu.nl.syu.hearth.common.crash.GlobalCrashHandler
 import org.eu.nl.syu.hearth.common.crash.CrashReportActivity
@@ -190,7 +193,18 @@ fun HearthApp() {
                     },
                     onNavigateToModelSettings = { navController.navigate("model_settings") },
                     onNavigateToModelPicker = { navController.navigate("model_picker") },
-                    onNavigateToCharacterPicker = { navController.navigate("character_picker") }
+                    onNavigateToCharacterPicker = { navController.navigate("character_picker") },
+                    onNavigateToUserPersona = { tid, cid, scope ->
+                        navController.navigate("user_persona?threadId=$tid&characterId=$cid&scope=${scope.name}")
+                    },
+                    onNavigateToCreatePersona = {
+                        navController.navigate("create_persona")
+                    }
+                )
+            }
+            composable(route = "create_persona") {
+                CreatePersonaScreen(
+                    onNavigateBack = { safeNavigateBack() }
                 )
             }
             composable(route = "settings") {
@@ -284,7 +298,54 @@ fun HearthApp() {
                     },
                     onNavigateToModelSettings = { characterId ->
                         navController.navigate("model_settings/$characterId")
+                    },
+                    onNavigateToEditPersona = { tid, cid, scope ->
+                        navController.navigate("user_persona?threadId=$tid&characterId=$cid&scope=${scope.name}")
+                    },
+                    onNavigateToCustomiseCharacter = { tid, cid, scope ->
+                        navController.navigate("model_settings/$cid?threadId=$tid&scope=${scope.name}")
                     }
+                )
+            }
+            composable(
+                route = "user_persona?threadId={threadId}&characterId={characterId}&scope={scope}",
+                arguments = listOf(
+                    navArgument("threadId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("characterId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("scope") { type = NavType.StringType; defaultValue = EditScope.GLOBAL.name }
+                )
+            ) { backStackEntry ->
+                val threadId = backStackEntry.arguments?.getString("threadId")
+                val characterId = backStackEntry.arguments?.getString("characterId")
+                val scopeName = backStackEntry.arguments?.getString("scope") ?: EditScope.GLOBAL.name
+                val scope = EditScope.valueOf(scopeName)
+                
+                UserPersonaScreen(
+                    threadId = threadId,
+                    characterId = characterId,
+                    initialScope = scope,
+                    onNavigateBack = { safeNavigateBack() },
+                    onNavigateToCreatePersona = { navController.navigate("create_persona") }
+                )
+            }
+            composable(
+                route = "model_settings/{characterId}?threadId={threadId}&scope={scope}",
+                arguments = listOf(
+                    navArgument("characterId") { type = NavType.StringType },
+                    navArgument("threadId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("scope") { type = NavType.StringType; defaultValue = EditScope.CHARACTER.name }
+                )
+            ) { backStackEntry ->
+                val characterId = backStackEntry.arguments?.getString("characterId")
+                val threadId = backStackEntry.arguments?.getString("threadId")
+                val scopeName = backStackEntry.arguments?.getString("scope") ?: EditScope.CHARACTER.name
+                val scope = EditScope.valueOf(scopeName)
+                
+                ModelSettingsScreen(
+                    characterId = characterId,
+                    threadId = threadId,
+                    initialScope = scope,
+                    onNavigateBack = { safeNavigateBack() }
                 )
             }
             composable(route = "model_settings/{characterId}") { backStackEntry ->

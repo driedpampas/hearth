@@ -43,7 +43,9 @@ import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.local.CharacterDao
 import org.eu.nl.syu.hearth.data.local.ChatMessageDao
 import org.eu.nl.syu.hearth.data.local.ChatThreadDao
+import org.eu.nl.syu.hearth.data.local.LoreChunkDao
 import org.eu.nl.syu.hearth.data.local.MemoryDao
+import org.eu.nl.syu.hearth.data.local.UserPersonaDao
 import org.eu.nl.syu.hearth.data.local.VectorDao
 import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.data.local.toEntity
@@ -88,6 +90,7 @@ class ChatViewModel @Inject constructor(
     private val characterDao: CharacterDao,
     private val chatThreadDao: ChatThreadDao,
     private val chatMessageDao: ChatMessageDao,
+    private val loreChunkDao: LoreChunkDao,
     private val engineWrapper: LiteRtEngineWrapper,
     private val embeddingEngine: EmbeddingEngine,
     private val modelManager: ModelManager,
@@ -95,6 +98,7 @@ class ChatViewModel @Inject constructor(
     private val narrativeContextFactory: NarrativeContextFactory,
     private val vectorDao: VectorDao,
     private val memoryDao: MemoryDao,
+    private val userPersonaDao: UserPersonaDao,
     private val loreSyncManager: LoreSyncManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
@@ -374,7 +378,13 @@ class ChatViewModel @Inject constructor(
 
                     if (loreSyncManager.syncState.value is LoreSyncManager.SyncState.Error) {
                         val error = (loreSyncManager.syncState.value as LoreSyncManager.SyncState.Error).message
-                        _uiState.update { it.copy(modelError = "Failed to embed lore: $error", isEmbedding = false, isGenerating = false) }
+                        val errorMsg = ChatMessage(
+                            role = MessageRole.SYSTEM,
+                            content = "Error: Failed to embed lore. $error",
+                            isError = true
+                        )
+                        chatMessageDao.insertMessage(errorMsg.toEntity(character.id, threadId))
+                        _uiState.update { it.copy(messages = it.messages + errorMsg, isEmbedding = false, isGenerating = false) }
                         return@launch
                     }
                 } finally {
@@ -419,12 +429,24 @@ class ChatViewModel @Inject constructor(
                 )
             }
 
-            val prompt = narrativeContextFactory.constructPrompt(
-                userInput = content,
-                character = character,
-                threadId = threadId,
-                history = _uiState.value.messages.dropLast(1).takeLast(10)
-            )
+            val prompt = try {
+                narrativeContextFactory.constructPrompt(
+                    userInput = content,
+                    character = character,
+                    threadId = threadId,
+                    history = _uiState.value.messages.dropLast(1).takeLast(10)
+                )
+            } catch (e: Exception) {
+                val errorMsg = ChatMessage(
+                    role = MessageRole.SYSTEM,
+                    content = "Error: ${e.message}",
+                    isError = true,
+                    parentId = userMessage.id
+                )
+                chatMessageDao.insertMessage(errorMsg.toEntity(character.id, threadId))
+                _uiState.update { it.copy(messages = it.messages + errorMsg, isGenerating = false) }
+                return@launch
+            }
 
             var fullResponse = ""
 
@@ -489,7 +511,14 @@ class ChatViewModel @Inject constructor(
                     generationJob = null
                 }
                 .catch { e ->
-                    _uiState.update { it.copy(isGenerating = false, currentGeneratingText = "Error: ${e.message}") }
+                    val errorMsg = ChatMessage(
+                        role = MessageRole.SYSTEM,
+                        content = "Generation Error: ${e.message}",
+                        isError = true,
+                        parentId = userMessage.id
+                    )
+                    chatMessageDao.insertMessage(errorMsg.toEntity(character.id, threadId))
+                    _uiState.update { it.copy(messages = it.messages + errorMsg, isGenerating = false, currentGeneratingText = "") }
                     generationJob = null
                 }
                 .launchIn(this)
@@ -860,14 +889,28 @@ class ChatViewModel @Inject constructor(
             _uiState.update { it.copy(threadTitle = newTitle) }
             
             // 2. Update Lore Source
-            val thread = chatThreadDao.getThreadById(threadId)?.toDomain() ?: return@launch
-            chatThreadDao.insertThread(thread.copy(threadLore = newLore).toEntity())
+            val threadEntity = chatThreadDao.getThreadById(threadId) ?: return@launch
+            chatThreadDao.insertThread(threadEntity.copy(title = newTitle, threadLore = newLore))
             _uiState.update { it.copy(threadLore = newLore) }
             
-            // 3. Sync Embeddings (this is suspend and sets isEmbedding = true via syncState)
-            loreSyncManager.syncLore(character, newLore, threadId)
+            // 3. Resolve User Identity for RAG sync
+            val userBio = when {
+                threadEntity.threadUserPersonaBio != null -> threadEntity.threadUserPersonaBio
+                threadEntity.userPersonaId != null -> userPersonaDao.getPersonaById(threadEntity.userPersonaId)?.bio
+                character.defaultUserPersonaId != null -> userPersonaDao.getPersonaById(character.defaultUserPersonaId)?.bio
+                else -> modelRepository.globalDefaultPersonaId.first()?.let { userPersonaDao.getPersonaById(it)?.bio }
+            }
             
-            // 4. Return to chat
+            val personaName = when {
+                threadEntity.userPersonaId != null -> userPersonaDao.getPersonaById(threadEntity.userPersonaId)?.name
+                character.defaultUserPersonaId != null -> userPersonaDao.getPersonaById(character.defaultUserPersonaId)?.name
+                else -> modelRepository.globalDefaultPersonaId.first()?.let { userPersonaDao.getPersonaById(it)?.name }
+            } ?: "User"
+            
+            // 4. Sync Embeddings
+            loreSyncManager.syncLore(character, newLore, threadId, personaName, userBio)
+            
+            // 5. Return to chat
             onDone()
         }
     }
@@ -908,14 +951,28 @@ class ChatViewModel @Inject constructor(
         
         viewModelScope.launch {
             // 1. Update the source text in DB
-            val thread = chatThreadDao.getThreadById(threadId)?.toDomain() ?: return@launch
-            chatThreadDao.insertThread(thread.copy(threadLore = newLore).toEntity())
+            val threadEntity = chatThreadDao.getThreadById(threadId) ?: return@launch
+            chatThreadDao.insertThread(threadEntity.copy(threadLore = newLore))
             
             // 2. Update UI state
             _uiState.update { it.copy(threadLore = newLore) }
             
-            // 3. Re-embed lore for this thread
-            loreSyncManager.syncLore(character, newLore, threadId)
+            // 3. Resolve User Identity for RAG sync
+            val userBio = when {
+                threadEntity.threadUserPersonaBio != null -> threadEntity.threadUserPersonaBio
+                threadEntity.userPersonaId != null -> userPersonaDao.getPersonaById(threadEntity.userPersonaId)?.bio
+                character.defaultUserPersonaId != null -> userPersonaDao.getPersonaById(character.defaultUserPersonaId)?.bio
+                else -> modelRepository.globalDefaultPersonaId.first()?.let { userPersonaDao.getPersonaById(it)?.bio }
+            }
+            
+            val personaName = when {
+                threadEntity.userPersonaId != null -> userPersonaDao.getPersonaById(threadEntity.userPersonaId)?.name
+                character.defaultUserPersonaId != null -> userPersonaDao.getPersonaById(character.defaultUserPersonaId)?.name
+                else -> modelRepository.globalDefaultPersonaId.first()?.let { userPersonaDao.getPersonaById(it)?.name }
+            } ?: "User"
+            
+            // 4. Re-embed lore for this thread
+            loreSyncManager.syncLore(character, newLore, threadId, personaName, userBio)
         }
     }
 }

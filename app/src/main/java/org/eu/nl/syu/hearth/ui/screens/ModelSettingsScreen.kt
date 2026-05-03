@@ -79,15 +79,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.eu.nl.syu.hearth.ui.components.FadeTextAnimation
 import org.eu.nl.syu.hearth.ui.components.WavyVerticalDivider
 import org.eu.nl.syu.hearth.ui.viewmodels.ModelSettingsViewModel
+import org.eu.nl.syu.hearth.ui.viewmodels.EditScope
+import org.eu.nl.syu.hearth.ui.components.ScopedButtonGroup
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ModelSettingsScreen(
     characterId: String?,
+    threadId: String? = null,
+    initialScope: EditScope = EditScope.CHARACTER,
     onNavigateBack: () -> Unit,
     viewModel: ModelSettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var selectedScope by remember { mutableStateOf(initialScope) }
 
     LaunchedEffect(characterId) {
         viewModel.loadSettings(characterId)
@@ -135,6 +140,8 @@ fun ModelSettingsScreen(
                         backend = pendingBackend,
                         maxTokens = pendingMaxTokens,
                         characterId = characterId,
+                        threadId = threadId,
+                        scope = selectedScope,
                         temp = pendingTemp,
                         topP = pendingTopP,
                         topK = pendingTopK,
@@ -167,6 +174,14 @@ fun ModelSettingsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(32.dp)
             ) {
+                if (threadId != null) {
+                    ScopedButtonGroup(
+                        selectedScope = selectedScope.name,
+                        scopes = listOf(EditScope.CHARACTER.name, EditScope.THREAD.name),
+                        onScopeSelected = { selectedScope = EditScope.valueOf(it) }
+                    )
+                }
+
                 // Global Section
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text("Global Model Settings", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)

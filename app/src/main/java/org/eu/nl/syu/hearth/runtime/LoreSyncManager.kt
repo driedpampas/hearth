@@ -55,7 +55,8 @@ class LoreSyncManager @Inject constructor(
         character: Character, 
         loreText: String, 
         threadId: String? = null,
-        userName: String = "User"
+        userName: String = "User",
+        userBio: String? = null
     ) = withContext(Dispatchers.IO) {
         _syncState.value = SyncState.Syncing
         try {
@@ -72,7 +73,7 @@ class LoreSyncManager @Inject constructor(
             val chunks: List<String> = loreSplitter.splitLore(loreText)
             val chunkEntities = chunks.map { text ->
                 // Resolve templates before embedding
-                val processedText = TemplateProcessor.process(text, character, userName)
+                val processedText = TemplateProcessor.process(text, character, userName, userBio)
                 LoreChunkEntity(
                     id = UUID.randomUUID().toString(),
                     characterId = character.id,

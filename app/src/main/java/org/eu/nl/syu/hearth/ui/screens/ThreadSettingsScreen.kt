@@ -33,6 +33,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.eu.nl.syu.hearth.ui.components.*
 import org.eu.nl.syu.hearth.ui.viewmodels.ChatViewModel
+import org.eu.nl.syu.hearth.ui.viewmodels.EditScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +42,8 @@ fun ThreadSettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToEditCharacter: (String) -> Unit,
     onNavigateToModelSettings: (String) -> Unit,
+    onNavigateToEditPersona: (String?, String?, EditScope) -> Unit,
+    onNavigateToCustomiseCharacter: (String?, String?, EditScope) -> Unit,
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -169,7 +172,23 @@ fun ThreadSettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     GlassySurface(
-                        onClick = { onNavigateToEditCharacter(uiState.character?.id ?: "") },
+                        onClick = { onNavigateToEditPersona(threadId, uiState.character?.id, EditScope.THREAD) },
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(Icons.Default.Badge, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(12.dp))
+                            Text("Edit Persona", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+
+                    GlassySurface(
+                        onClick = { onNavigateToCustomiseCharacter(threadId, uiState.character?.id, EditScope.THREAD) },
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
                     ) {
@@ -178,9 +197,35 @@ fun ThreadSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                            Icon(Icons.Default.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
                             Spacer(Modifier.width(12.dp))
-                            Text("Edit Character", style = MaterialTheme.typography.labelLarge)
+                            Text("Customise", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+
+                WavyVerticalDivider(
+                    modifier = Modifier.fillMaxWidth().height(16.dp),
+                    waveColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    GlassySurface(
+                        onClick = { onNavigateToEditCharacter(uiState.character?.id ?: "") },
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(12.dp))
+                            Text("Base Character", style = MaterialTheme.typography.labelLarge)
                         }
                     }
 
@@ -194,7 +239,7 @@ fun ThreadSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(Icons.Default.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                            Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
                             Spacer(Modifier.width(12.dp))
                             Text("Model Config", style = MaterialTheme.typography.labelLarge)
                         }

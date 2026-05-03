@@ -34,7 +34,14 @@ import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.local.CharacterDao
 import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
+import org.eu.nl.syu.hearth.data.local.ChatThreadDao
+import org.eu.nl.syu.hearth.domain.NarrativeContextFactory.CharacterOverride
+import com.google.gson.Gson
 import javax.inject.Inject
+
+enum class EditScope {
+    GLOBAL, CHARACTER, THREAD
+}
 
 data class ModelSettingsUiState(
     val character: Character? = null,
@@ -55,9 +62,11 @@ data class ModelSettingsUiState(
 @HiltViewModel
 class ModelSettingsViewModel @Inject constructor(
     private val characterDao: CharacterDao,
+    private val chatThreadDao: ChatThreadDao,
     private val modelRepository: ModelRepository,
     private val engineWrapper: LiteRtEngineWrapper
 ) : ViewModel() {
+    private val gson = Gson()
 
     private val _uiState = MutableStateFlow(ModelSettingsUiState())
     val uiState: StateFlow<ModelSettingsUiState> = _uiState.asStateFlow()
@@ -97,6 +106,8 @@ class ModelSettingsViewModel @Inject constructor(
         backend: String,
         maxTokens: Int,
         characterId: String?,
+        threadId: String?,
+        scope: EditScope,
         temp: Float,
         topP: Float,
         topK: Int,
@@ -108,22 +119,45 @@ class ModelSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                // Save global settings
+                // Save global app settings
                 modelRepository.setPreferredBackend(backend)
                 modelRepository.setDefaultMaxTokens(maxTokens)
                 
-                // Save character settings if applicable
+                // Save character settings based on scope
                 if (characterId != null) {
-                    characterDao.updateSamplingSettings(
-                        id = characterId,
-                        temp = temp,
-                        topP = topP,
-                        topK = topK,
-                        enableThinking = enableThinking,
-                        enableThinkingCompatibility = enableThinkingCompatibility,
-                        thinkingCompatibilityToken = thinkingCompatibilityToken,
-                        includeThinkingInContext = includeThinkingInContext
-                    )
+                    when (scope) {
+                        EditScope.GLOBAL, EditScope.CHARACTER -> {
+                            characterDao.updateSamplingSettings(
+                                id = characterId,
+                                temp = temp,
+                                topP = topP,
+                                topK = topK,
+                                enableThinking = enableThinking,
+                                enableThinkingCompatibility = enableThinkingCompatibility,
+                                thinkingCompatibilityToken = thinkingCompatibilityToken,
+                                includeThinkingInContext = includeThinkingInContext
+                            )
+                        }
+                        EditScope.THREAD -> {
+                            if (threadId != null) {
+                                val override = CharacterOverride(
+                                    temp = temp,
+                                    topP = topP,
+                                    topK = topK,
+                                    enableThinking = enableThinking,
+                                    enableThinkingCompatibility = enableThinkingCompatibility,
+                                    thinkingCompatibilityToken = thinkingCompatibilityToken,
+                                    includeThinkingInContext = includeThinkingInContext
+                                )
+                                val thread = chatThreadDao.getThreadById(threadId)
+                                if (thread != null) {
+                                    chatThreadDao.insertThread(thread.copy(
+                                        threadCharacterOverrideJson = gson.toJson(override)
+                                    ))
+                                }
+                            }
+                        }
+                    }
                 }
                 
                 // Update local state

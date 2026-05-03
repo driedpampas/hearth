@@ -18,10 +18,12 @@ object TemplateProcessor {
     fun process(
         text: String,
         character: Character,
-        userName: String = "User"
+        userName: String = "User",
+        userBio: String? = null
     ): String {
         return text.replace("{{char}}", character.name)
             .replace("{{user}}", userName)
+            .replace("{{persona}}", userBio ?: "")
             .replace("{{tagline}}", character.tagline)
     }
 }

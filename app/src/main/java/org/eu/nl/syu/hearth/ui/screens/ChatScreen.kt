@@ -473,7 +473,11 @@ fun ChatBubble(
                     }
                 ),
             shape = bubbleShape,
-            color = if (isUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+            color = when {
+                isUser -> MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                message.isError -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f)
+                else -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+            }
         ) {
             Box {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -503,7 +507,11 @@ fun ChatBubble(
                     } else if (mainContent.isNotEmpty()) {
                         MarkdownText(
                             text = mainContent,
-                            textColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                            textColor = when {
+                                isUser -> MaterialTheme.colorScheme.onPrimary
+                                message.isError -> MaterialTheme.colorScheme.onErrorContainer
+                                else -> MaterialTheme.colorScheme.onSecondaryContainer
+                            }
                         )
                     } else if (isGenerating && thought == null) {
                         TypingIndicator()

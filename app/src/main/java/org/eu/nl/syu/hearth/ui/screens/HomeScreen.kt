@@ -46,6 +46,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -114,6 +115,8 @@ fun HomeScreen(
     onNavigateToModelSettings: () -> Unit,
     onNavigateToModelPicker: () -> Unit,
     onNavigateToCharacterPicker: () -> Unit,
+    onNavigateToUserPersona: (String?, String?, org.eu.nl.syu.hearth.ui.viewmodels.EditScope) -> Unit,
+    onNavigateToCreatePersona: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -235,6 +238,14 @@ fun HomeScreen(
                         },
                         icon = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
                         text = { Text("Create Character") }
+                    )
+                    FloatingActionButtonMenuItem(
+                        onClick = {
+                            fabMenuExpanded = false
+                            onNavigateToCreatePersona()
+                        },
+                        icon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                        text = { Text("Create Persona") }
                     )
                 }
             }

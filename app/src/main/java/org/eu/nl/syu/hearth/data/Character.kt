@@ -42,5 +42,6 @@ data class Character(
     val knowledgeBase: String = "",
     val sceneBackgroundUrl: String? = null,
     val isPredefined: Boolean = false,
-    val lastUsedAt: Long = 0L
+    val lastUsedAt: Long = 0L,
+    val defaultUserPersonaId: String? = null
 )

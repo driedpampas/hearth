@@ -38,6 +38,7 @@ import org.eu.nl.syu.hearth.data.local.ChatThreadDao
 import org.eu.nl.syu.hearth.data.local.MemoryDao
 import org.eu.nl.syu.hearth.data.local.LoreChunkDao
 import org.eu.nl.syu.hearth.data.local.VectorDao
+import org.eu.nl.syu.hearth.data.local.UserPersonaDao
 import java.io.File
 import javax.inject.Singleton
 
@@ -60,6 +61,7 @@ object AppModule {
             "hearth_db"
         )
             .setDriver(driver)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .fallbackToDestructiveMigration(true)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
@@ -135,8 +137,8 @@ object AppModule {
             """
                 INSERT INTO characters (
                     id, name, tagline, avatarUrl, roleInstruction, reminderMessage,
-                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, knowledgeBase, sceneBackgroundUrl, isPredefined, initialMessagesJson, lastUsedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, knowledgeBase, sceneBackgroundUrl, isPredefined, initialMessagesJson, lastUsedAt, defaultUserPersonaId
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
             arrayOf<Any?>(
                 character.id,
@@ -156,7 +158,8 @@ object AppModule {
                 character.knowledgeBase,
                 character.sceneBackgroundUrl,
                 if (character.isPredefined) 1 else 0, "[]",
-                character.lastUsedAt
+                character.lastUsedAt,
+                null
             )
         )
     }
@@ -169,8 +172,8 @@ object AppModule {
             """
                 INSERT INTO characters (
                     id, name, tagline, avatarUrl, roleInstruction, reminderMessage,
-                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, knowledgeBase, sceneBackgroundUrl, isPredefined, initialMessagesJson, lastUsedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, knowledgeBase, sceneBackgroundUrl, isPredefined, initialMessagesJson, lastUsedAt, defaultUserPersonaId
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
         ).use { statement ->
             statement.bindText(1, character.id)
@@ -192,6 +195,7 @@ object AppModule {
             statement.bindBoolean(17, character.isPredefined)
             statement.bindText(18, "[]")
             statement.bindLong(19, character.lastUsedAt)
+            statement.bindNull(20)
             statement.step()
         }
     }
@@ -237,5 +241,39 @@ object AppModule {
     @Provides
     fun provideLoreChunkDao(database: AppDatabase): LoreChunkDao {
         return database.loreChunkDao()
+    }
+
+    @Provides
+    fun provideUserPersonaDao(database: AppDatabase): UserPersonaDao {
+        return database.userPersonaDao()
+    }
+
+    private val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(connection: SQLiteConnection) {
+            execute(connection, "ALTER TABLE chat_messages ADD COLUMN isError INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(connection: SQLiteConnection) {
+            // Update characters table
+            execute(connection, "ALTER TABLE characters ADD COLUMN defaultUserPersonaId TEXT")
+            
+            // Update chat_threads table
+            execute(connection, "ALTER TABLE chat_threads ADD COLUMN userPersonaId TEXT")
+            execute(connection, "ALTER TABLE chat_threads ADD COLUMN threadUserPersonaBio TEXT")
+            execute(connection, "ALTER TABLE chat_threads ADD COLUMN threadCharacterOverrideJson TEXT")
+            
+            // Create user_personas table
+            execute(connection, """
+                CREATE TABLE IF NOT EXISTS user_personas (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    name TEXT NOT NULL,
+                    bio TEXT NOT NULL,
+                    avatarUrl TEXT,
+                    lastUsedAt INTEGER NOT NULL
+                )
+            """.trimIndent())
+        }
     }
 }

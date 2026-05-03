@@ -20,16 +20,10 @@ package org.eu.nl.syu.hearth.data
 
 import java.util.UUID
 
-data class ChatThread(
+data class UserPersona(
     val id: String = UUID.randomUUID().toString(),
-    val characterId: String,
-    val title: String,
-    val createdAt: Long = System.currentTimeMillis(),
-    val lastMessageAt: Long = createdAt,
-    val sequenceId: Int = 0,
-    val styleJson: String? = null,
-    val threadLore: String? = null,
-    val userPersonaId: String? = null,
-    val threadUserPersonaBio: String? = null,
-    val threadCharacterOverrideJson: String? = null
+    val name: String,
+    val bio: String,
+    val avatarUrl: String? = null,
+    val lastUsedAt: Long = 0L
 )

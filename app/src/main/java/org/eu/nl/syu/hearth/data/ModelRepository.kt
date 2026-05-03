@@ -86,6 +86,7 @@ class ModelRepository @Inject constructor(
     private val BLACKLISTED_MODEL_HASHES = stringSetPreferencesKey("blacklisted_model_hashes")
     private val FAILED_MODELS = stringSetPreferencesKey("failed_models")
     private val LAST_LOADED_MODEL_PATH = stringPreferencesKey("last_loaded_model_path")
+    private val GLOBAL_DEFAULT_PERSONA_ID = stringPreferencesKey("global_default_persona_id")
 
     val selectedEmbeddingModel: Flow<String?> = context.modelDataStore.data.map { preferences ->
         preferences[SELECTED_EMBEDDING_MODEL]
@@ -389,6 +390,20 @@ class ModelRepository @Inject constructor(
 
     val lastLoadedModelPath: Flow<String?> = context.modelDataStore.data.map { preferences ->
         preferences[LAST_LOADED_MODEL_PATH]
+    }
+
+    val globalDefaultPersonaId: Flow<String?> = context.modelDataStore.data.map { preferences ->
+        preferences[GLOBAL_DEFAULT_PERSONA_ID]
+    }
+
+    suspend fun setGlobalDefaultPersonaId(id: String?) {
+        context.modelDataStore.edit { preferences ->
+            if (id == null) {
+                preferences.remove(GLOBAL_DEFAULT_PERSONA_ID)
+            } else {
+                preferences[GLOBAL_DEFAULT_PERSONA_ID] = id
+            }
+        }
     }
 
     suspend fun setLastLoadedModelPath(path: String?) {

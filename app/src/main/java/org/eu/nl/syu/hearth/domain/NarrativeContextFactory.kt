@@ -8,10 +8,15 @@ package org.eu.nl.syu.hearth.domain
 import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ChatMessage
 import org.eu.nl.syu.hearth.data.MessageRole
-import org.eu.nl.syu.hearth.data.local.ChatMessageDao
-import org.eu.nl.syu.hearth.data.local.VectorDao
 import org.eu.nl.syu.hearth.data.stripThinking
+import org.eu.nl.syu.hearth.data.local.ChatMessageDao
+import org.eu.nl.syu.hearth.data.local.ChatThreadDao
+import org.eu.nl.syu.hearth.data.local.UserPersonaDao
+import org.eu.nl.syu.hearth.data.local.VectorDao
+import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.runtime.EmbeddingEngine
+import com.google.gson.Gson
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,8 +24,24 @@ import javax.inject.Singleton
 class NarrativeContextFactory @Inject constructor(
     private val embeddingEngine: EmbeddingEngine,
     private val vectorDao: VectorDao,
-    private val chatMessageDao: ChatMessageDao
+    private val chatMessageDao: ChatMessageDao,
+    private val chatThreadDao: ChatThreadDao,
+    private val userPersonaDao: UserPersonaDao,
+    private val modelRepository: ModelRepository
 ) {
+    private val gson = Gson()
+
+    data class CharacterOverride(
+        val roleInstruction: String? = null,
+        val reminderMessage: String? = null,
+        val temp: Float? = null,
+        val topP: Float? = null,
+        val topK: Int? = null,
+        val enableThinking: Boolean? = null,
+        val enableThinkingCompatibility: Boolean? = null,
+        val thinkingCompatibilityToken: String? = null,
+        val includeThinkingInContext: Boolean? = null
+    )
 
     /**
      * Constructs the final prompt for the LLM.
@@ -32,13 +53,38 @@ class NarrativeContextFactory @Inject constructor(
         history: List<ChatMessage>,
         userName: String = "User"
     ): String {
+        val thread = threadId?.let { chatThreadDao.getThreadById(it) }
+        
+        // 0. Resolve Character Overrides
+        val overrides = thread?.threadCharacterOverrideJson?.let {
+            try { gson.fromJson(it, CharacterOverride::class.java) } catch (e: Exception) { null }
+        }
+        
+        val effectiveRoleInstruction = overrides?.roleInstruction ?: character.roleInstruction
+        val effectiveReminderMessage = overrides?.reminderMessage ?: character.reminderMessage
+        val effectiveIncludeThinking = overrides?.includeThinkingInContext ?: character.includeThinkingInContext
+        
+        // 1. Resolve User Identity
+        val userBio = when {
+            thread?.threadUserPersonaBio != null -> thread.threadUserPersonaBio
+            thread?.userPersonaId != null -> userPersonaDao.getPersonaById(thread.userPersonaId)?.bio
+            character.defaultUserPersonaId != null -> userPersonaDao.getPersonaById(character.defaultUserPersonaId)?.bio
+            else -> modelRepository.globalDefaultPersonaId.first()?.let { userPersonaDao.getPersonaById(it)?.bio }
+        }
+        
+        val personaName = when {
+            thread?.userPersonaId != null -> userPersonaDao.getPersonaById(thread.userPersonaId)?.name
+            character.defaultUserPersonaId != null -> userPersonaDao.getPersonaById(character.defaultUserPersonaId)?.name
+            else -> modelRepository.globalDefaultPersonaId.first()?.let { userPersonaDao.getPersonaById(it)?.name }
+        } ?: userName
+
         val promptBuilder = StringBuilder()
 
-        // 1. Identity: Templated roleInstruction
-        val templatedRole = TemplateProcessor.process(character.roleInstruction, character, userName)
+        // 2. Identity: Templated roleInstruction
+        val templatedRole = TemplateProcessor.process(effectiveRoleInstruction, character, personaName, userBio)
         promptBuilder.append(templatedRole).append("\n\n")
 
-        // 2. Retrieved Lore (RAG): Top 5 matches across Global and Thread scopes
+        // 3. Retrieved Lore (RAG): Top 5 matches across Global and Thread scopes
         val queryVector = embeddingEngine.getVector(userInput, isQuery = true)
         val loreChunks = vectorDao.searchLoreChunks(
             queryEmbedding = queryVector,
@@ -52,7 +98,7 @@ class NarrativeContextFactory @Inject constructor(
             promptBuilder.append("\n")
         }
 
-        // 3. Retrieved Memories (RAG): Top 2-3
+        // 4. Retrieved Memories (RAG): Top 2-3
         val memories = vectorDao.searchMemoryEntries(queryVector, topK = 3)
         if (memories.isNotEmpty()) {
             promptBuilder.append("[Past Memories:]\n")
@@ -60,12 +106,12 @@ class NarrativeContextFactory @Inject constructor(
             promptBuilder.append("\n")
         }
 
-        // 4. Conversation History
+        // 5. Conversation History
         if (history.isNotEmpty()) {
             promptBuilder.append("[Recent Conversation:]\n")
             history.filter { !it.isHiddenFromAi }.forEach { msg ->
-                val roleName = if (msg.role == MessageRole.USER) userName else character.name
-                val content = if (character.includeThinkingInContext) {
+                val roleName = if (msg.role == MessageRole.USER) personaName else character.name
+                val content = if (effectiveIncludeThinking) {
                     msg.content
                 } else {
                     msg.content.stripThinking()
@@ -76,9 +122,9 @@ class NarrativeContextFactory @Inject constructor(
             }
         }
 
-        // 5. The Reminder: Templated reminderMessage appended at the end
-        if (character.reminderMessage.isNotBlank()) {
-            val templatedReminder = TemplateProcessor.process(character.reminderMessage, character, userName)
+        // 6. The Reminder: Templated reminderMessage appended at the end
+        if (effectiveReminderMessage.isNotBlank()) {
+            val templatedReminder = TemplateProcessor.process(effectiveReminderMessage, character, personaName, userBio)
             promptBuilder.append("\n[Reminder: ").append(templatedReminder).append("]")
         }
 
