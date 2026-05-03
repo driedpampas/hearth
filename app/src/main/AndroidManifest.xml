@@ -28,6 +28,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".common.crash.CrashReportActivity"
+            android:process=":crash_handler"
+            android:exported="false"
+            android:theme="@style/Theme.Chat" />
+
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"

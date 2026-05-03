@@ -63,6 +63,12 @@ import org.eu.nl.syu.hearth.ui.screens.SettingsMainScreen
 import org.eu.nl.syu.hearth.ui.screens.SettingsModelsScreen
 import org.eu.nl.syu.hearth.ui.screens.ThreadSettingsScreen
 import org.eu.nl.syu.hearth.ui.theme.ChatTheme
+import org.eu.nl.syu.hearth.common.crash.GlobalCrashHandler
+import org.eu.nl.syu.hearth.common.crash.CrashReportActivity
+import android.content.Intent
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import javax.inject.Inject
 
 private const val USE_CUSTOM_NAV_FADE = true
@@ -83,11 +89,40 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val postMortemReport = GlobalCrashHandler.checkPostMortemCrash(this)
+
         setContent {
             ChatTheme {
                 val authError by authRepository.authError.collectAsStateWithLifecycle()
-                
+                var showPostMortemDialog by remember { mutableStateOf(postMortemReport != null) }
+
                 HearthApp()
+
+                if (showPostMortemDialog && postMortemReport != null) {
+                    AlertDialog(
+                        onDismissRequest = { showPostMortemDialog = false },
+                        title = { Text("Previous Session Crash Detected") },
+                        text = {
+                            Text("The application encountered a failure (Native Crash or ANR) during your last session. Would you like to view the details?")
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showPostMortemDialog = false
+                                val intent = Intent(this@MainActivity, CrashReportActivity::class.java).apply {
+                                    putExtra(CrashReportActivity.EXTRA_CRASH_INFO, postMortemReport)
+                                }
+                                startActivity(intent)
+                            }) {
+                                Text("View Details")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showPostMortemDialog = false }) {
+                                Text("Dismiss")
+                            }
+                        }
+                    )
+                }
                 
                 authError?.let { error ->
                     AlertDialog(

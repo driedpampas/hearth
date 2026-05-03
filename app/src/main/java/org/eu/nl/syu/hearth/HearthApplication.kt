@@ -36,6 +36,7 @@ class HearthApplication : Application(), Configuration.Provider, ImageLoaderFact
 
     override fun onCreate() {
         super.onCreate()
+        org.eu.nl.syu.hearth.common.crash.GlobalCrashHandler.initialize(this)
     }
 
     override val workManagerConfiguration: Configuration
