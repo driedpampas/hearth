@@ -33,6 +33,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.eu.nl.syu.hearth.R
 import org.eu.nl.syu.hearth.data.AuthRepository
 import org.eu.nl.syu.hearth.data.ModelRepository
 import java.io.File
@@ -263,7 +264,7 @@ class DownloadWorker @AssistedInject constructor(
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle("Downloading $fileName")
             .setContentText(contentText)
-            //.setSmallIcon(org.eu.nl.syu.hearth.R.mipmap.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setProgress(100, progress, progress <= 0)

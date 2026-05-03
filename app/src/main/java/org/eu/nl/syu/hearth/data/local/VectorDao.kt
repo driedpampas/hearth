@@ -106,4 +106,11 @@ interface VectorDao {
     @SkipQueryVerification
     @Query("DELETE FROM vec_memory WHERE memory_id IN (SELECT id FROM memory_entries WHERE characterId = :characterId)")
     suspend fun deleteMemoryVectorsForCharacter(characterId: String)
+    @SkipQueryVerification
+    @Query("SELECT COUNT(*) FROM vec_lore vl INNER JOIN lore_chunks lc ON vl.lore_id = lc.id WHERE lc.characterId = :characterId AND lc.threadId IS NULL")
+    suspend fun getGlobalLoreVectorCount(characterId: String): Int
+
+    @SkipQueryVerification
+    @Query("SELECT COUNT(*) FROM vec_lore vl INNER JOIN lore_chunks lc ON vl.lore_id = lc.id WHERE lc.threadId = :threadId")
+    suspend fun getThreadLoreVectorCount(threadId: String): Int
 }

@@ -85,12 +85,21 @@ fun ThreadSettingsScreen(
                             }
                         },
                         actions = {
-                            IconButton(onClick = {
-                                viewModel.renameThread(threadTitle)
-                                viewModel.updateThreadLore(threadLore)
-                                onNavigateBack()
-                            }) {
-                                Icon(Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
+                            IconButton(
+                                onClick = {
+                                    viewModel.saveThreadSettings(threadTitle, threadLore, onDone = onNavigateBack)
+                                },
+                                enabled = !uiState.isEmbedding
+                            ) {
+                                if (uiState.isEmbedding) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
+                                }
                             }
                         }
                     )
@@ -105,7 +114,6 @@ fun ThreadSettingsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                // 1. Identity Header (Hero Style)
                 GlassySurface(
                     modifier = Modifier.fillMaxWidth(),
                     blurRadius = 1.dp,
@@ -153,18 +161,9 @@ fun ThreadSettingsScreen(
                                 }
                             }
                         )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "CONVERSATION INSTANCE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                            fontWeight = FontWeight.Bold
-                        )
                     }
                 }
 
-                // 2. Navigation Actions
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -174,12 +173,13 @@ fun ThreadSettingsScreen(
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
                     ) {
-                        Column(
+                        Row(
                             modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.width(12.dp))
                             Text("Edit Character", style = MaterialTheme.typography.labelLarge)
                         }
                     }
@@ -189,18 +189,18 @@ fun ThreadSettingsScreen(
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
                     ) {
-                        Column(
+                        Row(
                             modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(Icons.Default.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.width(12.dp))
                             Text("Model Config", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
 
-                // 3. Thread Lore Section
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         "THREAD LORE",
@@ -224,7 +224,6 @@ fun ThreadSettingsScreen(
                     )
                 }
 
-                // 4. Danger Zone / Reset
                 Button(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -254,7 +253,7 @@ fun ThreadSettingsScreen(
             AlertDialog(
                 onDismissRequest = { showResetDialog = false },
                 title = { Text("Reset Thread Settings") },
-                text = { Text("This will revert the title and lore to match the character's base values. Existing messages will remain.") },
+                text = { Text("This will revert the title and lore to match the character's base values. Messages will not be affected.") },
                 confirmButton = {
                     TextButton(onClick = {
                         threadTitle = uiState.character?.name ?: ""

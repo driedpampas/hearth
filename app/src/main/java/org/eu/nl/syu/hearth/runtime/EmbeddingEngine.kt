@@ -59,6 +59,15 @@ class EmbeddingEngine @Inject constructor(
     private val mutex = Mutex()
     private val callbackExecutor = Executors.newSingleThreadExecutor()
 
+    suspend fun isAvailable(): Boolean {
+        val selectedModelName = modelRepository.selectedEmbeddingModel.first() ?: "EmbeddingGemma-300m"
+        val availableModels = modelRepository.getAvailableModels()
+        val model = availableModels.find { it.name == selectedModelName } ?: return false
+        val fileName = modelRepository.getDownloadFileName(model)
+        val file = File(context.filesDir, "models/$fileName")
+        return file.exists()
+    }
+
     /**
      * Ensures the embedder is initialized with the currently selected embedding model.
      */

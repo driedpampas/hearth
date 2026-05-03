@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
             ChatTheme {
                 val authError by authRepository.authError.collectAsStateWithLifecycle()
                 
-                CharChatApp()
+                HearthApp()
                 
                 authError?.let { error ->
                     AlertDialog(
@@ -118,12 +118,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun CharChatApp() {
+fun HearthApp() {
     val navController = rememberNavController()
 
     androidx.compose.runtime.DisposableEffect(navController) {
         val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, destination, arguments ->
-            android.util.Log.d("CharChatNav", "Navigated to: ${destination.route} with args: $arguments")
+            android.util.Log.d("HearthNav", "Navigated to: ${destination.route} with args: $arguments")
         }
         navController.addOnDestinationChangedListener(listener)
         onDispose {

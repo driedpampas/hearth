@@ -66,6 +66,7 @@ import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.data.local.toEntity
 import org.eu.nl.syu.hearth.domain.ScraperUseCase
 import org.eu.nl.syu.hearth.runtime.LoreSyncManager
+import org.eu.nl.syu.hearth.runtime.EmbeddingEngine
 import org.eu.nl.syu.hearth.ui.components.*
 import java.io.File
 import java.util.UUID
@@ -105,7 +106,8 @@ class CreateCharacterViewModel @Inject constructor(
     private val scraperUseCase: ScraperUseCase,
     private val characterDao: CharacterDao,
     private val modelManager: ModelManager,
-    private val loreSyncManager: LoreSyncManager
+    private val loreSyncManager: LoreSyncManager,
+    private val embeddingEngine: EmbeddingEngine
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CreateCharacterState())
     val uiState: StateFlow<CreateCharacterState> = _uiState.asStateFlow()
@@ -245,46 +247,69 @@ class CreateCharacterViewModel @Inject constructor(
     }
 
     fun saveCharacter(onSuccess: () -> Unit) {
+        Log.d("CreateCharacterViewModel", "saveCharacter: Entry")
         viewModelScope.launch {
-            val state = _uiState.value
-            if (state.modelPath.isBlank()) return@launch
-            val characterId = state.characterId ?: UUID.randomUUID().toString()
-            val character = Character(
-                id = characterId,
-                name = state.name,
-                tagline = state.tagline,
-                avatarUrl = null,
-                roleInstruction = state.lore,
-                reminderMessage = state.reminderMessage,
-                modelReference = state.modelPath,
-                temp = state.temp,
-                topP = state.topP,
-                topK = state.topK,
-                enableThinking = state.enableThinking,
-                knowledgeBase = state.knowledgeBase,
-                sceneBackgroundUrl = null,
-                isPredefined = false,
-                initialMessages = state.initialMessages.map { sm ->
-                    ChatMessage(
-                        role = sm.author,
-                        content = sm.content,
-                        isHiddenFromUser = sm.isHiddenFromUser,
-                        isHiddenFromAi = sm.isHiddenFromAi
-                    )
+            try {
+                val state = _uiState.value
+                Log.d("CreateCharacterViewModel", "saveCharacter: state.name=${state.name}, modelPath=${state.modelPath}")
+                
+                if (state.name.isBlank()) {
+                    Log.w("CreateCharacterViewModel", "saveCharacter: Name is blank, but allowing save for now.")
                 }
-            )
-            characterDao.insertCharacter(character.toEntity())
-            
-            // Sync BOTH core identity and deep lore to RAG layer
-            val combinedLore = listOf(state.lore, state.knowledgeBase)
-                .filter { it.isNotBlank() }
-                .joinToString("\n\n---\n\n")
-            
-            Log.d("CreateCharacterViewModel", "Saving character ${character.name}, starting lore sync...")
-            loreSyncManager.syncLore(character, combinedLore)
-            
-            if (loreSyncManager.syncState.value !is LoreSyncManager.SyncState.Error) {
+
+                val characterId = state.characterId ?: UUID.randomUUID().toString()
+                val character = Character(
+                    id = characterId,
+                    name = state.name.ifBlank { "Untitled Character" },
+                    tagline = state.tagline,
+                    avatarUrl = null,
+                    roleInstruction = state.lore,
+                    reminderMessage = state.reminderMessage,
+                    modelReference = state.modelPath,
+                    temp = state.temp,
+                    topP = state.topP,
+                    topK = state.topK,
+                    enableThinking = state.enableThinking,
+                    knowledgeBase = state.knowledgeBase,
+                    sceneBackgroundUrl = null,
+                    isPredefined = false,
+                    initialMessages = state.initialMessages.map { sm ->
+                        ChatMessage(
+                            role = sm.author,
+                            content = sm.content,
+                            isHiddenFromUser = sm.isHiddenFromUser,
+                            isHiddenFromAi = sm.isHiddenFromAi
+                        )
+                    }
+                )
+                
+                Log.d("CreateCharacterViewModel", "saveCharacter: Inserting into DB...")
+                characterDao.insertCharacter(character.toEntity())
+                Log.d("CreateCharacterViewModel", "saveCharacter: Inserted successfully")
+                
+                // Sync BOTH core identity and deep lore to RAG layer ONLY if engine is available
+                val combinedLore = listOf(state.lore, state.knowledgeBase)
+                    .filter { it.isNotBlank() }
+                    .joinToString("\n\n---\n\n")
+
+                Log.d("CreateCharacterViewModel", "saveCharacter: Combined lore length=${combinedLore.length}, engineAvailable=${embeddingEngine.isAvailable()}")
+                
+                if (embeddingEngine.isAvailable() && combinedLore.isNotBlank()) {
+                    Log.d("CreateCharacterViewModel", "saveCharacter: Starting lore sync...")
+                    loreSyncManager.syncLore(character, combinedLore)
+                    
+                    // If sync failed with an error, we might want to let the user see it
+                    // but since the character IS saved, we can also just navigate back
+                    // and let the chat screen handle missing embeddings later.
+                    // To follow "allow them", we navigate back anyway.
+                } else {
+                    Log.d("CreateCharacterViewModel", "saveCharacter: Skipping lore sync (engine unavailable or no lore)")
+                }
+                
+                Log.d("CreateCharacterViewModel", "saveCharacter: Calling onSuccess")
                 onSuccess()
+            } catch (e: Exception) {
+                Log.e("CreateCharacterViewModel", "saveCharacter: Error saving character", e)
             }
         }
     }

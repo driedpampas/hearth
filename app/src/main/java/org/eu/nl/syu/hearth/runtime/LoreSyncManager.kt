@@ -33,6 +33,20 @@ class LoreSyncManager @Inject constructor(
         data class Error(val message: String) : SyncState()
     }
 
+    suspend fun isSynced(characterId: String, threadId: String?): Boolean = withContext(Dispatchers.IO) {
+        if (threadId == null) {
+            val chunkCount = db.loreChunkDao().getGlobalChunkCount(characterId)
+            if (chunkCount == 0) return@withContext true
+            val vectorCount = db.vectorDao().getGlobalLoreVectorCount(characterId)
+            vectorCount >= chunkCount
+        } else {
+            val chunkCount = db.loreChunkDao().getThreadChunkCount(threadId)
+            if (chunkCount == 0) return@withContext true
+            val vectorCount = db.vectorDao().getThreadLoreVectorCount(threadId)
+            vectorCount >= chunkCount
+        }
+    }
+
     /**
      * Re-chunks and re-embeds lore for a character or specific thread.
      * Handles templating {{char}} and {{user}} before embedding.

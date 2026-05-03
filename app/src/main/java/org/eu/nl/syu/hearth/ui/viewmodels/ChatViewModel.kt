@@ -157,7 +157,12 @@ class ChatViewModel @Inject constructor(
             val openedAt = System.currentTimeMillis()
             characterDao.updateLastUsedAt(character.id, openedAt)
             
-            val allMessages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
+            val dbMessages = chatMessageDao.getMessagesForThread(threadId).map { it.toDomain() }
+            val allMessages = if (dbMessages.isEmpty() && threadEntity == null) {
+                character.initialMessages
+            } else {
+                dbMessages
+            }
             
             // Group by versionGroupId. If versionGroupId is null, treat as single version.
             val grouped = allMessages.groupBy { it.versionGroupId ?: it.id }
@@ -340,6 +345,43 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
 
+            // Ensure lore is synced before generation
+            val isGlobalSynced = loreSyncManager.isSynced(character.id, null)
+            val isThreadSynced = loreSyncManager.isSynced(character.id, threadId)
+            
+            if (!isGlobalSynced || !isThreadSynced) {
+                if (!embeddingEngine.isAvailable()) {
+                    _uiState.update { it.copy(modelError = "Embedding model not found. Please download it in Settings to enable Lore RAG.") }
+                    return@launch
+                }
+                
+                _uiState.update { it.copy(isEmbedding = true, isGenerating = true) }
+                
+                try {
+                    if (!isGlobalSynced) {
+                        val combinedLore = listOf(character.roleInstruction, character.knowledgeBase)
+                            .filter { it.isNotBlank() }
+                            .joinToString("\n\n---\n\n")
+                        loreSyncManager.syncLore(character, combinedLore, null)
+                    }
+                    
+                    if (!isThreadSynced) {
+                        val threadEntity = chatThreadDao.getThreadById(threadId)
+                        if (threadEntity?.threadLore != null) {
+                            loreSyncManager.syncLore(character, threadEntity.threadLore, threadId)
+                        }
+                    }
+
+                    if (loreSyncManager.syncState.value is LoreSyncManager.SyncState.Error) {
+                        val error = (loreSyncManager.syncState.value as LoreSyncManager.SyncState.Error).message
+                        _uiState.update { it.copy(modelError = "Failed to embed lore: $error", isEmbedding = false, isGenerating = false) }
+                        return@launch
+                    }
+                } finally {
+                    _uiState.update { it.copy(isEmbedding = false) }
+                }
+            }
+
             // Ensure thread exists in DB before inserting message
             if (!isThreadSaved) {
                 val count = chatThreadDao.getThreadCountForCharacter(character.id)
@@ -352,6 +394,16 @@ class ChatViewModel @Inject constructor(
                     lastMessageAt = startTime
                 )
                 chatThreadDao.insertThread(newThread.toEntity())
+                
+                // Seed initial messages into the database
+                character.initialMessages.forEachIndexed { index, msg ->
+                    val seededMsg = msg.copy(
+                        id = java.util.UUID.randomUUID().toString(),
+                        timestamp = startTime - (character.initialMessages.size - index) * 10
+                    )
+                    chatMessageDao.insertMessage(seededMsg.toEntity(character.id, threadId))
+                }
+                
                 isThreadSaved = true
             }
 
@@ -795,6 +847,28 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             chatThreadDao.updateThreadTitle(threadId, newTitle)
             _uiState.update { it.copy(threadTitle = newTitle) }
+        }
+    }
+
+    fun saveThreadSettings(newTitle: String, newLore: String, onDone: () -> Unit) {
+        val threadId = activeThreadId ?: return
+        val character = _uiState.value.character ?: return
+        
+        viewModelScope.launch {
+            // 1. Update Title
+            chatThreadDao.updateThreadTitle(threadId, newTitle)
+            _uiState.update { it.copy(threadTitle = newTitle) }
+            
+            // 2. Update Lore Source
+            val thread = chatThreadDao.getThreadById(threadId)?.toDomain() ?: return@launch
+            chatThreadDao.insertThread(thread.copy(threadLore = newLore).toEntity())
+            _uiState.update { it.copy(threadLore = newLore) }
+            
+            // 3. Sync Embeddings (this is suspend and sets isEmbedding = true via syncState)
+            loreSyncManager.syncLore(character, newLore, threadId)
+            
+            // 4. Return to chat
+            onDone()
         }
     }
 

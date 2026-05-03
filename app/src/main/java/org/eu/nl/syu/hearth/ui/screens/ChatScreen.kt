@@ -303,24 +303,25 @@ fun ChatScreen(
 
                     if (uiState.messages.filter { !it.isHiddenFromUser }.isEmpty() && 
                         !uiState.isLoadingModel && 
-                        uiState.modelError == null && 
                         !uiState.isGenerating && 
                         uiState.currentGeneratingText.isEmpty()) {
                         item {
-                            EmptyChatPlaceholder(characterName = uiState.character?.name ?: "Assistant")
+                            EmptyChatPlaceholder(character = uiState.character)
                         }
                     }
 
                     if (uiState.isGenerating && uiState.currentGeneratingText.isEmpty() && uiState.regeneratingMessageId == null) {
                         item {
-                            TypingIndicator()
+                            TypingIndicator(
+                                label = if (uiState.isEmbedding) "Embedding lore..." else "AI is thinking..."
+                            )
                         }
                     }
 
                     if (uiState.isSummarizing || uiState.isEmbedding) {
                         item {
                             StatusIndicator(
-                                text = if (uiState.isSummarizing) "Summarizing conversation..." else "Embedding memories..."
+                                text = if (uiState.isSummarizing) "Summarizing conversation..." else "Embedding lore..."
                             )
                         }
                     }
@@ -657,7 +658,7 @@ private fun resolveModelDisplayName(modelReference: String?, modelNamesByFile: M
 }
 
 @Composable
-fun TypingIndicator() {
+fun TypingIndicator(label: String = "AI is thinking...") {
     Row(
         modifier = Modifier.padding(8.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -683,7 +684,7 @@ fun TypingIndicator() {
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
-        Text("AI is thinking...", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
     }
 }
 
@@ -710,7 +711,7 @@ fun StatusIndicator(text: String) {
 }
 
 @Composable
-private fun EmptyChatPlaceholder(characterName: String) {
+private fun EmptyChatPlaceholder(character: org.eu.nl.syu.hearth.data.Character?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -726,10 +727,20 @@ private fun EmptyChatPlaceholder(characterName: String) {
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Conversation with $characterName",
+            text = "Conversation with ${character?.name ?: "Assistant"}",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (character?.tagline?.isNotBlank() == true) {
+            Text(
+                text = character.tagline,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 4.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "Start by sending a message below.",
             style = MaterialTheme.typography.bodyMedium,

@@ -57,10 +57,10 @@ object AppModule {
         return Room.databaseBuilder(
             context,
             AppDatabase::class.java,
-            "charchat_db"
+            "hearth_db"
         )
             .setDriver(driver)
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+            .fallbackToDestructiveMigration(true)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)
@@ -135,8 +135,8 @@ object AppModule {
             """
                 INSERT INTO characters (
                     id, name, tagline, avatarUrl, roleInstruction, reminderMessage,
-                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, sceneBackgroundUrl, isPredefined, initialMessagesJson, lastUsedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, knowledgeBase, sceneBackgroundUrl, isPredefined, initialMessagesJson, lastUsedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
             arrayOf<Any?>(
                 character.id,
@@ -153,6 +153,7 @@ object AppModule {
                 character.enableThinkingCompatibility,
                 character.thinkingCompatibilityToken,
                 character.includeThinkingInContext,
+                character.knowledgeBase,
                 character.sceneBackgroundUrl,
                 if (character.isPredefined) 1 else 0, "[]",
                 character.lastUsedAt
@@ -168,8 +169,8 @@ object AppModule {
             """
                 INSERT INTO characters (
                     id, name, tagline, avatarUrl, roleInstruction, reminderMessage,
-                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, sceneBackgroundUrl, isPredefined, initialMessagesJson, lastUsedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    modelReference, temp, topP, topK, enableThinking, enableThinkingCompatibility, thinkingCompatibilityToken, includeThinkingInContext, knowledgeBase, sceneBackgroundUrl, isPredefined, initialMessagesJson, lastUsedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
         ).use { statement ->
             statement.bindText(1, character.id)
@@ -186,10 +187,11 @@ object AppModule {
             statement.bindBoolean(12, character.enableThinkingCompatibility)
             statement.bindText(13, character.thinkingCompatibilityToken)
             statement.bindBoolean(14, character.includeThinkingInContext)
-            if (character.sceneBackgroundUrl == null) statement.bindNull(15) else statement.bindText(15, character.sceneBackgroundUrl)
-            statement.bindBoolean(16, character.isPredefined)
-            statement.bindText(17, "[]")
-            statement.bindLong(18, character.lastUsedAt)
+            statement.bindText(15, character.knowledgeBase)
+            if (character.sceneBackgroundUrl == null) statement.bindNull(16) else statement.bindText(16, character.sceneBackgroundUrl)
+            statement.bindBoolean(17, character.isPredefined)
+            statement.bindText(18, "[]")
+            statement.bindLong(19, character.lastUsedAt)
             statement.step()
         }
     }
@@ -235,115 +237,5 @@ object AppModule {
     @Provides
     fun provideLoreChunkDao(database: AppDatabase): LoreChunkDao {
         return database.loreChunkDao()
-    }
-}
-
-private val MIGRATION_2_3 = object : Migration(2, 3) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.prepare("ALTER TABLE characters ADD COLUMN lastUsedAt INTEGER NOT NULL DEFAULT 0").use { statement ->
-            statement.step()
-        }
-    }
-}
-
-private val MIGRATION_3_4 = object : Migration(3, 4) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.prepare("ALTER TABLE chat_messages ADD COLUMN modelReference TEXT").use { statement ->
-            statement.step()
-        }
-        connection.prepare("ALTER TABLE chat_messages ADD COLUMN generationTimeMs INTEGER").use { statement ->
-            statement.step()
-        }
-        connection.prepare("ALTER TABLE chat_messages ADD COLUMN tokensPerSecond REAL").use { statement ->
-            statement.step()
-        }
-    }
-}
-
-private val MIGRATION_4_5 = object : Migration(4, 5) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.prepare("CREATE TABLE IF NOT EXISTS chat_threads (id TEXT NOT NULL PRIMARY KEY, characterId TEXT NOT NULL, title TEXT NOT NULL, createdAt INTEGER NOT NULL, lastMessageAt INTEGER NOT NULL)").use { it.step() }
-        connection.prepare("CREATE TABLE IF NOT EXISTS chat_messages_new (id TEXT NOT NULL PRIMARY KEY, characterId TEXT NOT NULL, threadId TEXT, role TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL, isHiddenFromAi INTEGER NOT NULL, modelReference TEXT, generationTimeMs INTEGER, tokensPerSecond REAL, FOREIGN KEY(threadId) REFERENCES chat_threads(id) ON DELETE CASCADE)").use { it.step() }
-        connection.prepare("INSERT INTO chat_messages_new (id, characterId, threadId, role, content, timestamp, isHiddenFromAi, modelReference, generationTimeMs, tokensPerSecond) SELECT id, characterId, NULL, role, content, timestamp, isHiddenFromAi, modelReference, generationTimeMs, tokensPerSecond FROM chat_messages").use { it.step() }
-        connection.prepare("DROP TABLE chat_messages").use { it.step() }
-        connection.prepare("ALTER TABLE chat_messages_new RENAME TO chat_messages").use { it.step() }
-        connection.prepare("CREATE INDEX IF NOT EXISTS index_chat_messages_threadId ON chat_messages(threadId)").use { it.step() }
-    }
-}
-
-private val MIGRATION_5_6 = object : Migration(5, 6) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.prepare("ALTER TABLE characters ADD COLUMN enableThinking INTEGER NOT NULL DEFAULT 0").use { it.step() }
-    }
-}
-
-private val MIGRATION_6_7 = object : Migration(6, 7) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.prepare("ALTER TABLE chat_threads ADD COLUMN sequenceId INTEGER NOT NULL DEFAULT 0").use { it.step() }
-        connection.prepare("""
-            UPDATE chat_threads 
-            SET sequenceId = (
-                SELECT COUNT(*) 
-                FROM chat_threads AS t2 
-                WHERE t2.characterId = chat_threads.characterId 
-                AND (t2.createdAt < chat_threads.createdAt OR (t2.createdAt = chat_threads.createdAt AND t2.id <= chat_threads.id))
-            )
-        """.trimIndent()).use { it.step() }
-    }
-}
-
-private val MIGRATION_7_8 = object : Migration(7, 8) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.prepare("ALTER TABLE chat_messages ADD COLUMN parentId TEXT").use { it.step() }
-        connection.prepare("ALTER TABLE chat_messages ADD COLUMN versionGroupId TEXT").use { it.step() }
-        connection.prepare("ALTER TABLE chat_messages ADD COLUMN versionIndex INTEGER NOT NULL DEFAULT 0").use { it.step() }
-    }
-}
-
-private val MIGRATION_8_9 = object : Migration(8, 9) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.prepare("ALTER TABLE characters ADD COLUMN enableThinkingCompatibility INTEGER NOT NULL DEFAULT 0").use { it.step() }
-        connection.prepare("ALTER TABLE characters ADD COLUMN thinkingCompatibilityToken TEXT NOT NULL DEFAULT ''").use { it.step() }
-    }
-}
-
-private val MIGRATION_9_10 = object : Migration(9, 10) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.prepare("ALTER TABLE characters ADD COLUMN includeThinkingInContext INTEGER NOT NULL DEFAULT 0").use { it.step() }
-    }
-}
-
-private val MIGRATION_10_11 = object : Migration(10, 11) {
-    override fun migrate(connection: SQLiteConnection) {
-        // CharacterEntity: rename systemPromptLore to roleInstruction
-        connection.prepare("ALTER TABLE characters RENAME COLUMN systemPromptLore TO roleInstruction").use { it.step() }
-        
-        // ChatThreadEntity: add styleJson
-        connection.prepare("ALTER TABLE chat_threads ADD COLUMN styleJson TEXT").use { it.step() }
-        
-        // MemoryEntryEntity: add startMessageTimestamp, endMessageTimestamp
-        connection.prepare("ALTER TABLE memory_entries ADD COLUMN startMessageTimestamp INTEGER NOT NULL DEFAULT 0").use { it.step() }
-        connection.prepare("ALTER TABLE memory_entries ADD COLUMN endMessageTimestamp INTEGER NOT NULL DEFAULT 0").use { it.step() }
-    }
-}
-private val MIGRATION_11_12 = object : Migration(11, 12) {
-    override fun migrate(connection: SQLiteConnection) {
-        // LoreChunkEntity: add threadId
-        connection.prepare("ALTER TABLE lore_chunks ADD COLUMN threadId TEXT").use { it.step() }
-        
-        // ChatThreadEntity: add threadLore
-        connection.prepare("ALTER TABLE chat_threads ADD COLUMN threadLore TEXT").use { it.step() }
-    }
-}
-private val MIGRATION_12_13 = object : Migration(12, 13) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.prepare("ALTER TABLE characters ADD COLUMN knowledgeBase TEXT NOT NULL DEFAULT ''").use { it.step() }
-    }
-}
-
-private val MIGRATION_13_14 = object : Migration(13, 14) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.prepare("ALTER TABLE characters ADD COLUMN initialMessagesJson TEXT NOT NULL DEFAULT '[]'").use { it.step() }
-        connection.prepare("ALTER TABLE chat_messages ADD COLUMN isHiddenFromUser INTEGER NOT NULL DEFAULT 0").use { it.step() }
     }
 }

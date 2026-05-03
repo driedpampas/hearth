@@ -179,15 +179,14 @@ class HomeViewModel @Inject constructor(
 
     fun loadCharacters() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            val characters = withContext(Dispatchers.IO) {
-                characterDao.getAllCharacters().map { it.toDomain() }
-            }
-            _uiState.update {
-                it.copy(
-                    characters = characters,
-                    isLoading = false
-                )
+            characterDao.getAllCharactersFlow().collectLatest { entities ->
+                val characters = entities.map { it.toDomain() }
+                _uiState.update {
+                    it.copy(
+                        characters = characters,
+                        isLoading = false
+                    )
+                }
             }
         }
     }

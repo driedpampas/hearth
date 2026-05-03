@@ -124,6 +124,9 @@ interface CharacterDao {
     @Query("SELECT * FROM characters ORDER BY lastUsedAt DESC, name COLLATE NOCASE ASC")
     suspend fun getAllCharacters(): List<CharacterEntity>
 
+    @Query("SELECT * FROM characters ORDER BY lastUsedAt DESC, name COLLATE NOCASE ASC")
+    fun getAllCharactersFlow(): Flow<List<CharacterEntity>>
+
     @Query("SELECT * FROM characters WHERE id = :id")
     suspend fun getCharacterById(id: String): CharacterEntity?
 
@@ -254,6 +257,12 @@ interface LoreChunkDao {
 
     @Query("DELETE FROM lore_chunks WHERE threadId = :threadId")
     suspend fun deleteChunksForThread(threadId: String)
+
+    @Query("SELECT COUNT(*) FROM lore_chunks WHERE characterId = :characterId AND threadId IS NULL")
+    suspend fun getGlobalChunkCount(characterId: String): Int
+
+    @Query("SELECT COUNT(*) FROM lore_chunks WHERE threadId = :threadId")
+    suspend fun getThreadChunkCount(threadId: String): Int
 }
 
 @Database(
@@ -264,7 +273,7 @@ interface LoreChunkDao {
         LoreChunkEntity::class, 
         MemoryEntryEntity::class
     ], 
-    version = 14, 
+    version = 1, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
