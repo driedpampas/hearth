@@ -71,6 +71,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.eu.nl.syu.hearth.common.ModelSizeUtils
+import org.eu.nl.syu.hearth.data.AllowedModel
+import org.eu.nl.syu.hearth.ui.components.FadeTextAnimation
 import org.eu.nl.syu.hearth.ui.components.GlassyDropdownMenu
 import org.eu.nl.syu.hearth.ui.components.GlassySurface
 import org.eu.nl.syu.hearth.ui.viewmodels.HomeUiState
@@ -209,9 +211,9 @@ fun ModelPickerScreen(
 
         Box(modifier = Modifier.fillMaxSize()) {
             when {
-                        uiState.isModelLoading -> {
+                uiState.isModelLoading -> {
                     Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                        org.eu.nl.syu.hearth.ui.components.FadeTextAnimation(text = "Loading model...")
+                        FadeTextAnimation(text = "Loading model...")
                     }
                 }
                 uiState.notification != null -> {
@@ -300,7 +302,7 @@ fun ModelPickerScreen(
 private fun ModelItem(
     mFile: java.io.File,
     uiState: HomeUiState,
-    filenameToModel: Map<String, org.eu.nl.syu.hearth.data.AllowedModel>,
+    filenameToModel: Map<String, AllowedModel>,
     onSelectModel: (java.io.File) -> Unit,
     onOpenModelSettings: () -> Unit,
     isFailed: Boolean = false,

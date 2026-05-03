@@ -61,6 +61,7 @@ import org.eu.nl.syu.hearth.ui.screens.SettingsHuggingFaceAccountScreen
 import org.eu.nl.syu.hearth.ui.screens.SettingsLiteRtModelsScreen
 import org.eu.nl.syu.hearth.ui.screens.SettingsMainScreen
 import org.eu.nl.syu.hearth.ui.screens.SettingsModelsScreen
+import org.eu.nl.syu.hearth.ui.screens.ThreadSettingsScreen
 import org.eu.nl.syu.hearth.ui.theme.ChatTheme
 import javax.inject.Inject
 
@@ -232,6 +233,22 @@ fun CharChatApp() {
                     },
                     onNavigateToEditCharacter = { characterId ->
                         navController.navigate("create_character?characterId=$characterId")
+                    },
+                    onNavigateToThreadSettings = { tid ->
+                        navController.navigate("thread_settings/$tid")
+                    }
+                )
+            }
+            composable(route = "thread_settings/{threadId}") { backStackEntry ->
+                val threadId = backStackEntry.arguments?.getString("threadId") ?: ""
+                ThreadSettingsScreen(
+                    threadId = threadId,
+                    onNavigateBack = { safeNavigateBack() },
+                    onNavigateToEditCharacter = { characterId ->
+                        navController.navigate("create_character?characterId=$characterId")
+                    },
+                    onNavigateToModelSettings = { characterId ->
+                        navController.navigate("model_settings/$characterId")
                     }
                 )
             }

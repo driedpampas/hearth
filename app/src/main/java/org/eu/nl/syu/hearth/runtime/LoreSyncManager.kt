@@ -13,6 +13,7 @@ import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.local.AppDatabase
 import org.eu.nl.syu.hearth.data.local.LoreChunkEntity
 import org.eu.nl.syu.hearth.domain.LoreSplitter
+import org.eu.nl.syu.hearth.domain.TemplateProcessor
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -57,7 +58,7 @@ class LoreSyncManager @Inject constructor(
             val chunks: List<String> = loreSplitter.splitLore(loreText)
             val chunkEntities = chunks.map { text ->
                 // Resolve templates before embedding
-                val processedText = org.eu.nl.syu.hearth.domain.TemplateProcessor.process(text, character, userName)
+                val processedText = TemplateProcessor.process(text, character, userName)
                 LoreChunkEntity(
                     id = UUID.randomUUID().toString(),
                     characterId = character.id,

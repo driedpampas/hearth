@@ -394,7 +394,6 @@ fun CreateCharacterScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // 1. Identity Section (Hero)
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 GlassySurface(
                     modifier = Modifier.fillMaxWidth(),
@@ -524,8 +523,7 @@ fun CreateCharacterScreen(
                 }
             }
 
-            // 2. The Brain (Instructions vs Reminder)
-            org.eu.nl.syu.hearth.ui.components.GlassySurface(
+            GlassySurface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)
             ) {
@@ -582,7 +580,6 @@ fun CreateCharacterScreen(
                 }
             }
 
-            // 3. Knowledge Base (Lore & Scraper)
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -655,7 +652,6 @@ fun CreateCharacterScreen(
                 }
             }
 
-            // 4. Creative: Initial Messages (Full Width)
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.ChatBubbleOutline, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.secondary)
@@ -792,7 +788,6 @@ fun CreateCharacterScreen(
                 }
             }
 
-            // 5. Model & Technical Section
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Memory, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
@@ -1032,7 +1027,7 @@ fun LoreSyncOverlay() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
             .clickable(enabled = false) {},
         contentAlignment = Alignment.Center
     ) {

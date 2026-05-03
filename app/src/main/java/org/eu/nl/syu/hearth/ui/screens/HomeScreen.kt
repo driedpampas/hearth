@@ -215,7 +215,7 @@ fun HomeScreen(
                                 modifier = Modifier.graphicsLayer {
                                     rotationZ = fabProgress * 45f
                                 },
-                                tint = MaterialTheme.colorScheme.onSurface //if (!fabMenuExpanded && isSystemInDarkTheme()) MaterialTheme.colorScheme.onPrimary else Color.Unspecified
+                                tint = if (!fabMenuExpanded) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     }

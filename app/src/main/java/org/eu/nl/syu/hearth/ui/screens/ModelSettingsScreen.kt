@@ -76,6 +76,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.eu.nl.syu.hearth.ui.components.FadeTextAnimation
 import org.eu.nl.syu.hearth.ui.components.WavyVerticalDivider
 import org.eu.nl.syu.hearth.ui.viewmodels.ModelSettingsViewModel
 
@@ -403,7 +404,7 @@ fun ModelSettingsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        org.eu.nl.syu.hearth.ui.components.FadeTextAnimation(text = "Applying changes...")
+                        FadeTextAnimation(text = "Applying changes...")
                     }
                 }
             }

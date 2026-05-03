@@ -36,6 +36,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import org.eu.nl.syu.hearth.data.Character
+import org.eu.nl.syu.hearth.data.ChatMessage
+import org.eu.nl.syu.hearth.data.MessageRole
 import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.stripThinking
 import java.io.File
@@ -159,9 +161,9 @@ class LiteRtEngineWrapper @Inject constructor(
     }
 
     fun sendMessage(
-        text: String, 
-        reminder: String = "", 
-        history: List<org.eu.nl.syu.hearth.data.ChatMessage> = emptyList(),
+        text: String,
+        reminder: String = "",
+        history: List<ChatMessage> = emptyList(),
         includeThinking: Boolean = false,
         enableThinking: Boolean = false
     ): Flow<String> = callbackFlow {
@@ -169,7 +171,7 @@ class LiteRtEngineWrapper @Inject constructor(
         
         if (history.isNotEmpty()) {
             history.filter { !it.isHiddenFromAi }.forEach { msg ->
-                val roleName = if (msg.role == org.eu.nl.syu.hearth.data.MessageRole.USER) "User" else "Assistant"
+                val roleName = if (msg.role == MessageRole.USER) "User" else "Assistant"
                 // Clean content from thinking tags if not requested to keep them
                 var content = msg.content
                 if (!includeThinking) {

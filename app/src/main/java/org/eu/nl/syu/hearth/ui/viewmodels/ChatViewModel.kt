@@ -43,6 +43,8 @@ import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.local.CharacterDao
 import org.eu.nl.syu.hearth.data.local.ChatMessageDao
 import org.eu.nl.syu.hearth.data.local.ChatThreadDao
+import org.eu.nl.syu.hearth.data.local.MemoryDao
+import org.eu.nl.syu.hearth.data.local.VectorDao
 import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.data.local.toEntity
 import org.eu.nl.syu.hearth.data.stripThinking
@@ -52,6 +54,8 @@ import org.eu.nl.syu.hearth.runtime.MemorySyncWorker
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Data
+import org.eu.nl.syu.hearth.domain.NarrativeContextFactory
+import org.eu.nl.syu.hearth.runtime.LoreSyncManager
 import java.io.File
 import javax.inject.Inject
 
@@ -88,10 +92,10 @@ class ChatViewModel @Inject constructor(
     private val embeddingEngine: EmbeddingEngine,
     private val modelManager: ModelManager,
     private val modelRepository: ModelRepository,
-    private val narrativeContextFactory: org.eu.nl.syu.hearth.domain.NarrativeContextFactory,
-    private val vectorDao: org.eu.nl.syu.hearth.data.local.VectorDao,
-    private val memoryDao: org.eu.nl.syu.hearth.data.local.MemoryDao,
-    private val loreSyncManager: org.eu.nl.syu.hearth.runtime.LoreSyncManager,
+    private val narrativeContextFactory: NarrativeContextFactory,
+    private val vectorDao: VectorDao,
+    private val memoryDao: MemoryDao,
+    private val loreSyncManager: LoreSyncManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
 
@@ -100,6 +104,16 @@ class ChatViewModel @Inject constructor(
     private var activeThreadId: String? = null
     private var isThreadSaved: Boolean = false
     private var generationJob: kotlinx.coroutines.Job? = null
+    private var syncJob: kotlinx.coroutines.Job? = null
+
+    init {
+        // Observe embedding state from LoreSyncManager
+        syncJob = loreSyncManager.syncState
+            .onEach { state ->
+                _uiState.update { it.copy(isEmbedding = state is LoreSyncManager.SyncState.Syncing) }
+            }
+            .launchIn(viewModelScope)
+    }
 
     fun stopGeneration() {
         generationJob?.cancel()
@@ -109,6 +123,13 @@ class ChatViewModel @Inject constructor(
 
     fun loadConversation(conversationId: String) {
         viewModelScope.launch {
+            // Auto-initialize embedding engine for RAG tasks
+            try {
+                embeddingEngine.ensureInitialized()
+            } catch (e: Exception) {
+                android.util.Log.e("ChatViewModel", "Failed to auto-initialize embedding engine", e)
+            }
+
             val threadEntity = chatThreadDao.getThreadById(conversationId)
             isThreadSaved = threadEntity != null
             val character = when {
@@ -288,6 +309,9 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingModel = true, modelError = null) }
             try {
+                // Also ensure embedding engine is ready
+                embeddingEngine.ensureInitialized()
+                
                 val maxTokens = modelRepository.defaultMaxTokens.first()
                 withContext(Dispatchers.IO) {
                     engineWrapper.initialize(modelPath, maxTokens = maxTokens)
@@ -461,6 +485,9 @@ class ChatViewModel @Inject constructor(
             }
 
             try {
+                // Ensure embedding engine is ready
+                embeddingEngine.ensureInitialized()
+
                 val modelPath = resolveModelPath(character.modelReference)
                 if (modelPath.isNullOrBlank()) {
                     throw IllegalStateException("Model file not found: ${character.modelReference}")
@@ -501,6 +528,9 @@ class ChatViewModel @Inject constructor(
             val character = characterDao.getCharacterById(characterId)?.toDomain() ?: return@launch
             _uiState.update { it.copy(isLoadingModel = true, modelError = null) }
             try {
+                // Ensure embedding engine is ready
+                embeddingEngine.ensureInitialized()
+
                 val modelPath = resolveModelPath(character.modelReference)
                 if (modelPath == null) {
                     _uiState.update { it.copy(isLoadingModel = false, modelError = "Model file not found") }
@@ -796,6 +826,7 @@ class ChatViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        syncJob?.cancel()
     }
     fun updateThreadLore(newLore: String) {
         val character = _uiState.value.character ?: return

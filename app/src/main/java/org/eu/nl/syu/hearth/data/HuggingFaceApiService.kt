@@ -23,6 +23,7 @@ import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.eu.nl.syu.hearth.common.ProjectConfig
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -200,7 +201,7 @@ class HuggingFaceApiService @Inject constructor(
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             connection.doOutput = true
 
-            val clientId = org.eu.nl.syu.hearth.common.ProjectConfig.clientId
+            val clientId = ProjectConfig.clientId
             val postData = "grant_type=refresh_token&refresh_token=$refreshToken&client_id=$clientId"
 
             connection.outputStream.use { os ->

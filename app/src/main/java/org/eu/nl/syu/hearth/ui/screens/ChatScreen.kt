@@ -113,9 +113,11 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.google.gson.Gson
 import kotlinx.coroutines.launch
 import org.eu.nl.syu.hearth.data.AllowedModel
 import org.eu.nl.syu.hearth.data.ChatMessage
+import org.eu.nl.syu.hearth.data.ChatStyle
 import org.eu.nl.syu.hearth.data.MessageRole
 import org.eu.nl.syu.hearth.ui.components.GlassyDropdownMenu
 import org.eu.nl.syu.hearth.ui.components.GlassySurface
@@ -133,6 +135,7 @@ fun ChatScreen(
     onNavigateBack: () -> Unit,
     onNavigateToModelSettings: (String) -> Unit,
     onNavigateToEditCharacter: (String) -> Unit,
+    onNavigateToThreadSettings: (String) -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
     modelsViewModel: ModelsViewModel = hiltViewModel()
 ) {
@@ -146,16 +149,16 @@ fun ChatScreen(
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
-    var threadMenuExpanded by remember { mutableStateOf(false) }
-    var showRenameDialog by remember { mutableStateOf(false) }
-    var newThreadTitle by remember { mutableStateOf("") }
-    var showLoreDialog by remember { mutableStateOf(false) }
-    var tempThreadLore by remember { mutableStateOf("") }
+    var threadMenuExpanded by remember { mutableStateOf(false) } // Still used for something? No, let's remove.
+    // var showRenameDialog by remember { mutableStateOf(false) }
+    // var showLoreDialog by remember { mutableStateOf(false) }
+    // var newThreadTitle by remember { mutableStateOf("") }
+    // var tempThreadLore by remember { mutableStateOf("") }
 
     val chatStyle = remember(uiState.styleJson) {
         uiState.styleJson?.let {
             try {
-                com.google.gson.Gson().fromJson(it, org.eu.nl.syu.hearth.data.ChatStyle::class.java)
+                Gson().fromJson(it, ChatStyle::class.java)
             } catch (e: Exception) {
                 null
             }
@@ -227,49 +230,8 @@ fun ChatScreen(
                     },
                     actions = {
                         Box {
-                            IconButton(onClick = { threadMenuExpanded = true }) {
+                            IconButton(onClick = { onNavigateToThreadSettings(threadId) }) {
                                 Icon(Icons.Filled.Settings, contentDescription = "Thread settings")
-                            }
-                            
-                            GlassyDropdownMenu(
-                                expanded = threadMenuExpanded,
-                                onDismissRequest = { threadMenuExpanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Rename Thread") },
-                                    onClick = {
-                                        threadMenuExpanded = false
-                                        newThreadTitle = uiState.threadTitle ?: ""
-                                        showRenameDialog = true
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Thread Lore") },
-                                    onClick = {
-                                        threadMenuExpanded = false
-                                        tempThreadLore = uiState.threadLore ?: ""
-                                        showLoreDialog = true
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Character Editor") },
-                                    onClick = {
-                                        threadMenuExpanded = false
-                                        onNavigateToEditCharacter(uiState.character?.id ?: "")
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Model: ${resolveModelDisplayName(uiState.character?.modelReference, modelNamesByFile) ?: "Default"}") },
-                                    onClick = {
-                                        threadMenuExpanded = false
-                                        onNavigateToModelSettings(uiState.character?.id ?: "")
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null) },
-                                    enabled = uiState.modelError == null
-                                )
                             }
                         }
                     },
@@ -362,72 +324,12 @@ fun ChatScreen(
                             )
                         }
                     }
-                }
             }
         }
 
-    if (showRenameDialog) {
-        AlertDialog(
-            onDismissRequest = { showRenameDialog = false },
-            title = { Text("Rename Thread") },
-            text = {
-                OutlinedTextField(
-                    value = newThreadTitle,
-                    onValueChange = { newThreadTitle = it },
-                    label = { Text("New Title") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.renameThread(newThreadTitle)
-                    showRenameDialog = false
-                }) { Text("Rename") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
-
-    if (showLoreDialog) {
-        AlertDialog(
-            onDismissRequest = { showLoreDialog = false },
-            title = { Text("Thread-Specific Lore") },
-            text = {
-                Column {
-                    Text(
-                        "Add unique facts for this specific conversation. These take priority over global character lore.",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    OutlinedTextField(
-                        value = tempThreadLore,
-                        onValueChange = { tempThreadLore = it },
-                        label = { Text("Thread Lore") },
-                        placeholder = { Text("Separate individual facts with an empty line.") },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                        minLines = 3
-                    )
-                    Text(
-                        "Separate individual facts with an empty line.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.updateThreadLore(tempThreadLore)
-                    showLoreDialog = false
-                }) { Text("Save & Embed") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLoreDialog = false }) { Text("Cancel") }
-            }
-        )
+        if (uiState.isEmbedding) {
+            LoreSyncOverlay()
+        }
     }
 }
 

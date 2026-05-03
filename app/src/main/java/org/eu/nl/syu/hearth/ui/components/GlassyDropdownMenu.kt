@@ -27,10 +27,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
@@ -40,9 +43,10 @@ fun GlassyDropdownMenu(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
+    blurRadius: Dp = 8.dp,
     offset: DpOffset = DpOffset(0.dp, 0.dp),
     properties: PopupProperties = PopupProperties(focusable = true),
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable ColumnScope.() -> Unit = { Text(text = "text") }
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -62,7 +66,7 @@ fun GlassyDropdownMenu(
         Box(modifier = Modifier.padding(16.dp)) {
             GlassySurface(
                 shape = MaterialTheme.shapes.large,
-                blurRadius = 12.dp,
+                blurRadius = blurRadius,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f)
             ) {
                 Column(

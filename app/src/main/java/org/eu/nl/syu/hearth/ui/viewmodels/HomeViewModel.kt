@@ -42,6 +42,7 @@ import org.eu.nl.syu.hearth.data.local.LoreChunkDao
 import org.eu.nl.syu.hearth.data.local.MemoryDao
 import org.eu.nl.syu.hearth.data.local.VectorDao
 import org.eu.nl.syu.hearth.data.local.toDomain
+import org.eu.nl.syu.hearth.runtime.EmbeddingEngine
 import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
 import java.io.File
 import javax.inject.Inject
@@ -73,7 +74,8 @@ class HomeViewModel @Inject constructor(
     private val vectorDao: VectorDao,
     private val modelRepository: ModelRepository,
     private val modelManager: ModelManager,
-    private val engineWrapper: LiteRtEngineWrapper
+    private val engineWrapper: LiteRtEngineWrapper,
+    private val embeddingEngine: EmbeddingEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -294,6 +296,9 @@ class HomeViewModel @Inject constructor(
         }
 
         try {
+            // Also ensure embedding engine is ready
+            embeddingEngine.ensureInitialized()
+
             withContext(Dispatchers.IO) {
                 engineWrapper.initialize(
                     modelPath = file.absolutePath,
