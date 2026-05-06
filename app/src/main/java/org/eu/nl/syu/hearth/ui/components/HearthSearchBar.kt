@@ -10,6 +10,7 @@
 
 package org.eu.nl.syu.hearth.ui.components
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -63,6 +64,7 @@ fun HearthSearchBar(
         },
         expanded = active,
         onExpandedChange = onActiveChange,
+        windowInsets = WindowInsets(0.dp),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = if (active) 0.dp else 16.dp, vertical = 0.dp)

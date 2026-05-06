@@ -217,7 +217,12 @@ fun HearthApp() {
 
     Scaffold(
         bottomBar = {
-            if (!isWideScreen && currentRoute in listOf("home", "character_picker", "user_persona?scope=${EditScope.GLOBAL.name}", "user_persona")) {
+            val isTopLevelDestination = currentRoute in listOf(
+                "home",
+                "character_picker",
+                "user_persona?threadId={threadId}&characterId={characterId}&scope={scope}"
+            )
+            if (!isWideScreen && isTopLevelDestination) {
                 ShortNavigationBar {
                     navItems.forEach { item ->
                         val isSelected = currentRoute == item.route || (item.route.startsWith("user_persona") && currentRoute?.startsWith("user_persona") == true)
@@ -252,7 +257,12 @@ fun HearthApp() {
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            if (isWideScreen && currentRoute in listOf("home", "character_picker", "user_persona?scope=${EditScope.GLOBAL.name}", "user_persona")) {
+            val isTopLevelDestination = currentRoute in listOf(
+                "home",
+                "character_picker",
+                "user_persona?threadId={threadId}&characterId={characterId}&scope={scope}"
+            )
+            if (isWideScreen && isTopLevelDestination) {
                 NavigationRail(
                     header = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -306,202 +316,206 @@ fun HearthApp() {
                     enterTransition = { navEnterTransition() ?: fadeIn() },
                     exitTransition = { navExitTransition() ?: fadeOut() }
                 ) {
-            composable(route = "home") {
-                HomeScreen(
-                    onNavigateToChat = { id -> navController.navigate("chat/$id") },
-                    onNavigateToSettings = { navController.navigate("settings") },
-                    onNavigateToCreateCharacter = { id: String? -> 
-                        if (id != null) navController.navigate("create_character?characterId=$id")
-                        else navController.navigate("create_character")
-                    },
-                    onNavigateToModelSettings = { navController.navigate("model_settings") },
-                    onNavigateToModelPicker = { navController.navigate("model_picker") },
-                    onNavigateToCharacterPicker = { navController.navigate("character_picker") },
-                    onNavigateToUserPersona = { tid, cid, scope ->
-                        navController.navigate("user_persona?threadId=$tid&characterId=$cid&scope=${scope.name}")
-                    },
-                    onNavigateToCreatePersona = {
-                        navController.navigate("create_persona")
+                    composable(route = "home") {
+                        HomeScreen(
+                            onNavigateToChat = { id -> navController.navigate("chat/$id") },
+                            onNavigateToSettings = { navController.navigate("settings") },
+                            onNavigateToCreateCharacter = { id: String? ->
+                                if (id != null) navController.navigate("create_character?characterId=$id")
+                                else navController.navigate("create_character")
+                            },
+                            onNavigateToModelSettings = { navController.navigate("model_settings") },
+                            onNavigateToModelPicker = { navController.navigate("model_picker") },
+                            onNavigateToCharacterPicker = { navController.navigate("character_picker") },
+                            onNavigateToUserPersona = { tid, cid, scope ->
+                                navController.navigate("user_persona?threadId=$tid&characterId=$cid&scope=${scope.name}")
+                            },
+                            onNavigateToCreatePersona = {
+                                navController.navigate("create_persona")
+                            }
+                        )
                     }
-                )
-            }
-            composable(route = "create_persona") {
-                CreatePersonaScreen(
-                    onNavigateBack = { safeNavigateBack() }
-                )
-            }
-            composable(route = "settings") {
-                SettingsMainScreen(
-                    onNavigateBack = { 
-                        if (navController.currentDestination?.route != "home") {
-                            safeNavigateBack()
-                        }
-                    },
-                    onNavigateToGeneral = { navController.navigate("settings/general") },
-                    onNavigateToModels = { navController.navigate("settings/models") },
-                    onNavigateToDebugTheme = { navController.navigate("settings/debug_theme") }
-                )
-            }
-            composable(route = "settings/debug_theme") {
-                DebugThemeScreen(
-                    onNavigateBack = { safeNavigateBack() }
-                )
-            }
-            composable(route = "settings/general") {
-                SettingsGeneralScreen(
-                    onNavigateBack = { safeNavigateBack() }
-                )
-            }
-            composable(route = "settings/models") {
-                SettingsModelsScreen(
-                    onNavigateBack = { safeNavigateBack() },
-                    onNavigateToLiteRt = { navController.navigate("settings/models/litert") },
-                    onNavigateToEmbeddingModels = { navController.navigate("settings/models/embedding") },
-                    onNavigateToHuggingFace = { navController.navigate("settings/models/huggingface") },
-                    onNavigateToModelSettings = { navController.navigate("model_settings") }
-                )
-            }
-            composable(route = "settings/models/huggingface") {
-                SettingsHuggingFaceAccountScreen(
-                    onNavigateBack = { safeNavigateBack() }
-                )
-            }
-            composable(route = "settings/models/litert") {
-                SettingsLiteRtModelsScreen(
-                    onNavigateBack = { safeNavigateBack() },
-                    onNavigateToModelSettings = { navController.navigate("model_settings") }
-                )
-            }
-            composable(route = "settings/models/embedding") {
-                SettingsEmbeddingModelsScreen(
-                    onNavigateBack = { safeNavigateBack() }
-                )
-            }
-            composable(
-                route = "create_character?characterId={characterId}",
-                arguments = listOf(navArgument("characterId") { 
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                })
-            ) { backStackEntry ->
-                val characterId = backStackEntry.arguments?.getString("characterId")
-                CreateCharacterScreen(
-                    characterId = characterId,
-                    onNavigateBack = { safeNavigateBack() }
-                )
-            }
-            composable(route = "chat/{threadId}") { backStackEntry ->
-                val threadId = backStackEntry.arguments?.getString("threadId") ?: ""
-                ChatScreen(
-                    threadId = threadId,
-                    onNavigateBack = { 
-                        if (navController.currentDestination?.route != "home") {
-                            safeNavigateBack()
-                        }
-                    },
-                    onNavigateToModelSettings = { characterId ->
-                        navController.navigate("model_settings/$characterId")
-                    },
-                    onNavigateToEditCharacter = { characterId ->
-                        navController.navigate("create_character?characterId=$characterId")
-                    },
-                    onNavigateToThreadSettings = { tid ->
-                        navController.navigate("thread_settings/$tid")
+                    composable(route = "create_persona") {
+                        CreatePersonaScreen(
+                            onNavigateBack = { safeNavigateBack() }
+                        )
                     }
-                )
-            }
-            composable(route = "thread_settings/{threadId}") { backStackEntry ->
-                val threadId = backStackEntry.arguments?.getString("threadId") ?: ""
-                ThreadSettingsScreen(
-                    threadId = threadId,
-                    onNavigateBack = { safeNavigateBack() },
-                    onNavigateToEditCharacter = { characterId ->
-                        navController.navigate("create_character?characterId=$characterId")
-                    },
-                    onNavigateToModelSettings = { characterId ->
-                        navController.navigate("model_settings/$characterId")
-                    },
-                    onNavigateToEditPersona = { tid, cid, scope ->
-                        navController.navigate("user_persona?threadId=$tid&characterId=$cid&scope=${scope.name}")
-                    },
-                    onNavigateToCustomiseCharacter = { tid, cid, scope ->
-                        navController.navigate("model_settings/$cid?threadId=$tid&scope=${scope.name}")
+                    composable(route = "settings") {
+                        SettingsMainScreen(
+                            onNavigateBack = {
+                                if (navController.currentDestination?.route != "home") {
+                                    safeNavigateBack()
+                                }
+                            },
+                            onNavigateToGeneral = { navController.navigate("settings/general") },
+                            onNavigateToModels = { navController.navigate("settings/models") },
+                            onNavigateToDebugTheme = { navController.navigate("settings/debug_theme") }
+                        )
                     }
-                )
-            }
-            composable(
-                route = "user_persona?threadId={threadId}&characterId={characterId}&scope={scope}",
-                arguments = listOf(
-                    navArgument("threadId") { type = NavType.StringType; nullable = true; defaultValue = null },
-                    navArgument("characterId") { type = NavType.StringType; nullable = true; defaultValue = null },
-                    navArgument("scope") { type = NavType.StringType; defaultValue = EditScope.GLOBAL.name }
-                )
-            ) { backStackEntry ->
-                val threadId = backStackEntry.arguments?.getString("threadId")
-                val characterId = backStackEntry.arguments?.getString("characterId")
-                val scopeName = backStackEntry.arguments?.getString("scope") ?: EditScope.GLOBAL.name
-                val scope = EditScope.valueOf(scopeName)
-                
-                UserPersonaScreen(
-                    threadId = threadId,
-                    characterId = characterId,
-                    initialScope = scope,
-                    onNavigateBack = { safeNavigateBack() },
-                    onNavigateToCreatePersona = { navController.navigate("create_persona") }
-                )
-            }
-            composable(
-                route = "model_settings/{characterId}?threadId={threadId}&scope={scope}",
-                arguments = listOf(
-                    navArgument("characterId") { type = NavType.StringType },
-                    navArgument("threadId") { type = NavType.StringType; nullable = true; defaultValue = null },
-                    navArgument("scope") { type = NavType.StringType; defaultValue = EditScope.CHARACTER.name }
-                )
-            ) { backStackEntry ->
-                val characterId = backStackEntry.arguments?.getString("characterId")
-                val threadId = backStackEntry.arguments?.getString("threadId")
-                val scopeName = backStackEntry.arguments?.getString("scope") ?: EditScope.CHARACTER.name
-                val scope = EditScope.valueOf(scopeName)
-                
-                ModelSettingsScreen(
-                    characterId = characterId,
-                    threadId = threadId,
-                    initialScope = scope,
-                    onNavigateBack = { safeNavigateBack() }
-                )
-            }
-            composable(route = "model_settings/{characterId}") { backStackEntry ->
-                val characterId = backStackEntry.arguments?.getString("characterId")
-                ModelSettingsScreen(
-                    characterId = characterId,
-                    onNavigateBack = { safeNavigateBack() }
-                )
-            }
-            composable(route = "model_settings") {
-                ModelSettingsScreen(
-                    characterId = null,
-                    onNavigateBack = { safeNavigateBack() }
-                )
-            }
-            composable(route = "model_picker") {
-                ModelPickerScreen(
-                    onDismiss = { safeNavigateBack() },
-                    onOpenSettings = { navController.navigate("settings/models") },
-                    onNavigateToModelSettings = { navController.navigate("model_settings") }
-                )
-            }
-            composable(route = "character_picker") {
-                CharacterPickerScreen(
-                    onDismiss = { safeNavigateBack() },
-                    onCharacterSelected = { characterId ->
-                        safeNavigateBack()
-                        navController.navigate("chat/$characterId")
+                    composable(route = "settings/debug_theme") {
+                        DebugThemeScreen(
+                            onNavigateBack = { safeNavigateBack() }
+                        )
                     }
-                )
+                    composable(route = "settings/general") {
+                        SettingsGeneralScreen(
+                            onNavigateBack = { safeNavigateBack() }
+                        )
+                    }
+                    composable(route = "settings/models") {
+                        SettingsModelsScreen(
+                            onNavigateBack = { safeNavigateBack() },
+                            onNavigateToLiteRt = { navController.navigate("settings/models/litert") },
+                            onNavigateToEmbeddingModels = { navController.navigate("settings/models/embedding") },
+                            onNavigateToHuggingFace = { navController.navigate("settings/models/huggingface") },
+                            onNavigateToModelSettings = { navController.navigate("model_settings") }
+                        )
+                    }
+                    composable(route = "settings/models/huggingface") {
+                        SettingsHuggingFaceAccountScreen(
+                            onNavigateBack = { safeNavigateBack() }
+                        )
+                    }
+                    composable(route = "settings/models/litert") {
+                        SettingsLiteRtModelsScreen(
+                            onNavigateBack = { safeNavigateBack() },
+                            onNavigateToModelSettings = { navController.navigate("model_settings") }
+                        )
+                    }
+                    composable(route = "settings/models/embedding") {
+                        SettingsEmbeddingModelsScreen(
+                            onNavigateBack = { safeNavigateBack() }
+                        )
+                    }
+                    composable(
+                        route = "create_character?characterId={characterId}",
+                        arguments = listOf(navArgument("characterId") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        })
+                    ) { backStackEntry ->
+                        val characterId = backStackEntry.arguments?.getString("characterId")
+                        CreateCharacterScreen(
+                            characterId = characterId,
+                            onNavigateBack = { safeNavigateBack() }
+                        )
+                    }
+                    composable(route = "chat/{threadId}") { backStackEntry ->
+                        val threadId = backStackEntry.arguments?.getString("threadId") ?: ""
+                        ChatScreen(
+                            threadId = threadId,
+                            onNavigateBack = {
+                                if (navController.currentDestination?.route != "home") {
+                                    safeNavigateBack()
+                                }
+                            },
+                            onNavigateToModelSettings = { characterId ->
+                                navController.navigate("model_settings/$characterId")
+                            },
+                            onNavigateToEditCharacter = { characterId ->
+                                navController.navigate("create_character?characterId=$characterId")
+                            },
+                            onNavigateToThreadSettings = { tid ->
+                                navController.navigate("thread_settings/$tid")
+                            }
+                        )
+                    }
+                    composable(route = "thread_settings/{threadId}") { backStackEntry ->
+                        val threadId = backStackEntry.arguments?.getString("threadId") ?: ""
+                        ThreadSettingsScreen(
+                            threadId = threadId,
+                            onNavigateBack = { safeNavigateBack() },
+                            onNavigateToEditCharacter = { characterId ->
+                                navController.navigate("create_character?characterId=$characterId")
+                            },
+                            onNavigateToModelSettings = { characterId ->
+                                navController.navigate("model_settings/$characterId")
+                            },
+                            onNavigateToEditPersona = { tid, cid, scope ->
+                                navController.navigate("user_persona?threadId=$tid&characterId=$cid&scope=${scope.name}")
+                            },
+                            onNavigateToCustomiseCharacter = { tid, cid, scope ->
+                                navController.navigate("model_settings/$cid?threadId=$tid&scope=${scope.name}")
+                            }
+                        )
+                    }
+                    composable(
+                        route = "user_persona?threadId={threadId}&characterId={characterId}&scope={scope}",
+                        arguments = listOf(
+                            navArgument("threadId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                            navArgument("characterId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                            navArgument("scope") { type = NavType.StringType; defaultValue = EditScope.GLOBAL.name }
+                        )
+                    ) { backStackEntry ->
+                        val threadId = backStackEntry.arguments?.getString("threadId")
+                        val characterId = backStackEntry.arguments?.getString("characterId")
+                        val scopeName = backStackEntry.arguments?.getString("scope") ?: EditScope.GLOBAL.name
+                        val scope = EditScope.valueOf(scopeName)
+
+                        UserPersonaScreen(
+                            threadId = threadId,
+                            characterId = characterId,
+                            initialScope = scope,
+                            onNavigateBack = { safeNavigateBack() },
+                            onNavigateToCreatePersona = { navController.navigate("create_persona") }
+                        )
+                    }
+                    composable(
+                        route = "model_settings/{characterId}?threadId={threadId}&scope={scope}",
+                        arguments = listOf(
+                            navArgument("characterId") { type = NavType.StringType },
+                            navArgument("threadId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                            navArgument("scope") { type = NavType.StringType; defaultValue = EditScope.CHARACTER.name }
+                        )
+                    ) { backStackEntry ->
+                        val characterId = backStackEntry.arguments?.getString("characterId")
+                        val threadId = backStackEntry.arguments?.getString("threadId")
+                        val scopeName = backStackEntry.arguments?.getString("scope") ?: EditScope.CHARACTER.name
+                        val scope = EditScope.valueOf(scopeName)
+
+                        ModelSettingsScreen(
+                            characterId = characterId,
+                            threadId = threadId,
+                            initialScope = scope,
+                            onNavigateBack = { safeNavigateBack() }
+                        )
+                    }
+                    composable(route = "model_settings/{characterId}") { backStackEntry ->
+                        val characterId = backStackEntry.arguments?.getString("characterId")
+                        ModelSettingsScreen(
+                            characterId = characterId,
+                            onNavigateBack = { safeNavigateBack() }
+                        )
+                    }
+                    composable(route = "model_settings") {
+                        ModelSettingsScreen(
+                            characterId = null,
+                            onNavigateBack = { safeNavigateBack() }
+                        )
+                    }
+                    composable(route = "model_picker") {
+                        ModelPickerScreen(
+                            onDismiss = { safeNavigateBack() },
+                            onOpenSettings = { navController.navigate("settings/models") },
+                            onNavigateToModelSettings = { navController.navigate("model_settings") }
+                        )
+                    }
+                    composable(route = "character_picker") {
+                        CharacterPickerScreen(
+                            onDismiss = { safeNavigateBack() },
+                            onCharacterSelected = { characterId ->
+                                safeNavigateBack()
+                                navController.navigate("chat/$characterId")
+                            },
+                            onNavigateToCreateCharacter = { id ->
+                                if (id != null) navController.navigate("create_character?characterId=$id")
+                                else navController.navigate("create_character")
+                            }
+                        )
+                    }
+                }
             }
         }
-    }
-}
     }
 }

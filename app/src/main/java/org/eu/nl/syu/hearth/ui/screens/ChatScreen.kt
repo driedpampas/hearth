@@ -217,6 +217,7 @@ fun ChatScreen(
             containerColor = Color.Transparent,
             topBar = {
                 TopAppBar(
+                    windowInsets = WindowInsets(0.dp),
                     title = {
                         Column {
                             Text(uiState.threadTitle ?: uiState.character?.name ?: threadId, style = MaterialTheme.typography.titleMedium)

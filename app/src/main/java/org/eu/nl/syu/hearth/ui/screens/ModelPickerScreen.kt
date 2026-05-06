@@ -179,6 +179,7 @@ fun ModelPickerScreen(
             topBar = {
             androidx.compose.material3.TopAppBar(
                 title = { Text("Select Model") },
+                windowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp),
                 navigationIcon = {
                     IconButton(onClick = {
                         if (uiState.notification != null) {

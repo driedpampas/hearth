@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +44,7 @@ fun UserPersonaScreen(
     var rawBio by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
     var searchActive by remember { mutableStateOf(false) }
+    var infoPersona by remember { mutableStateOf<org.eu.nl.syu.hearth.data.UserPersona?>(null) }
 
     val filteredPersonas = remember(searchQuery, uiState.allPersonas) {
         if (searchQuery.isEmpty()) uiState.allPersonas
@@ -56,6 +58,29 @@ fun UserPersonaScreen(
         viewModel.init(selectedScope, threadId, characterId)
     }
 
+    if (infoPersona != null) {
+        AlertDialog(
+            onDismissRequest = { infoPersona = null },
+            title = { Text(infoPersona?.name ?: "Persona Info", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(infoPersona?.bio ?: "", style = MaterialTheme.typography.bodyMedium)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { infoPersona = null }) { Text("Close") }
+            },
+            dismissButton = if (threadId != null) {
+                {
+                    TextButton(onClick = { 
+                        infoPersona?.let { viewModel.selectPersona(it) }
+                        infoPersona = null
+                    }) { Text("Select") }
+                }
+            } else null
+        )
+    }
+
     Scaffold(
         topBar = {
             HearthSearchBar(
@@ -66,8 +91,17 @@ fun UserPersonaScreen(
                 onSearch = { searchActive = false },
                 placeholder = "Search personas",
                 leadingIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    if (threadId != null) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    } else {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.padding(start = 16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 },
                 trailingIcon = {
@@ -101,11 +135,13 @@ fun UserPersonaScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            ScopedButtonGroup(
-                selectedScope = selectedScope.name,
-                scopes = listOf(EditScope.GLOBAL.name, EditScope.CHARACTER.name, EditScope.THREAD.name),
-                onScopeSelected = { selectedScope = EditScope.valueOf(it) }
-            )
+            if (threadId != null) {
+                ScopedButtonGroup(
+                    selectedScope = selectedScope.name,
+                    scopes = listOf(EditScope.GLOBAL.name, EditScope.CHARACTER.name, EditScope.THREAD.name),
+                    onScopeSelected = { selectedScope = EditScope.valueOf(it) }
+                )
+            }
 
             if (selectedScope == EditScope.THREAD) {
                 Text(
@@ -139,11 +175,17 @@ fun UserPersonaScreen(
             filteredPersonas.forEach { persona ->
                 val isSelected = uiState.selectedPersona?.id == persona.id
                 GlassySurface(
-                    onClick = { viewModel.selectPersona(persona) },
+                    onClick = { 
+                        if (threadId != null) {
+                            viewModel.selectPersona(persona)
+                        } else {
+                            infoPersona = persona
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
-                    color = if (isSelected) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+                    color = if (isSelected && threadId != null) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                    border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
+                    border = if (isSelected && threadId != null) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
                              else null
                 ) {
                     Row(
@@ -159,7 +201,7 @@ fun UserPersonaScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        if (isSelected) {
+                        if (isSelected && threadId != null) {
                             Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
                         }
                     }

@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -151,6 +152,7 @@ fun SettingsMainScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
+                windowInsets = WindowInsets(0.dp),
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -222,6 +224,7 @@ fun SettingsMainScreen(
          topBar = {
              TopAppBar(
                  title = { Text("General Settings") },
+                 windowInsets = WindowInsets(0.dp),
                  navigationIcon = {
                      IconButton(onClick = onNavigateBack) {
                          Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -388,9 +391,10 @@ fun SettingsModelsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Models") },
-                navigationIcon = {
+             TopAppBar(
+                 title = { Text("Models") },
+                 windowInsets = WindowInsets(0.dp),
+                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
@@ -672,9 +676,10 @@ fun SettingsLiteRtModelsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("LiteRT Models") },
-                navigationIcon = {
+             TopAppBar(
+                 title = { Text("LiteRT Models") },
+                 windowInsets = WindowInsets(0.dp),
+                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
@@ -999,6 +1004,7 @@ fun SettingsEmbeddingModelsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Select Embedding Model") },
+                windowInsets = WindowInsets(0.dp),
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -1056,6 +1062,7 @@ fun SettingsHuggingFaceAccountScreen(
         topBar = {
             TopAppBar(
                 title = { Text("HuggingFace Account") },
+                windowInsets = WindowInsets(0.dp),
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

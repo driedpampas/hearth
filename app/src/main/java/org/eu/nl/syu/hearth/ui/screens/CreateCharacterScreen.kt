@@ -396,6 +396,7 @@ fun CreateCharacterScreen(
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent
                     ),
+                    windowInsets = WindowInsets(0.dp),
                     title = { Text(if (uiState.characterId != null) "Edit Character" else "Character Creator", fontWeight = FontWeight.SemiBold) },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
@@ -952,6 +953,7 @@ private fun CreateCharacterModelPickerScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Select Character Model", fontWeight = FontWeight.Bold) },
+                windowInsets = WindowInsets(0.dp),
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

@@ -81,6 +81,7 @@ fun ThreadSettingsScreen(
                 ) {
                     TopAppBar(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                        windowInsets = WindowInsets(0.dp),
                         title = { Text("Thread Settings", fontWeight = FontWeight.SemiBold) },
                         navigationIcon = {
                             IconButton(onClick = onNavigateBack) {

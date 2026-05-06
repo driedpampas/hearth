@@ -53,6 +53,7 @@ fun CreatePersonaScreen(
             ) {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                    windowInsets = WindowInsets(0.dp),
                     title = { Text("Create Persona", fontWeight = FontWeight.SemiBold) },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
