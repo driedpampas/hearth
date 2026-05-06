@@ -8,7 +8,11 @@ package org.eu.nl.syu.hearth.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.UserPersona
@@ -18,7 +22,6 @@ import org.eu.nl.syu.hearth.data.local.UserPersonaDao
 import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.data.local.toEntity
 import org.eu.nl.syu.hearth.runtime.LoreSyncManager
-import java.util.UUID
 import javax.inject.Inject
 
 data class UserPersonaUiState(

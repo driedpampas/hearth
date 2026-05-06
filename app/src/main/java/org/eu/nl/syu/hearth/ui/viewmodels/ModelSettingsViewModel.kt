@@ -20,6 +20,7 @@ package org.eu.nl.syu.hearth.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,11 +33,10 @@ import kotlinx.coroutines.withContext
 import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.local.CharacterDao
-import org.eu.nl.syu.hearth.data.local.toDomain
-import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
 import org.eu.nl.syu.hearth.data.local.ChatThreadDao
+import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.domain.NarrativeContextFactory.CharacterOverride
-import com.google.gson.Gson
+import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
 import javax.inject.Inject
 
 enum class EditScope {

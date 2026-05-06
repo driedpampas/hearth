@@ -20,6 +20,9 @@ package org.eu.nl.syu.hearth.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,14 +53,11 @@ import org.eu.nl.syu.hearth.data.local.VectorDao
 import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.data.local.toEntity
 import org.eu.nl.syu.hearth.data.stripThinking
+import org.eu.nl.syu.hearth.domain.NarrativeContextFactory
 import org.eu.nl.syu.hearth.runtime.EmbeddingEngine
 import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
-import org.eu.nl.syu.hearth.runtime.MemorySyncWorker
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.Data
-import org.eu.nl.syu.hearth.domain.NarrativeContextFactory
 import org.eu.nl.syu.hearth.runtime.LoreSyncManager
+import org.eu.nl.syu.hearth.runtime.MemorySyncWorker
 import java.io.File
 import javax.inject.Inject
 
@@ -100,7 +100,7 @@ class ChatViewModel @Inject constructor(
     private val memoryDao: MemoryDao,
     private val userPersonaDao: UserPersonaDao,
     private val loreSyncManager: LoreSyncManager,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
+    @param:dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())

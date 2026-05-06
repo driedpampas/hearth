@@ -19,11 +19,22 @@
 package org.eu.nl.syu.hearth.ui.screens
 
 import android.util.Log
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -32,11 +43,44 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Dataset
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -44,8 +88,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -60,19 +104,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.eu.nl.syu.hearth.data.Character
+import org.eu.nl.syu.hearth.data.ChatMessage
+import org.eu.nl.syu.hearth.data.MessageRole
 import org.eu.nl.syu.hearth.data.ModelManager
 import org.eu.nl.syu.hearth.data.local.CharacterDao
 import org.eu.nl.syu.hearth.data.local.toDomain
 import org.eu.nl.syu.hearth.data.local.toEntity
 import org.eu.nl.syu.hearth.domain.ScraperUseCase
-import org.eu.nl.syu.hearth.runtime.LoreSyncManager
 import org.eu.nl.syu.hearth.runtime.EmbeddingEngine
-import org.eu.nl.syu.hearth.ui.components.*
+import org.eu.nl.syu.hearth.runtime.LoreSyncManager
+import org.eu.nl.syu.hearth.ui.components.FadeTextAnimation
+import org.eu.nl.syu.hearth.ui.components.GlassySurface
+import org.eu.nl.syu.hearth.ui.components.WavyHorizontalDivider
 import java.io.File
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
-import org.eu.nl.syu.hearth.data.ChatMessage
-import org.eu.nl.syu.hearth.data.MessageRole
 
 data class StarterMessage(
     val content: String = "",
@@ -930,7 +977,7 @@ private fun TechnicalSlider(
     Column {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = MaterialTheme.typography.labelSmall)
-            Text(String.format("%.2f", value), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            Text(String.format(Locale.US, "%.2f", value), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
         }
         Slider(
             value = value,
@@ -1009,7 +1056,7 @@ private fun CreateCharacterModelPickerScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (isEmbedding) Icons.Default.Dataset else Icons.Default.Chat,
+                                    imageVector = if (isEmbedding) Icons.Default.Dataset else Icons.AutoMirrored.Filled.Chat,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp),
                                     tint = if (isEmbedding) MaterialTheme.colorScheme.onSecondaryContainer 

@@ -23,6 +23,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -135,6 +136,9 @@ import org.eu.nl.syu.hearth.data.HuggingFaceApiService
 import org.eu.nl.syu.hearth.data.HuggingFaceApiService.AccessResult
 import org.eu.nl.syu.hearth.data.ModelManager
 import org.eu.nl.syu.hearth.data.ModelRepository
+import org.eu.nl.syu.hearth.network.InferenceService
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import java.util.Locale
 import javax.inject.Inject
 
@@ -146,6 +150,7 @@ fun SettingsMainScreen(
     onNavigateBack: () -> Unit,
     onNavigateToGeneral: () -> Unit,
     onNavigateToModels: () -> Unit,
+    onNavigateToInferenceServer: () -> Unit,
     onNavigateToDebugTheme: () -> Unit
 ) {
     Scaffold(
@@ -180,6 +185,14 @@ fun SettingsMainScreen(
                     leadingContent = { Icon(Icons.Default.ModelTraining, contentDescription = null) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
                     modifier = Modifier.clickable { onNavigateToModels() }
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("Inference Server") },
+                    leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) }, // Will use better icon if found
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+                    modifier = Modifier.clickable { onNavigateToInferenceServer() }
                 )
             }
 
@@ -1595,4 +1608,152 @@ class ModelsViewModel @Inject constructor(
     fun getDownloadFileName(model: AllowedModel): String {
         return modelRepository.getDownloadFileName(model)
     }
+}
+
+// --- Inference Server Settings Screen ---
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsInferenceServerScreen(
+    onNavigateBack: () -> Unit,
+    viewModel: SettingsInferenceServerViewModel = hiltViewModel()
+) {
+    val isEnabled by viewModel.inferenceServerEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val port by viewModel.inferenceServerPort.collectAsStateWithLifecycle(initialValue = 8080)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val ipAddress = remember { getLocalIpAddress() ?: "Unknown" }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Inference Server") },
+                windowInsets = WindowInsets(0.dp),
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            ListItem(
+                headlineContent = { Text("Enable Server") },
+                supportingContent = { Text("Expose loaded models via OpenAI-compatible API") },
+                trailingContent = {
+                    Switch(
+                        checked = isEnabled,
+                        onCheckedChange = { 
+                            viewModel.setInferenceServerEnabled(it)
+                            if (it) {
+                                InferenceService.start(context, port)
+                            } else {
+                                InferenceService.stop(context)
+                            }
+                        }
+                    )
+                }
+            )
+
+            ListItem(
+                headlineContent = { Text("Port") },
+                supportingContent = { Text(port.toString()) },
+                modifier = Modifier.alpha(if (isEnabled) 0.5f else 1.0f)
+            )
+
+            if (isEnabled) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                
+                Text(
+                    "Status",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                ListItem(
+                    headlineContent = { Text("API Endpoint") },
+                    supportingContent = { Text("http://$ipAddress:$port/v1") },
+                    trailingContent = {
+                        val clipboard = LocalClipboard.current
+                        IconButton(onClick = {
+                            scope.launch {
+                                clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Hearth API Endpoint", "http://$ipAddress:$port/v1")))
+                            }
+                        }) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                        }
+                    }
+                )
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "To test from another device:",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "curl http://$ipAddress:$port/v1/chat/completions \\\n" +
+                            "  -H \"Content-Type: application/json\" \\\n" +
+                            "  -d '{\"model\": \"local\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]}'",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@HiltViewModel
+class SettingsInferenceServerViewModel @Inject constructor(
+    private val modelRepository: ModelRepository
+) : ViewModel() {
+
+    val inferenceServerEnabled = modelRepository.inferenceServerEnabled
+    val inferenceServerPort = modelRepository.inferenceServerPort
+
+    fun setInferenceServerEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            modelRepository.setInferenceServerEnabled(enabled)
+        }
+    }
+
+    fun setInferenceServerPort(port: Int) {
+        viewModelScope.launch {
+            modelRepository.setInferenceServerPort(port)
+        }
+    }
+}
+
+private fun getLocalIpAddress(): String? {
+    try {
+        val interfaces = NetworkInterface.getNetworkInterfaces()
+        while (interfaces.hasMoreElements()) {
+            val networkInterface = interfaces.nextElement()
+            val addresses = networkInterface.inetAddresses
+            while (addresses.hasMoreElements()) {
+                val address = addresses.nextElement()
+                if (!address.isLoopbackAddress && address is Inet4Address) {
+                    return address.hostAddress
+                }
+            }
+        }
+    } catch (e: Exception) {
+        Log.e("NetworkUtils", "Error getting local IP address", e)
+    }
+    return null
 }

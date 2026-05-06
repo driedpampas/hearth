@@ -29,14 +29,14 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
 import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ChatMessage
 import org.eu.nl.syu.hearth.data.ChatThread
-import org.eu.nl.syu.hearth.data.UserPersona
 import org.eu.nl.syu.hearth.data.MessageRole
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import org.eu.nl.syu.hearth.data.UserPersona
 
 @Entity(tableName = "user_personas")
 data class UserPersonaEntity(

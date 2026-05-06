@@ -13,7 +13,6 @@ package org.eu.nl.syu.hearth.common.crash
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Process
 import android.util.Log
 import java.io.PrintWriter

@@ -78,10 +78,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.eu.nl.syu.hearth.ui.components.FadeTextAnimation
-import org.eu.nl.syu.hearth.ui.components.WavyVerticalDivider
-import org.eu.nl.syu.hearth.ui.viewmodels.ModelSettingsViewModel
-import org.eu.nl.syu.hearth.ui.viewmodels.EditScope
 import org.eu.nl.syu.hearth.ui.components.ScopedButtonGroup
+import org.eu.nl.syu.hearth.ui.components.WavyVerticalDivider
+import org.eu.nl.syu.hearth.ui.viewmodels.EditScope
+import org.eu.nl.syu.hearth.ui.viewmodels.ModelSettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable

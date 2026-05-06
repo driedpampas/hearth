@@ -35,10 +35,10 @@ import org.eu.nl.syu.hearth.data.local.AppDatabase
 import org.eu.nl.syu.hearth.data.local.CharacterDao
 import org.eu.nl.syu.hearth.data.local.ChatMessageDao
 import org.eu.nl.syu.hearth.data.local.ChatThreadDao
-import org.eu.nl.syu.hearth.data.local.MemoryDao
 import org.eu.nl.syu.hearth.data.local.LoreChunkDao
-import org.eu.nl.syu.hearth.data.local.VectorDao
+import org.eu.nl.syu.hearth.data.local.MemoryDao
 import org.eu.nl.syu.hearth.data.local.UserPersonaDao
+import org.eu.nl.syu.hearth.data.local.VectorDao
 import java.io.File
 import javax.inject.Singleton
 

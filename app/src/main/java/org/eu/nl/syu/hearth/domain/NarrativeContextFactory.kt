@@ -5,18 +5,18 @@
 
 package org.eu.nl.syu.hearth.domain
 
+import com.google.gson.Gson
+import kotlinx.coroutines.flow.first
 import org.eu.nl.syu.hearth.data.Character
 import org.eu.nl.syu.hearth.data.ChatMessage
 import org.eu.nl.syu.hearth.data.MessageRole
-import org.eu.nl.syu.hearth.data.stripThinking
+import org.eu.nl.syu.hearth.data.ModelRepository
 import org.eu.nl.syu.hearth.data.local.ChatMessageDao
 import org.eu.nl.syu.hearth.data.local.ChatThreadDao
 import org.eu.nl.syu.hearth.data.local.UserPersonaDao
 import org.eu.nl.syu.hearth.data.local.VectorDao
-import org.eu.nl.syu.hearth.data.ModelRepository
+import org.eu.nl.syu.hearth.data.stripThinking
 import org.eu.nl.syu.hearth.runtime.EmbeddingEngine
-import com.google.gson.Gson
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 

@@ -87,6 +87,8 @@ class ModelRepository @Inject constructor(
     private val FAILED_MODELS = stringSetPreferencesKey("failed_models")
     private val LAST_LOADED_MODEL_PATH = stringPreferencesKey("last_loaded_model_path")
     private val GLOBAL_DEFAULT_PERSONA_ID = stringPreferencesKey("global_default_persona_id")
+    private val INFERENCE_SERVER_ENABLED = androidx.datastore.preferences.core.booleanPreferencesKey("inference_server_enabled")
+    private val INFERENCE_SERVER_PORT = androidx.datastore.preferences.core.intPreferencesKey("inference_server_port")
 
     val selectedEmbeddingModel: Flow<String?> = context.modelDataStore.data.map { preferences ->
         preferences[SELECTED_EMBEDDING_MODEL]
@@ -394,6 +396,26 @@ class ModelRepository @Inject constructor(
 
     val globalDefaultPersonaId: Flow<String?> = context.modelDataStore.data.map { preferences ->
         preferences[GLOBAL_DEFAULT_PERSONA_ID]
+    }
+
+    val inferenceServerEnabled: Flow<Boolean> = context.modelDataStore.data.map { preferences ->
+        preferences[INFERENCE_SERVER_ENABLED] ?: false
+    }
+
+    val inferenceServerPort: Flow<Int> = context.modelDataStore.data.map { preferences ->
+        preferences[INFERENCE_SERVER_PORT] ?: 8080
+    }
+
+    suspend fun setInferenceServerEnabled(enabled: Boolean) {
+        context.modelDataStore.edit { preferences ->
+            preferences[INFERENCE_SERVER_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setInferenceServerPort(port: Int) {
+        context.modelDataStore.edit { preferences ->
+            preferences[INFERENCE_SERVER_PORT] = port
+        }
     }
 
     suspend fun setGlobalDefaultPersonaId(id: String?) {
