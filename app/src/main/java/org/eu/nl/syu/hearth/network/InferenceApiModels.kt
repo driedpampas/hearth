@@ -23,8 +23,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ChatCompletionRequest(
-    val model: String,
     val messages: List<ChatCompletionMessage>,
+    val model: String? = null,
     val stream: Boolean = false,
     val temperature: Float? = null,
     @SerialName("max_tokens") val maxTokens: Int? = null,
@@ -35,7 +35,8 @@ data class ChatCompletionRequest(
 @Serializable
 data class ChatCompletionMessage(
     val role: String,
-    val content: String
+    val content: String,
+    @SerialName("reasoning_content") val reasoningContent: String? = null
 )
 
 @Serializable
@@ -81,5 +82,20 @@ data class ChatCompletionChunkChoice(
 @Serializable
 data class ChatCompletionDelta(
     val role: String? = null,
-    val content: String? = null
+    val content: String? = null,
+    @SerialName("reasoning_content") val reasoningContent: String? = null
+)
+
+@Serializable
+data class ModelListResponse(
+    @SerialName("object") val objectType: String = "list",
+    val data: List<ModelRecord>
+)
+
+@Serializable
+data class ModelRecord(
+    val id: String,
+    @SerialName("object") val objectType: String = "model",
+    val created: Long,
+    @SerialName("owned_by") val ownedBy: String = "hearth"
 )

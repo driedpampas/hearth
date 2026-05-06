@@ -47,6 +47,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
+data class GenerationDelta(
+    val thought: String? = null,
+    val content: String? = null
+)
+
+@Singleton
 class LiteRtEngineWrapper @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val modelRepository: ModelRepository
@@ -138,6 +144,20 @@ class LiteRtEngineWrapper @Inject constructor(
             throw e
         }
     }
+    
+    fun ensureConversation() {
+        if (conversation == null && engine != null) {
+            val config = ConversationConfig(
+                systemInstruction = Contents.of("You are a helpful assistant."),
+                samplerConfig = SamplerConfig(
+                    temperature = 0.7,
+                    topK = 40,
+                    topP = 0.95
+                )
+            )
+            conversation = engine?.createConversation(config)
+        }
+    }
 
     fun createConversation(character: Character) {
         val systemInstruction = if (character.enableThinking && character.enableThinkingCompatibility && character.thinkingCompatibilityToken.isNotEmpty()) {
@@ -201,6 +221,26 @@ class LiteRtEngineWrapper @Inject constructor(
         prompt: String,
         enableThinking: Boolean = false
     ): Flow<String> = callbackFlow {
+        sendRawPromptStructured(prompt, enableThinking).collect { delta ->
+            val response = StringBuilder()
+            delta.thought?.let { 
+                // We don't know if it's the start or middle, so we rely on sendRawPromptStructured 
+                // to handle the tags if we want them here, but structured delta is cleaner.
+                // Actually, for backward compatibility, we'll format it here.
+                response.append(it) 
+            }
+            delta.content?.let { response.append(it) }
+            if (response.isNotEmpty()) trySend(response.toString())
+        }
+        awaitClose { /* handled in sendRawPromptStructured */ }
+    }
+
+    fun sendRawPromptStructured(
+        prompt: String,
+        enableThinking: Boolean = false
+    ): Flow<GenerationDelta> = callbackFlow {
+        ensureConversation()
+        
         var inThinkingMode = false
         var lastThought = ""
         var lastMain = ""
@@ -222,26 +262,22 @@ class LiteRtEngineWrapper @Inject constructor(
                     currentMain
                 }
                 
-                val response = StringBuilder()
-                
                 if (thoughtDelta.isNotEmpty()) {
                     if (!inThinkingMode) {
-                        response.append("<think>\n")
+                        trySend(GenerationDelta(thought = "<think>\n$thoughtDelta"))
                         inThinkingMode = true
+                    } else {
+                        trySend(GenerationDelta(thought = thoughtDelta))
                     }
-                    response.append(thoughtDelta)
                 }
                 
                 if (mainDelta.isNotEmpty()) {
                     if (inThinkingMode) {
-                        response.append("\n</think>\n")
+                        trySend(GenerationDelta(content = "\n</think>\n$mainDelta"))
                         inThinkingMode = false
+                    } else {
+                        trySend(GenerationDelta(content = mainDelta))
                     }
-                    response.append(mainDelta)
-                }
-                
-                if (response.isNotEmpty()) {
-                    trySend(response.toString())
                 }
                 
                 lastThought = currentThought
@@ -250,7 +286,7 @@ class LiteRtEngineWrapper @Inject constructor(
 
             override fun onDone() {
                 if (inThinkingMode) {
-                    trySend("\n</think>")
+                    trySend(GenerationDelta(content = "\n</think>"))
                 }
                 close()
             }
@@ -264,7 +300,9 @@ class LiteRtEngineWrapper @Inject constructor(
             Contents.of(prompt), 
             callback,
             extraContext = mapOf("enable_thinking" to enableThinking)
-        )
+        ) ?: run {
+            close(IllegalStateException("Conversation not initialized. Ensure a character is selected or model is ready."))
+        }
 
         awaitClose {
             conversation?.cancelProcess()

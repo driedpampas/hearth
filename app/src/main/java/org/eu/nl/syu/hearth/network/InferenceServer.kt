@@ -26,6 +26,7 @@ import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.netty.NettyApplicationEngine
+import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.request.receive
@@ -38,6 +39,7 @@ import io.ktor.utils.io.writeStringUtf8
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.serialization.json.Json
 import org.eu.nl.syu.hearth.runtime.LiteRtEngineWrapper
+import org.slf4j.event.Level
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -63,24 +65,28 @@ class InferenceServer @Inject constructor(
                 anyHost()
                 allowHeader(io.ktor.http.HttpHeaders.ContentType)
             }
+            install(CallLogging) {
+                level = Level.INFO
+            }
             routing {
                 post("/v1/chat/completions") {
                     val request = call.receive<ChatCompletionRequest>()
                     handleChatCompletion(call, request)
                 }
                 get("/v1/models") {
-                    // Basic models list
-                    call.respond(mapOf(
-                        "object" to "list",
-                        "data" to listOf(
-                            mapOf(
-                                "id" to (engineWrapper.getLoadedModelPath() ?: "local-model"),
-                                "object" to "model",
-                                "created" to System.currentTimeMillis() / 1000,
-                                "owned_by" to "hearth"
+                    val modelPath = engineWrapper.getLoadedModelPath()
+                    val models = if (modelPath != null) {
+                        listOf(
+                            ModelRecord(
+                                id = modelPath,
+                                created = System.currentTimeMillis() / 1000
                             )
                         )
-                    ))
+                    } else {
+                        emptyList()
+                    }
+                    val response = ModelListResponse(data = models)
+                    call.respond(response)
                 }
             }
         }.start(wait = false)
@@ -88,7 +94,9 @@ class InferenceServer @Inject constructor(
     }
 
     private suspend fun handleChatCompletion(call: ApplicationCall, request: ChatCompletionRequest) {
+        Log.i("InferenceServer", "Handling chat completion request (stream=${request.stream})")
         if (!engineWrapper.isInitialized()) {
+            Log.w("InferenceServer", "Request failed: Model not loaded")
             call.respond(io.ktor.http.HttpStatusCode.ServiceUnavailable, "Model not loaded")
             return
         }
@@ -99,45 +107,81 @@ class InferenceServer @Inject constructor(
         val id = "chatcmpl-${UUID.randomUUID()}"
 
         if (request.stream) {
-            call.respondBytesWriter(contentType = io.ktor.http.ContentType.Text.EventStream) {
-                engineWrapper.sendRawPrompt(prompt)
-                    .onCompletion {
-                        writeStringUtf8("data: [DONE]\n\n")
-                        flush()
-                    }
-                    .collect { delta ->
-                        val chunk = ChatCompletionChunk(
-                            id = id,
-                            created = created,
-                            model = modelId,
-                            choices = listOf(
-                                ChatCompletionChunkChoice(
-                                    index = 0,
-                                    delta = ChatCompletionDelta(content = delta)
+            Log.i("InferenceServer", "Starting streaming response")
+            try {
+                call.respondBytesWriter(contentType = io.ktor.http.ContentType.Text.EventStream) {
+                    engineWrapper.sendRawPromptStructured(prompt, enableThinking = true)
+                        .onCompletion { cause ->
+                            if (cause != null) {
+                                Log.e("InferenceServer", "Stream completed with error: ${cause.message}", cause)
+                            } else {
+                                Log.i("InferenceServer", "Stream completed successfully")
+                            }
+                            try {
+                                writeStringUtf8("data: [DONE]\n\n")
+                                flush()
+                            } catch (e: Exception) {
+                                Log.w("InferenceServer", "Failed to write completion tag: ${e.message}")
+                            }
+                        }
+                        .collect { delta ->
+                            try {
+                                val chunk = ChatCompletionChunk(
+                                    id = id,
+                                    created = created,
+                                    model = modelId,
+                                    choices = listOf(
+                                        ChatCompletionChunkChoice(
+                                            index = 0,
+                                            delta = ChatCompletionDelta(
+                                                content = delta.content,
+                                                reasoningContent = delta.thought
+                                            )
+                                        )
+                                    )
                                 )
-                            )
-                        )
-                        writeStringUtf8("data: ${Json.encodeToString(ChatCompletionChunk.serializer(), chunk)}\n\n")
-                        flush()
-                    }
+                                writeStringUtf8("data: ${Json.encodeToString(ChatCompletionChunk.serializer(), chunk)}\n\n")
+                                flush()
+                            } catch (e: Exception) {
+                                Log.e("InferenceServer", "Error writing chunk to stream: ${e.message}")
+                                throw e
+                            }
+                        }
+                }
+            } catch (e: Exception) {
+                Log.e("InferenceServer", "Crashed during streaming response: ${e.message}", e)
+                // We can't really respond with another status if we already started respondBytesWriter
             }
         } else {
-            val fullResponse = StringBuilder()
-            engineWrapper.sendRawPrompt(prompt).collect { delta ->
-                fullResponse.append(delta)
-            }
-            val response = ChatCompletionResponse(
-                id = id,
-                created = created,
-                model = modelId,
-                choices = listOf(
-                    ChatCompletionChoice(
-                        index = 0,
-                        message = ChatCompletionMessage(role = "assistant", content = fullResponse.toString())
+            Log.i("InferenceServer", "Generating non-streaming response")
+            try {
+                val fullResponse = StringBuilder()
+                val fullReasoning = StringBuilder()
+                engineWrapper.sendRawPromptStructured(prompt, enableThinking = true).collect { delta ->
+                    delta.content?.let { fullResponse.append(it) }
+                    delta.thought?.let { fullReasoning.append(it) }
+                }
+                val response = ChatCompletionResponse(
+                    id = id,
+                    created = created,
+                    model = modelId,
+                    choices = listOf(
+                        ChatCompletionChoice(
+                            index = 0,
+                            message = ChatCompletionMessage(
+                                role = "assistant", 
+                                content = fullResponse.toString(),
+                                reasoningContent = fullReasoning.toString().takeIf { it.isNotEmpty() }
+                            )
+                        )
                     )
                 )
-            )
-            call.respond(response)
+                call.respond(response)
+                Log.i("InferenceServer", "Responded successfully")
+            } catch (e: Exception) {
+                Log.e("InferenceServer", "Error during non-streaming generation: ${e.message}", e)
+                call.respond(io.ktor.http.HttpStatusCode.InternalServerError, "Error: ${e.message}")
+            }
         }
     }
 

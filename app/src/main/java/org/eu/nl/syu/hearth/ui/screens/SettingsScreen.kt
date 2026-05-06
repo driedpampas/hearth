@@ -1708,11 +1708,29 @@ fun SettingsInferenceServerScreen(
                         Text(
                             "curl http://$ipAddress:$port/v1/chat/completions \\\n" +
                             "  -H \"Content-Type: application/json\" \\\n" +
-                            "  -d '{\"model\": \"local\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]}'",
+                            "  -d '{\"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]}'",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
+
+                ListItem(
+                    headlineContent = { Text("Copy Test Command") },
+                    supportingContent = { Text("Click to copy the full curl command") },
+                    trailingContent = {
+                        val clipboard = LocalClipboard.current
+                        IconButton(onClick = {
+                            val command = "curl http://$ipAddress:$port/v1/chat/completions " +
+                                "-H \"Content-Type: application/json\" " +
+                                "-d '{\"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]}'"
+                            scope.launch {
+                                clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Hearth Test Command", command)))
+                            }
+                        }) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                        }
+                    }
+                )
             }
         }
     }
