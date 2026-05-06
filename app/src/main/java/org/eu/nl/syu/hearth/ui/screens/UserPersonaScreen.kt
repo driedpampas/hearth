@@ -41,6 +41,16 @@ fun UserPersonaScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedScope by remember { mutableStateOf(initialScope) }
     var rawBio by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchActive by remember { mutableStateOf(false) }
+
+    val filteredPersonas = remember(searchQuery, uiState.allPersonas) {
+        if (searchQuery.isEmpty()) uiState.allPersonas
+        else uiState.allPersonas.filter { 
+            it.name.contains(searchQuery, ignoreCase = true) || 
+            it.bio.contains(searchQuery, ignoreCase = true) 
+        }
+    }
 
     LaunchedEffect(selectedScope) {
         viewModel.init(selectedScope, threadId, characterId)
@@ -48,29 +58,26 @@ fun UserPersonaScreen(
 
     Scaffold(
         topBar = {
-            GlassySurface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RectangleShape,
-                blurRadius = 8.dp,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f)
-            ) {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                    title = { Text("User Persona", fontWeight = FontWeight.SemiBold) },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        if (selectedScope == EditScope.THREAD) {
-                            IconButton(onClick = { viewModel.saveRawBio(rawBio); onNavigateBack() }) {
-                                Icon(Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
-                            }
+            HearthSearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                active = searchActive,
+                onActiveChange = { searchActive = it },
+                onSearch = { searchActive = false },
+                placeholder = "Search personas",
+                leadingIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                trailingIcon = {
+                    if (selectedScope == EditScope.THREAD) {
+                        IconButton(onClick = { viewModel.saveRawBio(rawBio); onNavigateBack() }) {
+                            Icon(Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
-                )
-            }
+                }
+            )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onNavigateToCreatePersona) {
@@ -129,7 +136,7 @@ fun UserPersonaScreen(
                 )
             }
 
-            uiState.allPersonas.forEach { persona ->
+            filteredPersonas.forEach { persona ->
                 val isSelected = uiState.selectedPersona?.id == persona.id
                 GlassySurface(
                     onClick = { viewModel.selectPersona(persona) },

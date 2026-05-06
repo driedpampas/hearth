@@ -103,6 +103,7 @@ import org.eu.nl.syu.hearth.data.ChatThread
 import org.eu.nl.syu.hearth.ui.components.GlassyDropdownMenu
 import org.eu.nl.syu.hearth.ui.components.GlassySurface
 import org.eu.nl.syu.hearth.ui.viewmodels.HomeViewModel
+import org.eu.nl.syu.hearth.ui.components.HearthSearchBar
 import androidx.compose.foundation.lazy.grid.items as gridItems
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -256,52 +257,31 @@ fun HomeScreen(
                         .fillMaxSize()
                         .blur(if (fabMenuExpanded) 8.dp else 0.dp)
                 ) {
-            SearchBar(
-                inputField = {
-                    androidx.compose.material3.SearchBarDefaults.InputField(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        onSearch = { searchActive = false },
-                        expanded = searchActive,
-                        onExpandedChange = { searchActive = it },
-                        placeholder = { Text("Search characters") },
-                        leadingIcon = {
-                            if (!searchActive) {
-                                IconButton(onClick = {
-                                    onNavigateToModelPicker()
-                                }) {
-                                    Icon(
-                                        imageVector = if (uiState.isModelLoaded) Icons.Filled.Widgets else Icons.Outlined.Widgets,
-                                        contentDescription = if (uiState.isModelLoaded) "Model Settings" else "Download Models",
-                                        tint = if (uiState.isModelLoaded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        },
-                        trailingIcon = {
-                            if (searchActive) {
-                                IconButton(onClick = {
-                                    if (searchQuery.isNotEmpty()) searchQuery = "" else searchActive = false
-                                }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
-                                }
-                            } else {
-                                IconButton(onClick = onNavigateToSettings) {
-                                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                                }
-                            }
-                        }
-                    )
+            HearthSearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                active = searchActive,
+                onActiveChange = { searchActive = it },
+                onSearch = { searchActive = false },
+                placeholder = "Search characters",
+                leadingIcon = {
+                    IconButton(onClick = onNavigateToModelPicker) {
+                        Icon(
+                            imageVector = if (uiState.isModelLoaded) Icons.Filled.Widgets else Icons.Outlined.Widgets,
+                            contentDescription = if (uiState.isModelLoaded) "Model Settings" else "Download Models",
+                            tint = if (uiState.isModelLoaded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 },
-                expanded = searchActive,
-                onExpandedChange = { searchActive = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = if (searchActive) 0.dp else 16.dp, vertical = 0.dp)
-            ) { }
+                trailingIcon = {
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    }
+                }
+            )
 
             if (!searchActive) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             if (visibleCharacters.isEmpty()) {
@@ -313,47 +293,14 @@ fun HomeScreen(
             }
 
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Fixed(1), // Changed to 1 column for chats as requested (or just better fit)
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Show Recent Characters only if there are existing threads to justify a shortcut section
-                if (filteredThreads.isNotEmpty() && recentCharacters.isNotEmpty()) {
-                    item(span = { GridItemSpan(2) }) {
-                        Text(
-                            text = "Recent Characters",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                    }
-
-                    gridItems(recentCharacters, key = { "recent-${it.id}" }) { character ->
-                        CharacterCard(
-                            character = character,
-                            onClick = { openCharacter(character) },
-                            onEdit = { onNavigateToCreateCharacter(character.id) },
-                            onDelete = {
-                                contextMenuCharacter = character
-                                showCharacterDeleteConfirm = true
-                            }
-                        )
-                    }
-                }
-
                 if (filteredThreads.isNotEmpty()) {
-                    item(span = { GridItemSpan(2) }) {
-                        Text(
-                            text = "Chats",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(top = if (recentCharacters.isNotEmpty()) 4.dp else 0.dp, bottom = 4.dp)
-                        )
-                    }
-
-                    gridItems(filteredThreads, key = { "thread-${it.id}" }, span = { GridItemSpan(2) }) { thread ->
+                    gridItems(filteredThreads, key = { "thread-${it.id}" }) { thread ->
                         ThreadCard(
                             thread = thread,
                             character = uiState.characters.firstOrNull { it.id == thread.characterId },
@@ -366,35 +313,6 @@ fun HomeScreen(
                             onDelete = {
                                 contextMenuThread = thread
                                 showDeleteConfirm = true
-                            }
-                        )
-                    }
-                }
-
-                // Use the full list if there are no threads, otherwise use the filtered subset
-                val charactersToDisplay = if (filteredThreads.isEmpty()) visibleCharacters else newChatCharacters
-
-                if (charactersToDisplay.isNotEmpty()) {
-                    item(span = { GridItemSpan(2) }) {
-                        Text(
-                            text = if (filteredThreads.isEmpty()) "Characters" else "Start a new chat",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(
-                                top = if (filteredThreads.isNotEmpty() || recentCharacters.isNotEmpty()) 4.dp else 0.dp, 
-                                bottom = 4.dp
-                            )
-                        )
-                    }
-
-                    gridItems(charactersToDisplay, key = { "visible-${it.id}" }) { character ->
-                        CharacterCard(
-                            character = character,
-                            onClick = { openCharacter(character) },
-                            onEdit = { onNavigateToCreateCharacter(character.id) },
-                            onDelete = {
-                                contextMenuCharacter = character
-                                showCharacterDeleteConfirm = true
                             }
                         )
                     }
@@ -680,12 +598,24 @@ private fun ThreadCard(
 fun CharacterPickerScreen(
     onDismiss: () -> Unit,
     onCharacterSelected: (String) -> Unit,
+    onNavigateToCreateCharacter: (String?) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var searchActive by rememberSaveable { mutableStateOf(false) }
+
     val characters = remember(uiState.characters) {
         uiState.characters
             .sortedWith(compareByDescending<Character> { it.lastUsedAt }.thenBy { it.name.lowercase() })
+    }
+
+    val filteredCharacters = remember(searchQuery, characters) {
+        if (searchQuery.isEmpty()) characters
+        else characters.filter { 
+            it.name.contains(searchQuery, ignoreCase = true) || 
+            it.tagline.contains(searchQuery, ignoreCase = true) 
+        }
     }
 
     Box(
@@ -704,15 +634,24 @@ fun CharacterPickerScreen(
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
-                androidx.compose.material3.TopAppBar(
-                    title = { Text("New Chat") },
-                    navigationIcon = {
+                HearthSearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    active = searchActive,
+                    onActiveChange = { searchActive = it },
+                    onSearch = { searchActive = false },
+                    placeholder = "Search characters",
+                    leadingIcon = {
                         IconButton(onClick = onDismiss) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
-                    },
-                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    }
                 )
+            },
+            floatingActionButton = {
+                FloatingActionButton(onClick = { onNavigateToCreateCharacter(null) }) {
+                    Icon(Icons.Default.Add, contentDescription = "Create Character")
+                }
             }
         ) { paddingValues ->
             if (characters.isEmpty()) {
@@ -724,17 +663,18 @@ fun CharacterPickerScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(1),
+                    columns = GridCells.Fixed(2), // Characters look better in 2 columns
                     contentPadding = PaddingValues(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize().padding(paddingValues)
                 ) {
-                    gridItems(characters) { character ->
+                    gridItems(filteredCharacters) { character ->
                         CharacterCard(
                             character = character,
                             onClick = { onCharacterSelected(character.id) },
-                            onEdit = {}, // Not needed in picker
-                            onDelete = {} // Not needed in picker
+                            onEdit = { onNavigateToCreateCharacter(character.id) },
+                            onDelete = { /* Add delete if needed here */ }
                         )
                     }
                 }

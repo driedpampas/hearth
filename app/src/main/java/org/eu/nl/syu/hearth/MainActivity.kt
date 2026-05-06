@@ -30,7 +30,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -65,6 +73,7 @@ import org.eu.nl.syu.hearth.ui.screens.ThreadSettingsScreen
 import org.eu.nl.syu.hearth.ui.screens.UserPersonaScreen
 import org.eu.nl.syu.hearth.ui.screens.CreatePersonaScreen
 import org.eu.nl.syu.hearth.ui.viewmodels.EditScope
+import androidx.navigation.compose.currentBackStackEntryAsState
 import org.eu.nl.syu.hearth.ui.theme.ChatTheme
 import org.eu.nl.syu.hearth.common.crash.GlobalCrashHandler
 import org.eu.nl.syu.hearth.common.crash.CrashReportActivity
@@ -72,6 +81,22 @@ import android.content.Intent
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import org.eu.nl.syu.hearth.ui.components.WavyHorizontalDivider
 import javax.inject.Inject
 
 private const val USE_CUSTOM_NAV_FADE = true
@@ -84,6 +109,8 @@ private fun navEnterTransition(): EnterTransition? =
 
 private fun navExitTransition(): ExitTransition? =
     if (USE_CUSTOM_NAV_FADE) fadeOut(animationSpec = navFadeSpec()) else null
+
+private data class NavItem(val route: String, val label: String, val icon: ImageVector)
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -158,6 +185,19 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HearthApp() {
     val navController = rememberNavController()
+    val configuration = LocalConfiguration.current
+    val isWideScreen = configuration.screenWidthDp >= 600
+    
+    val navItems = remember {
+        listOf(
+            NavItem("home", "Chats", Icons.AutoMirrored.Filled.Message),
+            NavItem("character_picker", "Characters", Icons.Default.Person),
+            NavItem("user_persona?scope=${EditScope.GLOBAL.name}", "Personas", Icons.Default.Badge)
+        )
+    }
+
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = currentBackStackEntry?.destination?.route
 
     androidx.compose.runtime.DisposableEffect(navController) {
         val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, destination, arguments ->
@@ -170,19 +210,102 @@ fun HearthApp() {
     }
 
     val safeNavigateBack: () -> Unit = {
-        // Only allow popping if the current screen is fully active.
-        // This instantly neutralizes rapid multi-taps.
         if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
             navController.popBackStack()
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        NavHost(navController = navController, startDestination = "home") {
+    Scaffold(
+        bottomBar = {
+            if (!isWideScreen && currentRoute in listOf("home", "character_picker", "user_persona?scope=${EditScope.GLOBAL.name}", "user_persona")) {
+                ShortNavigationBar {
+                    navItems.forEach { item ->
+                        val isSelected = currentRoute == item.route || (item.route.startsWith("user_persona") && currentRoute?.startsWith("user_persona") == true)
+                        ShortNavigationBarItem(
+                            selected = isSelected,
+                            onClick = {
+                                if (!isSelected) {
+                                    navController.navigate(item.route) {
+                                        popUpTo("home") { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            },
+                            icon = { Icon(item.icon, contentDescription = item.label) },
+                            label = { Text(item.label) }
+                        )
+                    }
+                    ShortNavigationBarItem(
+                        selected = false,
+                        onClick = { navController.navigate("settings") },
+                        icon = { Icon(Icons.Default.MoreVert, contentDescription = "Settings") },
+                        label = { Text("More") }
+                    )
+                }
+            }
+        }
+    ) { paddingValues ->
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            if (isWideScreen && currentRoute in listOf("home", "character_picker", "user_persona?scope=${EditScope.GLOBAL.name}", "user_persona")) {
+                NavigationRail(
+                    header = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                                contentDescription = "Hearth",
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            WavyHorizontalDivider(
+                                modifier = Modifier.width(48.dp).height(12.dp),
+                                waveLength = 40f,
+                                waveHeight = 10f
+                            )
+                        }
+                    }
+                ) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    navItems.forEach { item ->
+                        val isSelected = currentRoute == item.route || (item.route.startsWith("user_persona") && currentRoute?.startsWith("user_persona") == true)
+                        NavigationRailItem(
+                            selected = isSelected,
+                            onClick = {
+                                if (!isSelected) {
+                                    navController.navigate(item.route) {
+                                        popUpTo("home") { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            },
+                            icon = { Icon(item.icon, contentDescription = item.label) },
+                            label = { Text(item.label) }
+                        )
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    NavigationRailItem(
+                        selected = false,
+                        onClick = { navController.navigate("settings") },
+                        icon = { Icon(Icons.Default.MoreVert, contentDescription = "Settings") },
+                        label = { Text("Settings") }
+                    )
+                }
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                NavHost(
+                    navController = navController,
+                    startDestination = "home",
+                    enterTransition = { navEnterTransition() ?: fadeIn() },
+                    exitTransition = { navExitTransition() ?: fadeOut() }
+                ) {
             composable(route = "home") {
                 HomeScreen(
                     onNavigateToChat = { id -> navController.navigate("chat/$id") },
@@ -378,5 +501,7 @@ fun HearthApp() {
                 )
             }
         }
+    }
+}
     }
 }
